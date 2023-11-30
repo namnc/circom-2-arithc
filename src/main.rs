@@ -1,8 +1,12 @@
-use mpz_circuits::{types::ValueType, Circuit};
+#![allow(unused_variables, dead_code, unused_assignments)]
 
+mod circom;
+
+use circom::parse_circom;
+use mpz_circuits::types::ValueType;
 
 fn main() {
-    let circ = Circuit::parse_circom(
+    let circ = parse_circom(
         "circuits/bristol/adder64_reverse.txt",
         &[ValueType::U64, ValueType::U64],
         &[ValueType::U64],
@@ -14,5 +18,5 @@ fn main() {
 
     //let output: u64 = evaluate!(circ, fn(1u64, 2u64) -> u64).unwrap();
 
-    //assert_eq!(output, 3); 
+    //assert_eq!(output, 3);
 }

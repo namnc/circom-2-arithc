@@ -1,39 +1,26 @@
-#![allow(missing_docs)]
-#![deny(clippy::missing_docs_in_private_items)]
-
-use serde::{Serialize, Deserialize};
-
-
-// mpz crates
-use crate::{
-    components::{Feed, GateType, Node},
-    types::ValueType,
-    Circuit, CircuitBuilder,
-};
-
 use circom_circom_algebra::num_traits::ToPrimitive;
-use itertools::Itertools;
-
-// use regex::{Captures, Regex};
-
-// circom crates
-
-const VERSION: &'static str = "2.0.0";
-
-use std::{path::PathBuf, collections::{HashMap, LinkedList}, hash::Hash, fmt::{Display, self, write}, ptr::null, task::Context, thread::current};
-use ansi_term::Colour;
-
-use circom_constraint_generation::FlagsExecution;
-use circom_parser;
 use circom_compiler::compiler_interface;
 use circom_compiler::compiler_interface::{Config, VCP};
-use circom_program_structure::{error_code::ReportCode, ast::{Expression, Statement, SignalType, VariableType, ExpressionInfixOpcode, Meta, Access}};
-use circom_program_structure::error_definition::Report;
-use circom_program_structure::file_definition::FileLibrary;
 use circom_constraint_writers::debug_writer::DebugWriter;
-use circom_constraint_writers::ConstraintExporter;
+use circom_program_structure::ast::{
+    Access, Expression, ExpressionInfixOpcode, SignalType, Statement, VariableType,
+};
+use circom_program_structure::error_definition::Report;
 use circom_program_structure::program_archive::ProgramArchive;
 use circom_type_analysis::check_types::check_types;
+use clap::{App, Arg, ArgMatches};
+use mpz_circuits::types::ValueType;
+use mpz_circuits::{BuilderError, GateType};
+use regex::Captures;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::{
+    collections::{HashMap, LinkedList},
+    fmt,
+    path::PathBuf,
+};
+
+const VERSION: &'static str = "2.0.0";
 
 #[allow(missing_docs)]
 pub struct CompilerConfig {
@@ -54,8 +41,7 @@ pub struct CompilerConfig {
 }
 
 pub fn compile(config: CompilerConfig) -> Result<(), ()> {
-
-    // activate the c_flag in config 
+    // activate the c_flag in config
     // later replace it with something else that is more meaningful
 
     // config.c_flag = true;
@@ -255,37 +241,39 @@ const JSON: &'static str = "json";
 
 impl Input {
     pub fn default() -> Result<Input, ()> {
-       let input = Input { 
-        input_program: PathBuf::from("/Users/namncc/Documents/GitHub/mpz-pg/mpz-circuits/src/assets/circuit.circom"),
-        out_r1cs: PathBuf::from("./assets/tmp"),
-        out_json_constraints: PathBuf::from("./assets/tmp"),
-        out_wat_code: PathBuf::from("./assets/tmp"),
-        out_wasm_code: PathBuf::from("./assets/tmp"),
-        out_wasm_name: String::from("./assets/tmp"),
-        out_js_folder: PathBuf::from("./assets/tmp"),
-        out_c_run_name: String::from("./assets/tmp"),
-        out_c_folder: PathBuf::from("./assets/tmp"),
-        out_c_code: PathBuf::from("./assets/tmp"),
-        out_c_dat: PathBuf::from("./assets/tmp"),
-        out_sym: PathBuf::from("./assets/tmp"),
-        c_flag: true,
-        wasm_flag: false,
-        wat_flag:false,
-        r1cs_flag: false,
-        sym_flag: false,
-        json_constraint_flag: false,
-        json_substitution_flag: false,
-        main_inputs_flag: false,
-        print_ir_flag: true,
-        fast_flag: false,
-        reduced_simplification_flag: false,
-        parallel_simplification_flag: false,
-        flag_old_heuristics: false,
-        inspect_constraints_flag: false,
-        no_rounds: usize::MAX,
-        flag_verbose: true,
-        prime: String::from("bn128"),
-        link_libraries: Vec::new(), 
+        let input = Input {
+            input_program: PathBuf::from(
+                "/Users/namncc/Documents/GitHub/mpz-pg/mpz-circuits/src/assets/circuit.circom",
+            ),
+            out_r1cs: PathBuf::from("./assets/tmp"),
+            out_json_constraints: PathBuf::from("./assets/tmp"),
+            out_wat_code: PathBuf::from("./assets/tmp"),
+            out_wasm_code: PathBuf::from("./assets/tmp"),
+            out_wasm_name: String::from("./assets/tmp"),
+            out_js_folder: PathBuf::from("./assets/tmp"),
+            out_c_run_name: String::from("./assets/tmp"),
+            out_c_folder: PathBuf::from("./assets/tmp"),
+            out_c_code: PathBuf::from("./assets/tmp"),
+            out_c_dat: PathBuf::from("./assets/tmp"),
+            out_sym: PathBuf::from("./assets/tmp"),
+            c_flag: true,
+            wasm_flag: false,
+            wat_flag: false,
+            r1cs_flag: false,
+            sym_flag: false,
+            json_constraint_flag: false,
+            json_substitution_flag: false,
+            main_inputs_flag: false,
+            print_ir_flag: true,
+            fast_flag: false,
+            reduced_simplification_flag: false,
+            parallel_simplification_flag: false,
+            flag_old_heuristics: false,
+            inspect_constraints_flag: false,
+            no_rounds: usize::MAX,
+            flag_verbose: true,
+            prime: String::from("bn128"),
+            link_libraries: Vec::new(),
         };
         Ok(input)
     }
@@ -450,14 +438,6 @@ impl Input {
     }
 }
 
-// use ansi_term::Colour;
-use clap::{App, Arg, ArgMatches};
-use regex::Captures;
-use std::path::Path;
-
-// use super::VERSION;
-// use crate::VERSION;
-
 pub fn get_input(matches: &ArgMatches) -> Result<PathBuf, ()> {
     println!("{:?}", matches.value_of("input"));
     let route = Path::new(matches.value_of("input").unwrap()).to_path_buf();
@@ -469,10 +449,8 @@ pub fn get_input(matches: &ArgMatches) -> Result<PathBuf, ()> {
         } else {
             "".to_owned()
         };
-        Result::Err(eprintln!(
-            "{}",
-            Colour::Red.paint("Input file does not exist".to_owned() + &route)
-        ))
+
+        Result::Err(log::error!("Input file does not exist{}", route))
     }
 }
 
@@ -481,7 +459,7 @@ pub fn get_output_path(matches: &ArgMatches) -> Result<PathBuf, ()> {
     if route.is_dir() {
         Result::Ok(route)
     } else {
-        Result::Err(eprintln!("{}", Colour::Red.paint("invalid output path")))
+        Result::Err(log::error!("Invalid output path: {}", route.display()))
     }
 }
 
@@ -509,10 +487,7 @@ pub fn get_simplification_style(matches: &ArgMatches) -> Result<SimplificationSt
                     Ok(SimplificationStyle::O2(no_rounds))
                 }
             } else {
-                Result::Err(eprintln!(
-                    "{}",
-                    Colour::Red.paint("invalid number of rounds")
-                ))
+                Result::Err(log::error!("invalid number of rounds"))
             }
         }
 
@@ -584,7 +559,7 @@ pub fn get_prime(matches: &ArgMatches) -> Result<String, ()> {
             {
                 Ok(String::from(matches.value_of("prime").unwrap()))
             } else {
-                Result::Err(eprintln!("{}", Colour::Red.paint("invalid prime number")))
+                Result::Err(log::error!("Invalid prime number"))
             }
         }
 
@@ -816,7 +791,7 @@ pub enum ParseError {
     #[error("unsupported gate type: {0}")]
     UnsupportedGateType(String),
     #[error(transparent)]
-    BuilderError(#[from] crate::BuilderError),
+    BuilderError(#[from] BuilderError),
 }
 
 // ====== ABOVE IS COPIED FROM CIRCOM FOR PARSING TO PROGRAM ARCHIVE ======
@@ -827,13 +802,17 @@ pub struct RuntimeContext {
     pub caller_id: u32,
     pub context_id: u32,
     pub vars: HashMap<String, u32>,
-    pub execution: RuntimeExecutionContext
+    pub execution: RuntimeExecutionContext,
 }
 
 impl RuntimeContext {
-
-    pub fn new (_caller_id: u32, _context_id: u32) -> RuntimeContext {
-        RuntimeContext { caller_id: _caller_id, context_id: _context_id, vars: HashMap::new(), execution: RuntimeExecutionContext::new(_caller_id, _context_id)}
+    pub fn new(_caller_id: u32, _context_id: u32) -> RuntimeContext {
+        RuntimeContext {
+            caller_id: _caller_id,
+            context_id: _context_id,
+            vars: HashMap::new(),
+            execution: RuntimeExecutionContext::new(_caller_id, _context_id),
+        }
     }
 
     // pub fn init (&mut self, runtime: &CircomRuntime) {
@@ -853,10 +832,13 @@ impl RuntimeContext {
     //     self.execution.return_to_caller(context);
     // }
 
-    pub fn assign_var (&mut self, var_name: &String, last_var_id: u32) -> u32 {
+    pub fn assign_var(&mut self, var_name: &String, last_var_id: u32) -> u32 {
         self.vars.insert(var_name.to_string(), last_var_id);
         self.execution.assign_var(var_name);
-        println!("[RuntimeContext] {} is now with id {}", var_name, last_var_id);
+        println!(
+            "[RuntimeContext] {} is now with id {}",
+            var_name, last_var_id
+        );
         last_var_id
     }
 
@@ -903,16 +885,20 @@ pub struct RuntimeExecutionContext {
     pub caller_id: u32,
     pub context_id: u32,
     pub vars: HashMap<String, u32>,
-    pub exevars: HashMap<String, bool>
+    pub exevars: HashMap<String, bool>,
 }
 
 impl RuntimeExecutionContext {
-
-    pub fn new (_caller_id: u32, _context_id: u32) -> RuntimeExecutionContext {
-        RuntimeExecutionContext { caller_id: _caller_id, context_id: _context_id, vars: HashMap::new(), exevars: HashMap::new() }
+    pub fn new(_caller_id: u32, _context_id: u32) -> RuntimeExecutionContext {
+        RuntimeExecutionContext {
+            caller_id: _caller_id,
+            context_id: _context_id,
+            vars: HashMap::new(),
+            exevars: HashMap::new(),
+        }
     }
 
-    pub fn init (&mut self, context: &RuntimeContext) {
+    pub fn init(&mut self, context: &RuntimeContext) {
         for (k, v) in context.execution.vars.iter() {
             self.assign_var(k);
             if context.execution.can_get_var_val(k) {
@@ -930,36 +916,48 @@ impl RuntimeExecutionContext {
     //         }
     //     }
     // }
-    
-    pub fn assign_var (&mut self, var_name: &String) -> u32 {
+
+    pub fn assign_var(&mut self, var_name: &String) -> u32 {
         let mut var_val = 0;
         if self.exevars.contains_key(var_name) {
             var_val = self.get_var_val(var_name);
             self.vars.insert(var_name.to_string(), var_val);
-            println!("[RuntimeExecutionContext] Now {} carries over val {}", var_name, var_val);
+            println!(
+                "[RuntimeExecutionContext] Now {} carries over val {}",
+                var_name, var_val
+            );
         } else {
             self.vars.insert(var_name.to_string(), 0);
             self.exevars.insert(var_name.to_string(), false);
-            println!("[RuntimeExecutionContext] Now {} has no val {}", var_name, var_val);
+            println!(
+                "[RuntimeExecutionContext] Now {} has no val {}",
+                var_name, var_val
+            );
         }
         var_val
     }
 
-    pub fn assign_var_val (&mut self, var_name: &String, var_val: u32) -> u32 {
+    pub fn assign_var_val(&mut self, var_name: &String, var_val: u32) -> u32 {
         self.vars.insert(var_name.to_string(), var_val);
         self.exevars.insert(var_name.to_string(), true);
-        println!("[RuntimeExecutionContext] Now {} has val {}", var_name, var_val);
+        println!(
+            "[RuntimeExecutionContext] Now {} has val {}",
+            var_name, var_val
+        );
         var_val
     }
 
-    pub fn deassign_var_val (&mut self, var_name: &String) -> u32 {
+    pub fn deassign_var_val(&mut self, var_name: &String) -> u32 {
         self.vars.insert(var_name.to_string(), 0);
         self.exevars.insert(var_name.to_string(), false);
-        println!("[RuntimeExecutionContext] Now {} has no val {}", var_name, 0);
+        println!(
+            "[RuntimeExecutionContext] Now {} has no val {}",
+            var_name, 0
+        );
         0
     }
 
-    pub fn get_var_val (&self, var_name: &String) -> u32 {
+    pub fn get_var_val(&self, var_name: &String) -> u32 {
         if !self.can_get_var_val(var_name) {
             return 0;
         }
@@ -979,22 +977,24 @@ impl RuntimeExecutionContext {
 pub struct CircomRuntime {
     pub last_var_id: u32,
     pub last_context_id: u32,
-    pub call_stack: LinkedList<RuntimeContext>
+    pub call_stack: LinkedList<RuntimeContext>,
 }
 
 impl CircomRuntime {
-
-    pub fn new () -> CircomRuntime {
-        CircomRuntime { last_var_id: 0, last_context_id: 0, call_stack: LinkedList::new() }
+    pub fn new() -> CircomRuntime {
+        CircomRuntime {
+            last_var_id: 0,
+            last_context_id: 0,
+            call_stack: LinkedList::new(),
+        }
     }
 
-    pub fn init (&mut self) {
+    pub fn init(&mut self) {
         self.last_context_id += 1;
         let rc = RuntimeContext::new(0, self.last_context_id);
         // When we init the circom runtime there is no caller to init with
         // rc.init(self);
         self.call_stack.push_front(rc);
-
     }
 
     // Should add context from calling and branching
@@ -1035,11 +1035,11 @@ impl CircomRuntime {
     //     self.get_runtime_context_by_stack_index(idx)
     // }
 
-    pub fn get_current_runtime_context_caller_id (&self) -> u32 {
+    pub fn get_current_runtime_context_caller_id(&self) -> u32 {
         self.call_stack.front().unwrap().caller_id
     }
 
-    pub fn get_current_runtime_context_id (&mut self) -> u32 {
+    pub fn get_current_runtime_context_id(&mut self) -> u32 {
         self.call_stack.front().unwrap().context_id
     }
 
@@ -1050,43 +1050,43 @@ impl CircomRuntime {
 
     // }
 
-    pub fn get_current_runtime_context (&self) -> &RuntimeContext {
+    pub fn get_current_runtime_context(&self) -> &RuntimeContext {
         self.call_stack.front().unwrap()
     }
 
-    pub fn get_current_runtime_context_mut (&mut self) -> &mut RuntimeContext {
+    pub fn get_current_runtime_context_mut(&mut self) -> &mut RuntimeContext {
         self.call_stack.front_mut().unwrap()
     }
 
-    pub fn get_var_from_current_context (&self, var: &String) -> u32 {
+    pub fn get_var_from_current_context(&self, var: &String) -> u32 {
         let current = self.get_current_runtime_context();
         current.get_var(var)
     }
-    pub fn assign_var_to_current_context (&mut self, var: &String) -> u32 {
+    pub fn assign_var_to_current_context(&mut self, var: &String) -> u32 {
         self.last_var_id += 1;
         let var_id = self.last_var_id;
         let current = self.get_current_runtime_context_mut();
         current.assign_var(var, var_id)
     }
-    pub fn can_get_var_val_from_current_context (&self, var: &String) -> bool {
+    pub fn can_get_var_val_from_current_context(&self, var: &String) -> bool {
         let current = self.get_current_runtime_context();
         current.can_get_var_val(var)
     }
-    pub fn get_var_val_from_current_context (&self, var: &String) -> u32 {
+    pub fn get_var_val_from_current_context(&self, var: &String) -> u32 {
         let current = self.get_current_runtime_context();
         current.get_var_val(var)
     }
-    pub fn assign_var_val_to_current_context (&mut self, var: &String, var_val: u32) -> u32 {
+    pub fn assign_var_val_to_current_context(&mut self, var: &String, var_val: u32) -> u32 {
         let current = self.get_current_runtime_context_mut();
         current.assign_var_val(var, var_val)
     }
 
-    pub fn deassign_var_val_to_current_context (&mut self, var: &String) -> u32 {
+    pub fn deassign_var_val_to_current_context(&mut self, var: &String) -> u32 {
         let current = self.get_current_runtime_context_mut();
         current.deassign_var_val(var)
     }
 
-    pub fn assign_auto_var_to_current_context (&mut self) -> String {
+    pub fn assign_auto_var_to_current_context(&mut self) -> String {
         self.last_var_id += 1;
         let var_id = self.last_var_id;
         let current = self.get_current_runtime_context_mut();
@@ -1098,7 +1098,11 @@ impl CircomRuntime {
 
     // TODO: array auto var should support multi-dimension, right now 1
 
-    pub fn assign_array_var_to_current_context (&mut self, var: &String, indice: Vec<u32>) -> (String, u32) {
+    pub fn assign_array_var_to_current_context(
+        &mut self,
+        var: &String,
+        indice: Vec<u32>,
+    ) -> (String, u32) {
         self.last_var_id += 1;
         let var_id = self.last_var_id;
         let current = self.get_current_runtime_context_mut();
@@ -1111,7 +1115,6 @@ impl CircomRuntime {
         println!("[CircomRuntime] Array var {}", var);
         (var, var_id)
     }
-
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -1119,20 +1122,24 @@ pub struct ArithmeticVar {
     pub var_id: u32,
     pub var_name: String,
     pub is_const: bool,
-    pub const_value: u32
+    pub const_value: u32,
 }
 
 impl ArithmeticVar {
     pub fn new(_var_id: u32, _var_name: String) -> ArithmeticVar {
-        ArithmeticVar { var_id: _var_id, var_name: _var_name , is_const: false, const_value: 0}
+        ArithmeticVar {
+            var_id: _var_id,
+            var_name: _var_name,
+            is_const: false,
+            const_value: 0,
+        }
     }
 
-    pub fn set_const_value (&mut self, value: u32) {
+    pub fn set_const_value(&mut self, value: u32) {
         self.is_const = true;
         self.const_value = value;
     }
 }
-
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum AGateType {
@@ -1146,7 +1153,7 @@ pub enum AGateType {
     ALEq,
     AGEq,
     ALt,
-    AGt
+    AGt,
 }
 
 impl fmt::Display for AGateType {
@@ -1174,12 +1181,24 @@ pub struct ArithmeticNode {
     pub gate_type: AGateType,
     pub input_lhs_id: u32,
     pub input_rhs_id: u32,
-    pub output_id: u32
+    pub output_id: u32,
 }
 
 impl ArithmeticNode {
-    pub fn new (_gate_id: u32, _gate_type: AGateType, _input_lhs_id: u32, _input_rhs_id: u32, _out_put_id: u32) -> ArithmeticNode {
-        ArithmeticNode { gate_id: _gate_id, gate_type: _gate_type, input_lhs_id: _input_lhs_id, input_rhs_id: _input_rhs_id, output_id: _out_put_id }
+    pub fn new(
+        _gate_id: u32,
+        _gate_type: AGateType,
+        _input_lhs_id: u32,
+        _input_rhs_id: u32,
+        _out_put_id: u32,
+    ) -> ArithmeticNode {
+        ArithmeticNode {
+            gate_id: _gate_id,
+            gate_type: _gate_type,
+            input_lhs_id: _input_lhs_id,
+            input_rhs_id: _input_rhs_id,
+            output_id: _out_put_id,
+        }
     }
 }
 
@@ -1188,11 +1207,10 @@ pub struct ArithmeticCircuit {
     pub gate_count: u32,
     pub var_count: u32,
     pub vars: HashMap<u32, ArithmeticVar>,
-    pub gates: HashMap<u32, ArithmeticNode>
+    pub gates: HashMap<u32, ArithmeticNode>,
 }
 
 impl ArithmeticCircuit {
-
     pub fn gate_count(&self) -> u32 {
         self.gate_count
     }
@@ -1201,16 +1219,20 @@ impl ArithmeticCircuit {
         self.var_count
     }
 
-    pub fn new () -> ArithmeticCircuit {
-        ArithmeticCircuit { gate_count: 0, var_count: 0, vars: HashMap::new(), gates: HashMap::new() }
+    pub fn new() -> ArithmeticCircuit {
+        ArithmeticCircuit {
+            gate_count: 0,
+            var_count: 0,
+            vars: HashMap::new(),
+            gates: HashMap::new(),
+        }
     }
 
-    pub fn add_var(
-        &mut self, 
-        var_id: u32,
-        var_name: &str) -> &ArithmeticVar {
-
-        println!("[ArithmeticCircuit] Add var {} with id {}", var_name, var_id);
+    pub fn add_var(&mut self, var_id: u32, var_name: &str) -> &ArithmeticVar {
+        println!(
+            "[ArithmeticCircuit] Add var {} with id {}",
+            var_name, var_id
+        );
 
         // Not sure if var_count is needed
         self.var_count += 1;
@@ -1218,14 +1240,13 @@ impl ArithmeticCircuit {
         let var = ArithmeticVar::new(var_id, var_name.to_string());
         self.vars.insert(var_id, var);
         self.vars.get(&var_id).unwrap()
-    } 
+    }
 
-    pub fn add_const_var(
-        &mut self, 
-        var_id: u32,
-        var_val: u32) -> &ArithmeticVar {
-
-        println!("[ArithmeticCircuit] var {} now has value {}", var_id, var_val);
+    pub fn add_const_var(&mut self, var_id: u32, var_val: u32) -> &ArithmeticVar {
+        println!(
+            "[ArithmeticCircuit] var {} now has value {}",
+            var_id, var_val
+        );
 
         // Not sure if var_count is needed
         self.var_count += 1;
@@ -1235,7 +1256,7 @@ impl ArithmeticCircuit {
         var.const_value = var_val;
         self.vars.insert(var_id, var);
         self.vars.get(&var_id).unwrap()
-    } 
+    }
 
     pub fn get_var(&self, var_id: u32) -> &ArithmeticVar {
         self.vars.get(&var_id).unwrap()
@@ -1247,25 +1268,39 @@ impl ArithmeticCircuit {
 
     //We support ADD, MUL, CADD, CMUL, DIV, CDIV, CINVERT, IFTHENELSE, FOR
 
-    pub fn add_gate (
+    pub fn add_gate(
         &mut self,
         output_name: &String,
         output_id: u32,
         lhs_id: u32,
         rhs_id: u32,
-        gate_type: AGateType) {
-            self.gate_count += 1;
-            self.add_var(output_id, output_name);
-            let node = ArithmeticNode::new(self.gate_count, gate_type, lhs_id, rhs_id, output_id);
-            let var_output = self.get_var(output_id);
-            let var_lhs = self.get_var(lhs_id);
-            let var_rhs = self.get_var(rhs_id);
-            println!("[ArithmeticCircuit] Gate added id {}: ({}, {}, {}) = ({}, {}, {}) {} ({}, {}, {})", node.gate_id, node.output_id, var_output.is_const, var_output.const_value, node.input_lhs_id, var_lhs.is_const, var_lhs.const_value, node.gate_type.to_string(), node.input_rhs_id, var_rhs.is_const, var_rhs.const_value);
-            self.gates.insert(self.gate_count, node);
-        }
+        gate_type: AGateType,
+    ) {
+        self.gate_count += 1;
+        self.add_var(output_id, output_name);
+        let node = ArithmeticNode::new(self.gate_count, gate_type, lhs_id, rhs_id, output_id);
+        let var_output = self.get_var(output_id);
+        let var_lhs = self.get_var(lhs_id);
+        let var_rhs = self.get_var(rhs_id);
+        println!(
+            "[ArithmeticCircuit] Gate added id {}: ({}, {}, {}) = ({}, {}, {}) {} ({}, {}, {})",
+            node.gate_id,
+            node.output_id,
+            var_output.is_const,
+            var_output.const_value,
+            node.input_lhs_id,
+            var_lhs.is_const,
+            var_lhs.const_value,
+            node.gate_type.to_string(),
+            node.input_rhs_id,
+            var_rhs.is_const,
+            var_rhs.const_value
+        );
+        self.gates.insert(self.gate_count, node);
+    }
 
     // pub fn add_gate(
-    //     &mut self, 
+    //     &mut self,
     //     output: &ArithmeticVar,
     //     lhs: &ArithmeticVar,
     //     rhs: &ArithmeticVar,
@@ -1279,7 +1314,7 @@ impl ArithmeticCircuit {
     // }
 
     pub fn replace_input_var_in_gate(&mut self, var_id: u32, new_var_id: u32) {
-        for i in 1..(self.gate_count+1) {
+        for i in 1..(self.gate_count + 1) {
             if !self.gates.contains_key(&i) {
                 continue;
             }
@@ -1295,7 +1330,7 @@ impl ArithmeticCircuit {
 
     pub fn truncate_zero_add_gate(&mut self) {
         let mut zero_add_gate_indice = vec![];
-        for i in 1..(self.gate_count+1) {
+        for i in 1..(self.gate_count + 1) {
             if !self.gates.contains_key(&i) {
                 continue;
             }
@@ -1331,7 +1366,7 @@ impl ArithmeticCircuit {
 
     pub fn print_ac(&self) {
         println!("[ArithmeticCircuit] Whole Arithmetic Circuit");
-        for i in 1..(self.gate_count+1) {
+        for i in 1..(self.gate_count + 1) {
             if !self.gates.contains_key(&i) {
                 continue;
             }
@@ -1340,7 +1375,20 @@ impl ArithmeticCircuit {
             let var_output = self.get_var(node.output_id);
             let var_lhs = self.get_var(node.input_lhs_id);
             let var_rhs = self.get_var(node.input_rhs_id);
-            println!("[ArithmeticCircuit] Gate id {}: ({}, {}, {}) = ({}, {}, {}) {} ({}, {}, {})", node.gate_id, node.output_id, var_output.is_const, var_output.const_value, node.input_lhs_id, var_lhs.is_const, var_lhs.const_value, node.gate_type.to_string(), node.input_rhs_id, var_rhs.is_const, var_rhs.const_value);
+            println!(
+                "[ArithmeticCircuit] Gate id {}: ({}, {}, {}) = ({}, {}, {}) {} ({}, {}, {})",
+                node.gate_id,
+                node.output_id,
+                var_output.is_const,
+                var_output.const_value,
+                node.input_lhs_id,
+                var_lhs.is_const,
+                var_lhs.const_value,
+                node.gate_type.to_string(),
+                node.input_rhs_id,
+                var_rhs.is_const,
+                var_rhs.const_value
+            );
         }
         // for (ank, anv) in self.gates.iter() {
         //     println!("Gate {}: {} = {} [{}] {}", ank, anv.output_id, anv.input_lhs_id, anv.gate_type.to_string(), anv.input_rhs_id);
@@ -1364,14 +1412,14 @@ impl ArithmeticCircuit {
 //WIP HERE
 // TODO: named_access should support multi-dimension, right now 1
 
-fn execute_infix_op (
+fn execute_infix_op(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     output: &String,
     input_lhs: &String,
     input_rhs: &String,
-    infixop: ExpressionInfixOpcode
-) -> (u32,bool) {
+    infixop: ExpressionInfixOpcode,
+) -> (u32, bool) {
     // let current = runtime.get_current_runtime_context();
     let mut can_execute_infix = true;
     if !runtime.can_get_var_val_from_current_context(input_lhs) {
@@ -1387,7 +1435,7 @@ fn execute_infix_op (
     if !can_execute_infix {
         runtime.deassign_var_val_to_current_context(output);
         println!("[Execute] Now mark {} as no value", output);
-        return (0,false);
+        return (0, false);
     }
 
     let lhsvar_val = runtime.get_var_val_from_current_context(input_lhs);
@@ -1402,61 +1450,91 @@ fn execute_infix_op (
     // let rvar = ac.get_var(rhsvar_id);
 
     let mut res = 0;
-    
+
     use ExpressionInfixOpcode::*;
     let mut gate_type = AGateType::AAdd;
     match infixop {
         Mul => {
-            println!("[Execute] Mul op {} = {} * {}", output, lhsvar_val, rhsvar_val);
-            gate_type = AGateType::AMul;    
-            res = lhsvar_val * rhsvar_val;           
+            println!(
+                "[Execute] Mul op {} = {} * {}",
+                output, lhsvar_val, rhsvar_val
+            );
+            gate_type = AGateType::AMul;
+            res = lhsvar_val * rhsvar_val;
         }
         Div => {
-            println!("[Execute] Div op {} = {} / {}", output, lhsvar_val, rhsvar_val);
+            println!(
+                "[Execute] Div op {} = {} / {}",
+                output, lhsvar_val, rhsvar_val
+            );
             gate_type = AGateType::ADiv;
             res = lhsvar_val / rhsvar_val;
-        },
+        }
         Add => {
-            println!("[Execute] Add op {} = {} + {}", output, lhsvar_val, rhsvar_val);
-            gate_type = AGateType::AAdd; 
+            println!(
+                "[Execute] Add op {} = {} + {}",
+                output, lhsvar_val, rhsvar_val
+            );
+            gate_type = AGateType::AAdd;
             res = lhsvar_val + rhsvar_val;
-        },
+        }
         Sub => {
-            println!("[Execute] Sub op {} = {} - {}", output, lhsvar_val, rhsvar_val);
-            gate_type = AGateType::ASub; 
+            println!(
+                "[Execute] Sub op {} = {} - {}",
+                output, lhsvar_val, rhsvar_val
+            );
+            gate_type = AGateType::ASub;
             res = lhsvar_val - rhsvar_val;
-        },
+        }
         // Pow => {},
         // IntDiv => {},
         // Mod => {},
         // ShiftL => {},
         // ShiftR => {},
         LesserEq => {
-            println!("[Execute] LesserEq op {} = {} <= {}", output, lhsvar_val, rhsvar_val);
+            println!(
+                "[Execute] LesserEq op {} = {} <= {}",
+                output, lhsvar_val, rhsvar_val
+            );
             res = if lhsvar_val <= rhsvar_val { 1 } else { 0 };
-        },
+        }
         GreaterEq => {
-            println!("[Execute] GreaterEq op {} = {} >= {}", output, lhsvar_val, rhsvar_val);
+            println!(
+                "[Execute] GreaterEq op {} = {} >= {}",
+                output, lhsvar_val, rhsvar_val
+            );
             res = if lhsvar_val >= rhsvar_val { 1 } else { 0 };
-        },
+        }
         Lesser => {
-            println!("[Execute] Lesser op {} = {} < {}", output, lhsvar_val, rhsvar_val);
+            println!(
+                "[Execute] Lesser op {} = {} < {}",
+                output, lhsvar_val, rhsvar_val
+            );
             res = if lhsvar_val < rhsvar_val { 1 } else { 0 };
-        },
+        }
         Greater => {
-            println!("[Execute] Greater op {} = {} > {}", output, lhsvar_val, rhsvar_val);
+            println!(
+                "[Execute] Greater op {} = {} > {}",
+                output, lhsvar_val, rhsvar_val
+            );
             res = if lhsvar_val > rhsvar_val { 1 } else { 0 };
-        },
+        }
         Eq => {
-            println!("[Execute] Eq op {} = {} == {}", output,lhsvar_val, rhsvar_val);
-            gate_type = AGateType::AEq;  
+            println!(
+                "[Execute] Eq op {} = {} == {}",
+                output, lhsvar_val, rhsvar_val
+            );
+            gate_type = AGateType::AEq;
             res = if lhsvar_val == rhsvar_val { 1 } else { 0 };
-        },
+        }
         NotEq => {
-            println!("[Execute] Neq op {} = {} != {}", output, lhsvar_val, rhsvar_val);
-            gate_type = AGateType::ANeq; 
+            println!(
+                "[Execute] Neq op {} = {} != {}",
+                output, lhsvar_val, rhsvar_val
+            );
+            gate_type = AGateType::ANeq;
             res = if lhsvar_val != rhsvar_val { 1 } else { 0 };
-        },
+        }
         // BoolOr => {},
         // BoolAnd => {},
         // BitOr => {},
@@ -1467,18 +1545,17 @@ fn execute_infix_op (
         }
     };
     println!("[Execute] infix res = {}", res);
-    (res,true)
+    (res, true)
     // ac.add_gate(&output, var_id, lhsvar_id, rhsvar_id, gate_type);
-
 }
 
-fn traverse_infix_op (
+fn traverse_infix_op(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     output: &String,
     input_lhs: &String,
     input_rhs: &String,
-    infixop: ExpressionInfixOpcode
+    infixop: ExpressionInfixOpcode,
 ) -> (u32, bool) {
     // let current = runtime.get_current_runtime_context();
 
@@ -1510,55 +1587,85 @@ fn traverse_infix_op (
 
     // let lvar = ac.get_var(lhsvar_id);
     // let rvar = ac.get_var(rhsvar_id);
-    
+
     use ExpressionInfixOpcode::*;
     let mut gate_type = AGateType::AAdd;
     match infixop {
         Mul => {
-            println!("[Traverse] Mul op {} = {} * {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AMul;               
+            println!(
+                "[Traverse] Mul op {} = {} * {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AMul;
         }
         Div => {
-            println!("[Traverse] Div op {} = {} / {}", output, input_lhs, input_rhs);
+            println!(
+                "[Traverse] Div op {} = {} / {}",
+                output, input_lhs, input_rhs
+            );
             gate_type = AGateType::ADiv;
-        },
+        }
         Add => {
-            println!("[Traverse] Add op {} = {} + {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AAdd; 
-        },
+            println!(
+                "[Traverse] Add op {} = {} + {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AAdd;
+        }
         Sub => {
-            println!("[Traverse] Sub op {} = {} - {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::ASub; 
-        },
+            println!(
+                "[Traverse] Sub op {} = {} - {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::ASub;
+        }
         // Pow => {},
         // IntDiv => {},
         // Mod => {},
         // ShiftL => {},
         // ShiftR => {},
         LesserEq => {
-            println!("[Traverse] LEq op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::ALEq;  
-        },
+            println!(
+                "[Traverse] LEq op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::ALEq;
+        }
         GreaterEq => {
-            println!("[Traverse] GEq op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AGEq;  
-        },
+            println!(
+                "[Traverse] GEq op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AGEq;
+        }
         Lesser => {
-            println!("[Traverse] Ls op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::ALt;  
-        },
+            println!(
+                "[Traverse] Ls op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::ALt;
+        }
         Greater => {
-            println!("[Traverse] Gt op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AGt;  
-        },
+            println!(
+                "[Traverse] Gt op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AGt;
+        }
         Eq => {
-            println!("[Traverse] Eq op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AEq;  
-        },
+            println!(
+                "[Traverse] Eq op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AEq;
+        }
         NotEq => {
-            println!("[Traverse] Neq op {} = {} != {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::ANeq; 
-        },
+            println!(
+                "[Traverse] Neq op {} = {} != {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::ANeq;
+        }
         // BoolOr => {},
         // BoolAnd => {},
         // BitOr => {},
@@ -1572,17 +1679,15 @@ fn traverse_infix_op (
     ac.add_gate(&output, var_id, lhsvar_id, rhsvar_id, gate_type);
 
     (0, false)
-
 }
 
-fn execute_expression (
+fn execute_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     var: &String,
     expr: &Expression,
-    program_archive: &ProgramArchive
-) -> (String,bool) {
-
+    program_archive: &ProgramArchive,
+) -> (String, bool) {
     use Expression::*;
     // let mut can_be_simplified = true;
     match expr {
@@ -1591,26 +1696,41 @@ fn execute_expression (
             runtime.assign_var_val_to_current_context(&value.to_string(), value.to_u32().unwrap());
             ac.add_const_var(var_id, value.to_u32().unwrap());
             println!("[Execute] Number value {}", value);
-            (value.to_string(),true)
-        },
-        InfixOp { meta, lhe, infix_op, rhe, .. } => {
+            (value.to_string(), true)
+        }
+        InfixOp {
+            meta,
+            lhe,
+            infix_op,
+            rhe,
+            ..
+        } => {
             let varlhs = runtime.assign_auto_var_to_current_context();
             println!("[Execute] Auto var for lhs {}", varlhs);
             let varrhs = runtime.assign_auto_var_to_current_context();
             println!("[Execute] Auto var for rhs {}", varrhs);
-            let (varlop,lhsb) = execute_expression(ac, runtime, &varlhs, lhe, program_archive);
+            let (varlop, lhsb) = execute_expression(ac, runtime, &varlhs, lhe, program_archive);
             println!("[Execute] lhs {} {}", varlop, lhsb);
-            let (varrop,rhsb) = execute_expression(ac, runtime, &varrhs, rhe, program_archive);
+            let (varrop, rhsb) = execute_expression(ac, runtime, &varrhs, rhe, program_archive);
             println!("[Execute] rhs {} {}", varrop, rhsb);
-            let (res,rb) = execute_infix_op(ac, runtime, var, &varlop, &varrop, *infix_op);
+            let (res, rb) = execute_infix_op(ac, runtime, var, &varlop, &varrop, *infix_op);
             println!("[Execute] infix out res {}", res);
-            (res.to_string(),rb)
+            (res.to_string(), rb)
         }
-        PrefixOp { meta, prefix_op, rhe } => {
+        PrefixOp {
+            meta,
+            prefix_op,
+            rhe,
+        } => {
             println!("Prefix found ");
-            (var.to_string(),false)
-        },
-        InlineSwitchOp { meta, cond, if_true, if_false } => todo!(),
+            (var.to_string(), false)
+        }
+        InlineSwitchOp {
+            meta,
+            cond,
+            if_true,
+            if_false,
+        } => todo!(),
         ParallelOp { meta, rhe } => todo!(),
         Variable { meta, name, access } => {
             let mut name_access = String::from(name);
@@ -1620,53 +1740,66 @@ fn execute_expression (
                     Access::ArrayAccess(expr) => {
                         println!("[Execute] Array access found");
                         // let mut dim_u32_vec = Vec::new();
-                        let dim_u32_str = 
+                        let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
                         // dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
                         name_access.push_str("_");
                         name_access.push_str(dim_u32_str.as_str());
                         println!("[Execute] Change var name to {}", name_access);
-                    },
+                    }
                     Access::ComponentAccess(name) => {
                         println!("Component access found");
                     }
                 }
             }
             if runtime.can_get_var_val_from_current_context(&name_access) {
-                let var_val = runtime.get_var_val_from_current_context(&name_access).to_string();
+                let var_val = runtime
+                    .get_var_val_from_current_context(&name_access)
+                    .to_string();
                 println!("[Execute] Return var value {} = {}", name_access, var_val);
                 runtime.assign_var_to_current_context(&var_val);
-                runtime.assign_var_val_to_current_context(&var_val, var_val.parse::<u32>().unwrap());
-                return (var_val,true);
+                runtime
+                    .assign_var_val_to_current_context(&var_val, var_val.parse::<u32>().unwrap());
+                return (var_val, true);
             }
-            (name_access.to_string(),false)
-        },
+            (name_access.to_string(), false)
+        }
         Call { meta, id, args } => {
             println!("Call found {}", id.to_string());
             // find the template and execute it
-            (id.to_string(),false)
-        },
-        AnonymousComp { meta, id, is_parallel, params, signals, names } => todo!(),
+            (id.to_string(), false)
+        }
+        AnonymousComp {
+            meta,
+            id,
+            is_parallel,
+            params,
+            signals,
+            names,
+        } => todo!(),
         ArrayInLine { meta, values } => {
             println!("ArrayInLine found");
-            (var.to_string(),false)
-        },
+            (var.to_string(), false)
+        }
         Tuple { meta, values } => todo!(),
-        UniformArray { meta, value, dimension } => {
+        UniformArray {
+            meta,
+            value,
+            dimension,
+        } => {
             println!("UniformArray found");
-            (var.to_string(),false)
-        },
+            (var.to_string(), false)
+        }
     }
 }
 
-fn traverse_expression (
+fn traverse_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     var: &String,
     expr: &Expression,
-    program_archive: &ProgramArchive
+    program_archive: &ProgramArchive,
 ) -> String {
-
     use Expression::*;
     // let mut can_be_simplified = true;
     match expr {
@@ -1676,8 +1809,14 @@ fn traverse_expression (
             ac.add_const_var(var_id, value.to_u32().unwrap());
             println!("[Traverse] Number value {}", value);
             value.to_string()
-        },
-        InfixOp { meta, lhe, infix_op, rhe, .. } => {
+        }
+        InfixOp {
+            meta,
+            lhe,
+            infix_op,
+            rhe,
+            ..
+        } => {
             let varlhs = runtime.assign_auto_var_to_current_context();
             println!("[Traverse] Auto var for lhs {}", varlhs);
             let varrhs = runtime.assign_auto_var_to_current_context();
@@ -1692,11 +1831,20 @@ fn traverse_expression (
             }
             var.to_string()
         }
-        PrefixOp { meta, prefix_op, rhe } => {
+        PrefixOp {
+            meta,
+            prefix_op,
+            rhe,
+        } => {
             println!("Prefix found ");
             var.to_string()
-        },
-        InlineSwitchOp { meta, cond, if_true, if_false } => todo!(),
+        }
+        InlineSwitchOp {
+            meta,
+            cond,
+            if_true,
+            if_false,
+        } => todo!(),
         ParallelOp { meta, rhe } => todo!(),
         Variable { meta, name, access } => {
             let mut name_access = String::from(name);
@@ -1706,72 +1854,86 @@ fn traverse_expression (
                     Access::ArrayAccess(expr) => {
                         println!("[Traverse] Array access found");
                         // let mut dim_u32_vec = Vec::new();
-                        let dim_u32_str = 
+                        let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
                         // dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
                         name_access.push_str("_");
                         name_access.push_str(dim_u32_str.as_str());
                         println!("[Traverse] Change var name to {}", name_access);
-                    },
+                    }
                     Access::ComponentAccess(name) => {
                         println!("[Traverse] Component access found");
                     }
                 }
             }
             if runtime.can_get_var_val_from_current_context(&name_access) {
-                let var_val = runtime.get_var_val_from_current_context(&name_access).to_string();
+                let var_val = runtime
+                    .get_var_val_from_current_context(&name_access)
+                    .to_string();
                 println!("[Traverse] Return var value {} = {}", name_access, var_val);
                 let var_id = runtime.assign_var_to_current_context(&var_val);
-                let var_val_n = runtime.assign_var_val_to_current_context(&var_val, var_val.parse::<u32>().unwrap());
+                let var_val_n = runtime
+                    .assign_var_val_to_current_context(&var_val, var_val.parse::<u32>().unwrap());
                 ac.add_const_var(var_id, var_val_n);
                 return var_val.to_string();
             }
             name_access.to_string()
-        },
+        }
         Call { meta, id, args } => {
             println!("Call found {}", id.to_string());
             // find the template and execute it
             id.to_string()
-        },
-        AnonymousComp { meta, id, is_parallel, params, signals, names } => todo!(),
+        }
+        AnonymousComp {
+            meta,
+            id,
+            is_parallel,
+            params,
+            signals,
+            names,
+        } => todo!(),
         ArrayInLine { meta, values } => {
             println!("ArrayInLine found");
             var.to_string()
-        },
+        }
         Tuple { meta, values } => todo!(),
-        UniformArray { meta, value, dimension } => {
+        UniformArray {
+            meta,
+            value,
+            dimension,
+        } => {
             println!("UniformArray found");
             var.to_string()
-        },
+        }
     }
 }
 
-fn traverse_component_declaration (
+fn traverse_component_declaration(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     comp_name: &str,
-    dim_u32_vec: &Vec<u32>
+    dim_u32_vec: &Vec<u32>,
 ) {
     // let var_id = runtime.assign_var_to_current_context(&var_name.to_string());
     // ac.add_var(var_id, comp_name.to_string().as_str());
     println!("Found component {}", comp_name);
 }
 
-fn traverse_signal_declaration (
+fn traverse_signal_declaration(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     signal_name: &str,
     signal_type: SignalType,
-    dim_u32_vec: &Vec<u32>
+    dim_u32_vec: &Vec<u32>,
 ) {
     traverse_variable_declaration(ac, runtime, signal_name, dim_u32_vec);
 }
 
-fn traverse_variable_declaration (
+fn traverse_variable_declaration(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     var_name: &str,
-    dim_u32_vec: &Vec<u32>
+    dim_u32_vec: &Vec<u32>,
 ) {
     if dim_u32_vec.is_empty() {
         let var_id = runtime.assign_var_to_current_context(&var_name.to_string());
@@ -1792,19 +1954,19 @@ fn traverse_variable_declaration (
         for i in 0..dim_u32 {
             let mut u32vec = Vec::new();
             u32vec.push(i);
-            let (var, var_id) = runtime.assign_array_var_to_current_context(&var_name.to_string(), u32vec);
+            let (var, var_id) =
+                runtime.assign_array_var_to_current_context(&var_name.to_string(), u32vec);
             ac.add_var(var_id, var.as_str());
         }
     }
 }
 
-fn execute_statement (
+fn execute_statement(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     stmt: &Statement,
-    program_archive: &ProgramArchive
+    program_archive: &ProgramArchive,
 ) {
-
     use Statement::*;
     let id = stmt.get_meta().elem_id;
 
@@ -1813,12 +1975,20 @@ fn execute_statement (
     // let mut can_be_simplified = true;
 
     match stmt {
-        InitializationBlock { initializations, .. } => {
+        InitializationBlock {
+            initializations, ..
+        } => {
             for istmt in initializations.iter() {
                 execute_statement(ac, runtime, istmt, program_archive);
             }
         }
-        Declaration { meta, xtype, name, dimensions, .. } => {
+        Declaration {
+            meta,
+            xtype,
+            name,
+            dimensions,
+            ..
+        } => {
             println!("Declaration of {}", name);
             match xtype {
                 // VariableType::AnonymousComponent => {
@@ -1833,7 +2003,7 @@ fn execute_statement (
                 _ => {
                     let mut dim_u32_vec = Vec::new();
                     for dimension in dimensions.iter() {
-                        let dim_u32_str = 
+                        let dim_u32_str =
                             traverse_expression(ac, runtime, name, dimension, program_archive);
                         dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
                     }
@@ -1860,86 +2030,87 @@ fn execute_statement (
                             ac,
                             runtime,
                             name,
-                            &dim_u32_vec
-                            // &usable_dimensions
-                            // &mut runtime.environment,
-                            // actual_node
+                            &dim_u32_vec, // &usable_dimensions
+                                          // &mut runtime.environment,
+                                          // actual_node
                         ),
                         VariableType::Var => traverse_variable_declaration(
                             ac,
                             runtime,
                             name,
-                            &dim_u32_vec
-                            // &usable_dimensions
+                            &dim_u32_vec, // &usable_dimensions
                         ),
-                        VariableType::Signal(signal_type, tag_list) => traverse_signal_declaration (
+                        VariableType::Signal(signal_type, tag_list) => traverse_signal_declaration(
                             ac,
                             runtime,
                             name,
                             *signal_type,
-                            &dim_u32_vec
-                            // &usable_dimensions
+                            &dim_u32_vec, // &usable_dimensions
                         ),
-                        _ =>{
+                        _ => {
                             unreachable!()
                         }
                     }
-
                 }
             }
             // Option::None
         }
-        IfThenElse { cond, if_case, else_case, .. } => {
+        IfThenElse {
+            cond,
+            if_case,
+            else_case,
+            ..
+        } => {
             // let var = String::from("IFTHENELSE");
             // ac.add_var(&var, SignalType::Intermediate);
             // let lhs = traverse_expression(ac, &var, cond, program_archive);
             // traverse_statement(ac, &if_case, program_archive);
             // let else_case = else_case.as_ref().map(|e| e.as_ref());
             // traverse_statement(ac, else_case.unwrap(), program_archive);
-        //     let else_case = else_case.as_ref().map(|e| e.as_ref());
-        //     let (possible_return, can_simplify, _) = execute_conditional_statement(
-        //         cond,
-        //         if_case,
-        //         else_case,
-        //         program_archive,
-        //         runtime,
-        //         actual_node,
-        //         flags
-        //     )?;
-        //     can_be_simplified = can_simplify;
-        //     possible_return
-        // }
-        // While { cond, stmt, .. } => loop {
-        //     let (returned, can_simplify, condition_result) = execute_conditional_statement(
-        //         cond,
-        //         stmt,
-        //         Option::None,
-        //         program_archive,
-        //         runtime,
-        //         actual_node,
-        //         flags
-        //     )?;
-        //     can_be_simplified &= can_simplify;
-        //     if returned.is_some() {
-        //         break returned;
-        //     } else if condition_result.is_none() {
-        //         let (returned, _, _) = execute_conditional_statement(
-        //             cond,
-        //             stmt,
-        //             None,
-        //             program_archive,
-        //             runtime,
-        //             actual_node,
-        //             flags
-        //         )?;
-        //         break returned;
-        //     } else if !condition_result.unwrap() {
-        //         break returned;
-        //     }
-        },
+            //     let else_case = else_case.as_ref().map(|e| e.as_ref());
+            //     let (possible_return, can_simplify, _) = execute_conditional_statement(
+            //         cond,
+            //         if_case,
+            //         else_case,
+            //         program_archive,
+            //         runtime,
+            //         actual_node,
+            //         flags
+            //     )?;
+            //     can_be_simplified = can_simplify;
+            //     possible_return
+            // }
+            // While { cond, stmt, .. } => loop {
+            //     let (returned, can_simplify, condition_result) = execute_conditional_statement(
+            //         cond,
+            //         stmt,
+            //         Option::None,
+            //         program_archive,
+            //         runtime,
+            //         actual_node,
+            //         flags
+            //     )?;
+            //     can_be_simplified &= can_simplify;
+            //     if returned.is_some() {
+            //         break returned;
+            //     } else if condition_result.is_none() {
+            //         let (returned, _, _) = execute_conditional_statement(
+            //             cond,
+            //             stmt,
+            //             None,
+            //             program_archive,
+            //             runtime,
+            //             actual_node,
+            //             flags
+            //         )?;
+            //         break returned;
+            //     } else if !condition_result.unwrap() {
+            //         break returned;
+            //     }
+        }
         While { cond, stmt, .. } => loop {
             let var = String::from("while");
-            let (res,rb) = execute_expression(ac, runtime, &var, cond, program_archive);
+            let (res, rb) = execute_expression(ac, runtime, &var, cond, program_archive);
             println!("[Execute] res = {} {}", res, rb);
             execute_statement(ac, runtime, stmt, program_archive);
             if res.contains("0") {
@@ -1981,8 +2152,8 @@ fn execute_statement (
             //     )?;
             //     let possible_non_quadratic =
             //         AExpr::sub(
-            //             &value_left, 
-            //             &value_right, 
+            //             &value_left,
+            //             &value_right,
             //             &runtime.constants.get_p()
             //         );
             //     if possible_non_quadratic.is_nonquadratic() {
@@ -2001,17 +2172,20 @@ fn execute_statement (
             //     .unwrap();
             //     if let Option::Some(node) = actual_node {
             //         node.add_constraint(constraint_expression);
-            //     }    
+            //     }
             // }
             // Option::None
         }
-        Return { value, .. } => {
-            
-        }
-        Assert { arg, meta, .. } => {
-            
-        }
-        Substitution { meta, var, access, op, rhe, .. } => {
+        Return { value, .. } => {}
+        Assert { arg, meta, .. } => {}
+        Substitution {
+            meta,
+            var,
+            access,
+            op,
+            rhe,
+            ..
+        } => {
             let mut name_access = String::from(var);
             println!("[Execute] Variable found {}", var.to_string());
             for a in access.iter() {
@@ -2019,46 +2193,45 @@ fn execute_statement (
                     Access::ArrayAccess(expr) => {
                         println!("[Execute] Array access found");
                         // let mut dim_u32_vec = Vec::new();
-                        let dim_u32_str = 
+                        let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
                         // dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
                         name_access.push_str("_");
                         name_access.push_str(dim_u32_str.as_str());
                         println!("[Execute] Change var name to {}", name_access);
-                    },
+                    }
                     Access::ComponentAccess(name) => {
                         println!("Component access not handled");
                     }
                 }
             }
-            let (rhs,rhsb) = execute_expression(ac, runtime, &name_access, rhe, program_archive);
+            let (rhs, rhsb) = execute_expression(ac, runtime, &name_access, rhe, program_archive);
             println!("[Execute] Assigning {} ? {} to {}", rhs, rhsb, &name_access);
             if rhsb {
                 println!("[Execute] Assigning {} to {}", rhs, &name_access);
-                runtime.assign_var_val_to_current_context(&name_access, rhs.parse::<u32>().unwrap());
+                runtime
+                    .assign_var_val_to_current_context(&name_access, rhs.parse::<u32>().unwrap());
             }
         }
         Block { stmts, .. } => {
             traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true);
         }
-        LogCall { args, .. } => {
-        }
-        UnderscoreSubstitution{ meta, rhe, op} =>{
+        LogCall { args, .. } => {}
+        UnderscoreSubstitution { meta, rhe, op } => {
             println!("UnderscoreSubstitution found");
         }
-        _ =>{
+        _ => {
             unimplemented!()
         }
     }
 }
 
-fn traverse_statement (
+fn traverse_statement(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     stmt: &Statement,
-    program_archive: &ProgramArchive
+    program_archive: &ProgramArchive,
 ) {
-
     use Statement::*;
     let id = stmt.get_meta().elem_id;
 
@@ -2067,12 +2240,20 @@ fn traverse_statement (
     // let mut can_be_simplified = true;
 
     match stmt {
-        InitializationBlock { initializations, .. } => {
+        InitializationBlock {
+            initializations, ..
+        } => {
             for istmt in initializations.iter() {
                 traverse_statement(ac, runtime, istmt, program_archive);
             }
         }
-        Declaration { meta, xtype, name, dimensions, .. } => {
+        Declaration {
+            meta,
+            xtype,
+            name,
+            dimensions,
+            ..
+        } => {
             println!("[Traverse] Declaration of {}", name);
             match xtype {
                 // VariableType::AnonymousComponent => {
@@ -2087,7 +2268,7 @@ fn traverse_statement (
                 _ => {
                     let mut dim_u32_vec = Vec::new();
                     for dimension in dimensions.iter() {
-                        let dim_u32_str = 
+                        let dim_u32_str =
                             traverse_expression(ac, runtime, name, dimension, program_archive);
                         dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
                     }
@@ -2114,83 +2295,84 @@ fn traverse_statement (
                             ac,
                             runtime,
                             name,
-                            &dim_u32_vec
-                            // &usable_dimensions
-                            // &mut runtime.environment,
-                            // actual_node
+                            &dim_u32_vec, // &usable_dimensions
+                                          // &mut runtime.environment,
+                                          // actual_node
                         ),
                         VariableType::Var => traverse_variable_declaration(
                             ac,
                             runtime,
                             name,
-                            &dim_u32_vec
-                            // &usable_dimensions
+                            &dim_u32_vec, // &usable_dimensions
                         ),
-                        VariableType::Signal(signal_type, tag_list) => traverse_signal_declaration (
+                        VariableType::Signal(signal_type, tag_list) => traverse_signal_declaration(
                             ac,
                             runtime,
                             name,
                             *signal_type,
-                            &dim_u32_vec
-                            // &usable_dimensions
+                            &dim_u32_vec, // &usable_dimensions
                         ),
-                        _ =>{
+                        _ => {
                             unreachable!()
                         }
                     }
-
                 }
             }
             // Option::None
         }
-        IfThenElse { cond, if_case, else_case, .. } => {
+        IfThenElse {
+            cond,
+            if_case,
+            else_case,
+            ..
+        } => {
             // let var = String::from("IFTHENELSE");
             // ac.add_var(&var, SignalType::Intermediate);
             // let lhs = traverse_expression(ac, &var, cond, program_archive);
             // traverse_statement(ac, &if_case, program_archive);
             // let else_case = else_case.as_ref().map(|e| e.as_ref());
             // traverse_statement(ac, else_case.unwrap(), program_archive);
-        //     let else_case = else_case.as_ref().map(|e| e.as_ref());
-        //     let (possible_return, can_simplify, _) = execute_conditional_statement(
-        //         cond,
-        //         if_case,
-        //         else_case,
-        //         program_archive,
-        //         runtime,
-        //         actual_node,
-        //         flags
-        //     )?;
-        //     can_be_simplified = can_simplify;
-        //     possible_return
-        // }
-        // While { cond, stmt, .. } => loop {
-        //     let (returned, can_simplify, condition_result) = execute_conditional_statement(
-        //         cond,
-        //         stmt,
-        //         Option::None,
-        //         program_archive,
-        //         runtime,
-        //         actual_node,
-        //         flags
-        //     )?;
-        //     can_be_simplified &= can_simplify;
-        //     if returned.is_some() {
-        //         break returned;
-        //     } else if condition_result.is_none() {
-        //         let (returned, _, _) = execute_conditional_statement(
-        //             cond,
-        //             stmt,
-        //             None,
-        //             program_archive,
-        //             runtime,
-        //             actual_node,
-        //             flags
-        //         )?;
-        //         break returned;
-        //     } else if !condition_result.unwrap() {
-        //         break returned;
-        //     }
-        },
+            //     let else_case = else_case.as_ref().map(|e| e.as_ref());
+            //     let (possible_return, can_simplify, _) = execute_conditional_statement(
+            //         cond,
+            //         if_case,
+            //         else_case,
+            //         program_archive,
+            //         runtime,
+            //         actual_node,
+            //         flags
+            //     )?;
+            //     can_be_simplified = can_simplify;
+            //     possible_return
+            // }
+            // While { cond, stmt, .. } => loop {
+            //     let (returned, can_simplify, condition_result) = execute_conditional_statement(
+            //         cond,
+            //         stmt,
+            //         Option::None,
+            //         program_archive,
+            //         runtime,
+            //         actual_node,
+            //         flags
+            //     )?;
+            //     can_be_simplified &= can_simplify;
+            //     if returned.is_some() {
+            //         break returned;
+            //     } else if condition_result.is_none() {
+            //         let (returned, _, _) = execute_conditional_statement(
+            //             cond,
+            //             stmt,
+            //             None,
+            //             program_archive,
+            //             runtime,
+            //             actual_node,
+            //             flags
+            //         )?;
+            //         break returned;
+            //     } else if !condition_result.unwrap() {
+            //         break returned;
+            //     }
+        }
         While { cond, stmt, .. } => loop {
             let var = String::from("while");
             let (res, rb) = execute_expression(ac, runtime, &var, cond, program_archive);
@@ -2235,8 +2417,8 @@ fn traverse_statement (
             //     )?;
             //     let possible_non_quadratic =
             //         AExpr::sub(
-            //             &value_left, 
-            //             &value_right, 
+            //             &value_left,
+            //             &value_right,
             //             &runtime.constants.get_p()
             //         );
             //     if possible_non_quadratic.is_nonquadratic() {
@@ -2255,17 +2437,20 @@ fn traverse_statement (
             //     .unwrap();
             //     if let Option::Some(node) = actual_node {
             //         node.add_constraint(constraint_expression);
-            //     }    
+            //     }
             // }
             // Option::None
         }
-        Return { value, .. } => {
-            
-        }
-        Assert { arg, meta, .. } => {
-            
-        }
-        Substitution { meta, var, access, op, rhe, .. } => {
+        Return { value, .. } => {}
+        Assert { arg, meta, .. } => {}
+        Substitution {
+            meta,
+            var,
+            access,
+            op,
+            rhe,
+            ..
+        } => {
             let mut name_access = String::from(var);
             println!("[Traverse] Sub Variable found {}", var.to_string());
             for a in access.iter() {
@@ -2273,13 +2458,13 @@ fn traverse_statement (
                     Access::ArrayAccess(expr) => {
                         println!("[Traverse] Sub Array access found");
                         // let mut dim_u32_vec = Vec::new();
-                        let dim_u32_str = 
+                        let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
                         // dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
                         name_access.push_str("_");
                         name_access.push_str(dim_u32_str.as_str());
                         println!("[Traverse] Sub Change var name to {}", name_access);
-                    },
+                    }
                     Access::ComponentAccess(name) => {
                         println!("[Traverse] Sub Component access not handled");
                     }
@@ -2292,36 +2477,32 @@ fn traverse_statement (
         Block { stmts, .. } => {
             traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true);
         }
-        LogCall { args, .. } => {
-        }
-        UnderscoreSubstitution{ meta, rhe, op} =>{
+        LogCall { args, .. } => {}
+        UnderscoreSubstitution { meta, rhe, op } => {
             println!("UnderscoreSubstitution found");
         }
-        _ =>{
+        _ => {
             unimplemented!()
         }
     }
 }
 
-fn traverse_sequence_of_statements (
+fn traverse_sequence_of_statements(
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
     stmts: &[Statement],
     program_archive: &ProgramArchive,
-    is_complete_template: bool
+    is_complete_template: bool,
 ) {
     for stmt in stmts.iter() {
         traverse_statement(ac, runtime, stmt, program_archive);
     }
-    if is_complete_template{
+    if is_complete_template {
         //execute_delayed_declarations(program_archive, runtime, actual_node, flags)?;
     }
 }
 
-pub fn traverse_program (
-    program_archive: &ProgramArchive,
-) -> ArithmeticCircuit {    
-
+pub fn traverse_program(program_archive: &ProgramArchive) -> ArithmeticCircuit {
     let mut ac = ArithmeticCircuit::new();
 
     let mut runtime = CircomRuntime::new();
@@ -2341,18 +2522,23 @@ pub fn traverse_program (
     // Public inputs
     // program_archive.get_public_inputs_main_component().clone();
 
-    if let Call{ id, args, .. } = program_archive.get_main_expression() {
-
+    if let Call { id, args, .. } = program_archive.get_main_expression() {
         let template_body = program_archive.get_template_data(id).get_body_as_vec();
 
-        traverse_sequence_of_statements(&mut ac, &mut runtime, template_body, program_archive, true);
+        traverse_sequence_of_statements(
+            &mut ac,
+            &mut runtime,
+            template_body,
+            program_archive,
+            true,
+        );
 
         ac.print_ac();
         ac.truncate_zero_add_gate();
         ac.print_ac();
         ac.serde();
-        
-        // let folded_value_result = 
+
+        // let folded_value_result =
         //     if let Call { id, args, .. } = &program_archive.get_main_expression() {
         //         let mut arg_values = Vec::new();
         //         for arg_expression in args.iter() {
@@ -2369,10 +2555,9 @@ pub fn traverse_program (
         //             flags,
         //         )
         //     } else {
-        //         unreachable!("The main expression should be a call."); 
+        //         unreachable!("The main expression should be a call.");
         //     };
-        
-        
+
         // match folded_value_result {
         //     Result::Err(_) => Result::Err(runtime_information.runtime_errors),
         //     Result::Ok(folded_value) => {
@@ -2385,134 +2570,127 @@ pub fn traverse_program (
     ac
 }
 
-impl Circuit {
-    pub fn parse_circom(
-        filename: &str,
-        inputs: &[ValueType],
-        outputs: &[ValueType],
-    ) -> Result<(), ()> {
+pub fn parse_circom(filename: &str, inputs: &[ValueType], outputs: &[ValueType]) -> Result<(), ()> {
+    let user_input = Input::default()?;
+    let mut program_archive = parse_project(&user_input)?;
+    analyse_project(&mut program_archive)?;
 
-        let user_input = Input::default()?;
-        let mut program_archive = parse_project(&user_input)?;
-        analyse_project(&mut program_archive)?;
+    // let config = ExecutionConfig {
+    //     no_rounds: user_input.no_rounds(),
+    //     flag_p: user_input.parallel_simplification_flag(),
+    //     flag_s: user_input.reduced_simplification_flag(),
+    //     flag_f: user_input.unsimplified_flag(),
+    //     flag_old_heuristics: user_input.flag_old_heuristics(),
+    //     flag_verbose: user_input.flag_verbose(),
+    //     inspect_constraints_flag: user_input.inspect_constraints_flag(),
+    //     r1cs_flag: user_input.r1cs_flag(),
+    //     json_constraint_flag: user_input.json_constraints_flag(),
+    //     json_substitution_flag: user_input.json_substitutions_flag(),
+    //     sym_flag: user_input.sym_flag(),
+    //     sym: user_input.sym_file().to_string(),
+    //     r1cs: user_input.r1cs_file().to_string(),
+    //     json_constraints: user_input.json_constraints_file().to_string(),
+    //     prime: user_input.prime(),
+    // };
 
-        // let config = ExecutionConfig {
-        //     no_rounds: user_input.no_rounds(),
-        //     flag_p: user_input.parallel_simplification_flag(),
-        //     flag_s: user_input.reduced_simplification_flag(),
-        //     flag_f: user_input.unsimplified_flag(),
-        //     flag_old_heuristics: user_input.flag_old_heuristics(),
-        //     flag_verbose: user_input.flag_verbose(),
-        //     inspect_constraints_flag: user_input.inspect_constraints_flag(),
-        //     r1cs_flag: user_input.r1cs_flag(),
-        //     json_constraint_flag: user_input.json_constraints_flag(),
-        //     json_substitution_flag: user_input.json_substitutions_flag(),
-        //     sym_flag: user_input.sym_flag(),
-        //     sym: user_input.sym_file().to_string(),
-        //     r1cs: user_input.r1cs_file().to_string(),
-        //     json_constraints: user_input.json_constraints_file().to_string(),
-        //     prime: user_input.prime(),
-        // };
+    traverse_program(&program_archive);
 
-        traverse_program(&program_archive);
-        
-        // let circuit = execute_project(program_archive, config)?;
-        // let compilation_config = CompilerConfig {
-        //     vcp: circuit,
-        //     debug_output: user_input.print_ir_flag(),
-        //     c_flag: user_input.c_flag(),
-        //     wasm_flag: user_input.wasm_flag(),
-        //     wat_flag: user_input.wat_flag(),
-        //     js_folder: user_input.js_folder().to_string(),
-        //     wasm_name: user_input.wasm_name().to_string(),
-        //     c_folder: user_input.c_folder().to_string(),
-        //     c_run_name: user_input.c_run_name().to_string(),
-        //     c_file: user_input.c_file().to_string(),
-        //     dat_file: user_input.dat_file().to_string(),
-        //     wat_file: user_input.wat_file().to_string(),
-        //     wasm_file: user_input.wasm_file().to_string(),
-        //     produce_input_log: user_input.main_inputs_flag(),
-        // };
-        // compile(compilation_config)?;
+    // let circuit = execute_project(program_archive, config)?;
+    // let compilation_config = CompilerConfig {
+    //     vcp: circuit,
+    //     debug_output: user_input.print_ir_flag(),
+    //     c_flag: user_input.c_flag(),
+    //     wasm_flag: user_input.wasm_flag(),
+    //     wat_flag: user_input.wat_flag(),
+    //     js_folder: user_input.js_folder().to_string(),
+    //     wasm_name: user_input.wasm_name().to_string(),
+    //     c_folder: user_input.c_folder().to_string(),
+    //     c_run_name: user_input.c_run_name().to_string(),
+    //     c_file: user_input.c_file().to_string(),
+    //     dat_file: user_input.dat_file().to_string(),
+    //     wat_file: user_input.wat_file().to_string(),
+    //     wasm_file: user_input.wasm_file().to_string(),
+    //     produce_input_log: user_input.main_inputs_flag(),
+    // };
+    // compile(compilation_config)?;
 
-        // Sample code for binary circuit
+    // Sample code for binary circuit
 
-        // let builder = CircuitBuilder::new();
+    // let builder = CircuitBuilder::new();
 
-        // let mut feed_ids: Vec<usize> = Vec::new();
-        // let mut feed_map: HashMap<usize, Node<Feed>> = HashMap::default();
+    // let mut feed_ids: Vec<usize> = Vec::new();
+    // let mut feed_map: HashMap<usize, Node<Feed>> = HashMap::default();
 
-        // let mut input_len = 0;
-        // for input in inputs {
-        //     let input = builder.add_input_by_type(input.clone());
-        //     for (node, old_id) in input.iter().zip(input_len..input_len + input.len()) {
-        //         feed_map.insert(old_id, *node);
-        //     }
-        //     input_len += input.len();
-        // }
+    // let mut input_len = 0;
+    // for input in inputs {
+    //     let input = builder.add_input_by_type(input.clone());
+    //     for (node, old_id) in input.iter().zip(input_len..input_len + input.len()) {
+    //         feed_map.insert(old_id, *node);
+    //     }
+    //     input_len += input.len();
+    // }
 
-        // let mut state = builder.state().borrow_mut();
-        // let pattern = Regex::new(GATE_PATTERN).unwrap();
-        // for cap in pattern.captures_iter(&file) {
-        //     let UncheckedGate {
-        //         xref,
-        //         yref,
-        //         zref,
-        //         gate_type,
-        //     } = UncheckedGate::parse(cap)?;
-        //     feed_ids.push(zref);
+    // let mut state = builder.state().borrow_mut();
+    // let pattern = Regex::new(GATE_PATTERN).unwrap();
+    // for cap in pattern.captures_iter(&file) {
+    //     let UncheckedGate {
+    //         xref,
+    //         yref,
+    //         zref,
+    //         gate_type,
+    //     } = UncheckedGate::parse(cap)?;
+    //     feed_ids.push(zref);
 
-        //     match gate_type {
-        //         GateType::Xor => {
-        //             let new_x = feed_map
-        //                 .get(&xref)
-        //                 .ok_or(ParseError::UninitializedFeed(xref))?;
-        //             let new_y = feed_map
-        //                 .get(&yref.unwrap())
-        //                 .ok_or(ParseError::UninitializedFeed(yref.unwrap()))?;
-        //             let new_z = state.add_xor_gate(*new_x, *new_y);
-        //             feed_map.insert(zref, new_z);
-        //         }
-        //         GateType::And => {
-        //             let new_x = feed_map
-        //                 .get(&xref)
-        //                 .ok_or(ParseError::UninitializedFeed(xref))?;
-        //             let new_y = feed_map
-        //                 .get(&yref.unwrap())
-        //                 .ok_or(ParseError::UninitializedFeed(yref.unwrap()))?;
-        //             let new_z = state.add_and_gate(*new_x, *new_y);
-        //             feed_map.insert(zref, new_z);
-        //         }
-        //         GateType::Inv => {
-        //             let new_x = feed_map
-        //                 .get(&xref)
-        //                 .ok_or(ParseError::UninitializedFeed(xref))?;
-        //             let new_z = state.add_inv_gate(*new_x);
-        //             feed_map.insert(zref, new_z);
-        //         }
-        //     }
-        // }
-        // drop(state);
-        // feed_ids.sort();
+    //     match gate_type {
+    //         GateType::Xor => {
+    //             let new_x = feed_map
+    //                 .get(&xref)
+    //                 .ok_or(ParseError::UninitializedFeed(xref))?;
+    //             let new_y = feed_map
+    //                 .get(&yref.unwrap())
+    //                 .ok_or(ParseError::UninitializedFeed(yref.unwrap()))?;
+    //             let new_z = state.add_xor_gate(*new_x, *new_y);
+    //             feed_map.insert(zref, new_z);
+    //         }
+    //         GateType::And => {
+    //             let new_x = feed_map
+    //                 .get(&xref)
+    //                 .ok_or(ParseError::UninitializedFeed(xref))?;
+    //             let new_y = feed_map
+    //                 .get(&yref.unwrap())
+    //                 .ok_or(ParseError::UninitializedFeed(yref.unwrap()))?;
+    //             let new_z = state.add_and_gate(*new_x, *new_y);
+    //             feed_map.insert(zref, new_z);
+    //         }
+    //         GateType::Inv => {
+    //             let new_x = feed_map
+    //                 .get(&xref)
+    //                 .ok_or(ParseError::UninitializedFeed(xref))?;
+    //             let new_z = state.add_inv_gate(*new_x);
+    //             feed_map.insert(zref, new_z);
+    //         }
+    //     }
+    // }
+    // drop(state);
+    // feed_ids.sort();
 
-        // for output in outputs.iter().rev() {
-        //     let feeds = feed_ids
-        //         .drain(feed_ids.len() - output.len()..)
-        //         .map(|id| {
-        //             *feed_map
-        //                 .get(&id)
-        //                 .expect("Old feed should be mapped to new feed")
-        //         })
-        //         .collect::<Vec<Node<Feed>>>();
+    // for output in outputs.iter().rev() {
+    //     let feeds = feed_ids
+    //         .drain(feed_ids.len() - output.len()..)
+    //         .map(|id| {
+    //             *feed_map
+    //                 .get(&id)
+    //                 .expect("Old feed should be mapped to new feed")
+    //         })
+    //         .collect::<Vec<Node<Feed>>>();
 
-        //     let output = output.to_bin_repr(&feeds).unwrap();
-        //     builder.add_output(output);
-        // }
+    //     let output = output.to_bin_repr(&feeds).unwrap();
+    //     builder.add_output(output);
+    // }
 
-        // Ok(builder.build()?)
+    // Ok(builder.build()?)
 
-        Ok(())
-    }
+    Ok(())
 }
 
 struct UncheckedGate {
@@ -2550,13 +2728,11 @@ impl UncheckedGate {
 
 #[cfg(test)]
 mod tests {
-    //use mpz_circuits_macros::evaluate;
-
     use super::*;
 
     #[test]
     fn test_parse_circom_mul2() {
-        let circ = Circuit::parse_circom(
+        let circ = parse_circom(
             "circuits/bristol/adder64_reverse.txt",
             &[ValueType::U64, ValueType::U64],
             &[ValueType::U64],
@@ -2570,22 +2746,4 @@ mod tests {
 
         //assert_eq!(output, 3);
     }
-
-}
-
-
-fn main() {
-    let circ = Circuit::parse_circom(
-        "circuits/bristol/adder64_reverse.txt",
-        &[ValueType::U64, ValueType::U64],
-        &[ValueType::U64],
-    )
-    .unwrap();
-
-    // stupid assert always true
-    assert_eq!(3, 3);
-
-    //let output: u64 = evaluate!(circ, fn(1u64, 2u64) -> u64).unwrap();
-
-    //assert_eq!(output, 3); 
 }
