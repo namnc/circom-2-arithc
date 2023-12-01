@@ -23,7 +23,6 @@
                 "args": [
                     "build",
                     "--bin=circom",
-                    "--package=mpz-circuits"
                 ],
                 "filter": {
                     "name": "circom",
