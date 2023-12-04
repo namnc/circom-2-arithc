@@ -1,12 +1,8 @@
-#![allow(unused_variables, dead_code, unused_assignments)]
-
-mod circom;
-
-use circom::parse_circom;
+use circom_2_arithc::program::parse_circom;
 use mpz_circuits::types::ValueType;
 
 fn main() {
-    let circ = parse_circom(
+    let _circ = parse_circom(
         "circuits/bristol/adder64_reverse.txt",
         &[ValueType::U64, ValueType::U64],
         &[ValueType::U64],
