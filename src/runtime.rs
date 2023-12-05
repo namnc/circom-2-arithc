@@ -2,7 +2,9 @@
 //!
 //! This module manages the runtime environment for arithmetic circuit computation, handling variable and execution context tracking.
 
-use std::collections::{HashMap, LinkedList};
+use std::collections::{HashMap, HashSet, LinkedList};
+
+use log::debug;
 
 /// Circom Runtime - the main runtime struct.
 pub struct CircomRuntime {
@@ -238,90 +240,52 @@ impl RuntimeContext {
 pub struct RuntimeExecutionContext {
     pub caller_id: u32,
     pub context_id: u32,
-    pub vars: HashMap<String, u32>,
-    pub exevars: HashMap<String, bool>,
+    pub vars: HashMap<String, Option<u32>>,
 }
 
 impl RuntimeExecutionContext {
-    pub fn new(_caller_id: u32, _context_id: u32) -> RuntimeExecutionContext {
-        RuntimeExecutionContext {
-            caller_id: _caller_id,
-            context_id: _context_id,
-            vars: HashMap::new(),
-            exevars: HashMap::new(),
+    /// Constructs a new runtime execution context with specified caller and context IDs, cloning variables from the given context.
+    pub fn new(caller_id: u32, context_id: u32, context: &RuntimeContext) -> Self {
+        Self {
+            caller_id,
+            context_id,
+            vars: context.execution.vars.clone(),
         }
     }
 
-    pub fn init(&mut self, context: &RuntimeContext) {
-        for (k, v) in context.execution.vars.iter() {
-            self.assign_var(k);
-            if context.execution.can_get_var_val(k) {
-                self.assign_var_val(k, *v);
-            }
-        }
-    }
-
-    // Return to caller or return from callee to push changes from a function call back to caller
+    /// Copies all variables from this context back to the caller's context.
     pub fn return_to_caller(&mut self, context: &mut RuntimeContext) {
-        for (k, v) in self.vars.iter() {
-            context.execution.assign_var(k);
-            if self.can_get_var_val(k) {
-                context.execution.assign_var_val(k, *v);
-            }
-        }
+        self.vars.iter().for_each(|(name, &val)| match val {
+            Some(value) => context.execution.set_var(name, value),
+            None => context.execution.unset_var(name),
+        });
     }
 
-    pub fn assign_var(&mut self, var_name: &String) -> u32 {
-        let mut var_val = 0;
-        if self.exevars.contains_key(var_name) {
-            var_val = self.get_var_val(var_name);
-            self.vars.insert(var_name.to_string(), var_val);
-            println!(
-                "[RuntimeExecutionContext] Now {} carries over val {}",
-                var_name, var_val
-            );
-        } else {
-            self.vars.insert(var_name.to_string(), 0);
-            self.exevars.insert(var_name.to_string(), false);
-            println!(
-                "[RuntimeExecutionContext] Now {} has no val {}",
-                var_name, var_val
-            );
-        }
-        var_val
+    /// Declares a new variable in the context without setting its value (initialized as unset).
+    pub fn declare_var(&mut self, var_name: &str) {
+        self.vars.insert(var_name.to_owned(), None);
+        debug!("[RuntimeExecutionContext] '{}' is declared", var_name);
     }
 
-    pub fn assign_var_val(&mut self, var_name: &String, var_val: u32) -> u32 {
-        self.vars.insert(var_name.to_string(), var_val);
-        self.exevars.insert(var_name.to_string(), true);
-        println!(
-            "[RuntimeExecutionContext] Now {} has val {}",
+    /// Retrieves the value of a variable if it is set, or None if it is unset.
+    pub fn get_var(&self, var_name: &str) -> Option<u32> {
+        self.vars.get(var_name).cloned().flatten()
+    }
+
+    /// Sets the value of a specified variable, marking it as set.
+    pub fn set_var(&mut self, var_name: &str, var_val: u32) {
+        self.vars.insert(var_name.to_owned(), Some(var_val));
+        debug!(
+            "[RuntimeExecutionContext] '{}' set to {}",
             var_name, var_val
         );
-        var_val
     }
 
-    pub fn deassign_var_val(&mut self, var_name: &String) -> u32 {
-        self.vars.insert(var_name.to_string(), 0);
-        self.exevars.insert(var_name.to_string(), false);
-        println!(
-            "[RuntimeExecutionContext] Now {} has no val {}",
-            var_name, 0
-        );
-        0
-    }
-
-    pub fn get_var_val(&self, var_name: &String) -> u32 {
-        if !self.can_get_var_val(var_name) {
-            return 0;
+    /// Unsets (clears) a specified variable.
+    pub fn unset_var(&mut self, var_name: &str) {
+        if self.vars.contains_key(var_name) {
+            self.vars.insert(var_name.to_owned(), None);
+            debug!("[RuntimeExecutionContext] '{}' is unset", var_name);
         }
-        *self.vars.get(var_name).unwrap()
-    }
-
-    pub fn can_get_var_val(&self, var_name: &String) -> bool {
-        if !self.exevars.contains_key(var_name) {
-            return false;
-        }
-        *self.exevars.get(var_name).unwrap()
     }
 }
