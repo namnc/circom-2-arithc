@@ -4,186 +4,7 @@
 
 use std::collections::{HashMap, LinkedList};
 
-/// Runtime Context struct.
-/// For runtime context we mostly care about the `var_id`.
-/// For runtime execution we care about the evaluated value of a named variable.
-pub struct RuntimeContext {
-    pub caller_id: u32,
-    pub context_id: u32,
-    pub vars: HashMap<String, u32>,
-    pub execution: RuntimeExecutionContext,
-}
-
-impl RuntimeContext {
-    pub fn new(_caller_id: u32, _context_id: u32) -> RuntimeContext {
-        RuntimeContext {
-            caller_id: _caller_id,
-            context_id: _context_id,
-            vars: HashMap::new(),
-            execution: RuntimeExecutionContext::new(_caller_id, _context_id),
-        }
-    }
-
-    // pub fn init (&mut self, runtime: &CircomRuntime) {
-    //     let context = runtime.get_runtime_context_by_context_id(self.caller_id);
-    //     for (k, v) in context.vars.iter() {
-    //         self.assign_var(k, *v);
-    //     }
-    //     self.execution.init(context);
-    // }
-
-    // Return to caller or return from callee to push changes from a function call back to caller
-    // pub fn return_to_caller(&mut self, runtime: &CircomRuntime) {
-    //     let context = runtime.get_runtime_context_by_context_id(self.caller_id);
-    //     for (k, v) in self.vars.iter() {
-    //         context.assign_var(k, *v);
-    //     }
-    //     self.execution.return_to_caller(context);
-    // }
-
-    pub fn assign_var(&mut self, var_name: &String, last_var_id: u32) -> u32 {
-        self.vars.insert(var_name.to_string(), last_var_id);
-        self.execution.assign_var(var_name);
-        println!(
-            "[RuntimeContext] {} is now with id {}",
-            var_name, last_var_id
-        );
-        last_var_id
-    }
-
-    pub fn assign_var_val(&mut self, var_name: &String, var_val: u32) -> u32 {
-        if !self.can_get_var(var_name) {
-            return 0;
-        }
-        self.execution.assign_var_val(var_name, var_val);
-        var_val
-    }
-
-    pub fn deassign_var_val(&mut self, var_name: &String) -> u32 {
-        if !self.can_get_var(var_name) {
-            return 0;
-        }
-        self.execution.deassign_var_val(var_name);
-        0
-    }
-
-    pub fn can_get_var(&self, var_name: &String) -> bool {
-        self.vars.contains_key(var_name)
-    }
-
-    pub fn get_var(&self, var_name: &String) -> u32 {
-        if !self.can_get_var(var_name) {
-            return 0;
-        }
-        *self.vars.get(var_name).unwrap()
-    }
-
-    pub fn can_get_var_val(&self, var_name: &String) -> bool {
-        self.execution.can_get_var_val(var_name)
-    }
-
-    pub fn get_var_val(&self, var_name: &String) -> u32 {
-        if !self.execution.can_get_var_val(var_name) {
-            return 0;
-        }
-        self.execution.get_var_val(var_name)
-    }
-}
-
-/// Runtime Execution Context struct
-pub struct RuntimeExecutionContext {
-    pub caller_id: u32,
-    pub context_id: u32,
-    pub vars: HashMap<String, u32>,
-    pub exevars: HashMap<String, bool>,
-}
-
-impl RuntimeExecutionContext {
-    pub fn new(_caller_id: u32, _context_id: u32) -> RuntimeExecutionContext {
-        RuntimeExecutionContext {
-            caller_id: _caller_id,
-            context_id: _context_id,
-            vars: HashMap::new(),
-            exevars: HashMap::new(),
-        }
-    }
-
-    pub fn init(&mut self, context: &RuntimeContext) {
-        for (k, v) in context.execution.vars.iter() {
-            self.assign_var(k);
-            if context.execution.can_get_var_val(k) {
-                self.assign_var_val(k, *v);
-            }
-        }
-    }
-
-    // Return to caller or return from callee to push changes from a function call back to caller
-    // pub fn return_to_caller(&mut self, context: &mut RuntimeContext) {
-    //     for (k, v) in self.vars.iter() {
-    //         context.execution.assign_var(k);
-    //         if self.can_get_var_val(k) {
-    //             context.execution.assign_var_val(k, *v);
-    //         }
-    //     }
-    // }
-
-    pub fn assign_var(&mut self, var_name: &String) -> u32 {
-        let mut var_val = 0;
-        if self.exevars.contains_key(var_name) {
-            var_val = self.get_var_val(var_name);
-            self.vars.insert(var_name.to_string(), var_val);
-            println!(
-                "[RuntimeExecutionContext] Now {} carries over val {}",
-                var_name, var_val
-            );
-        } else {
-            self.vars.insert(var_name.to_string(), 0);
-            self.exevars.insert(var_name.to_string(), false);
-            println!(
-                "[RuntimeExecutionContext] Now {} has no val {}",
-                var_name, var_val
-            );
-        }
-        var_val
-    }
-
-    pub fn assign_var_val(&mut self, var_name: &String, var_val: u32) -> u32 {
-        self.vars.insert(var_name.to_string(), var_val);
-        self.exevars.insert(var_name.to_string(), true);
-        println!(
-            "[RuntimeExecutionContext] Now {} has val {}",
-            var_name, var_val
-        );
-        var_val
-    }
-
-    pub fn deassign_var_val(&mut self, var_name: &String) -> u32 {
-        self.vars.insert(var_name.to_string(), 0);
-        self.exevars.insert(var_name.to_string(), false);
-        println!(
-            "[RuntimeExecutionContext] Now {} has no val {}",
-            var_name, 0
-        );
-        0
-    }
-
-    pub fn get_var_val(&self, var_name: &String) -> u32 {
-        if !self.can_get_var_val(var_name) {
-            return 0;
-        }
-        *self.vars.get(var_name).unwrap()
-    }
-
-    pub fn can_get_var_val(&self, var_name: &String) -> bool {
-        if !self.exevars.contains_key(var_name) {
-            return false;
-        }
-        *self.exevars.get(var_name).unwrap()
-    }
-}
-
-/// For runtime we maintain a call stack
-/// Right now this is buggy cannot handle the stack management (RUST!!!)
+/// Circom Runtime - the main runtime struct.
 pub struct CircomRuntime {
     pub last_var_id: u32,
     pub last_context_id: u32,
@@ -324,5 +145,183 @@ impl CircomRuntime {
         current.assign_var(&var, var_id);
         println!("[CircomRuntime] Array var {}", var);
         (var, var_id)
+    }
+}
+
+/// Runtime Context - tracks the variable and execution context for a specific environment.
+/// For runtime context we mostly care about the `var_id`.
+/// For runtime execution we care about the evaluated value of a named variable.
+pub struct RuntimeContext {
+    pub caller_id: u32,
+    pub context_id: u32,
+    pub vars: HashMap<String, u32>,
+    pub execution: RuntimeExecutionContext,
+}
+
+impl RuntimeContext {
+    pub fn new(_caller_id: u32, _context_id: u32) -> RuntimeContext {
+        RuntimeContext {
+            caller_id: _caller_id,
+            context_id: _context_id,
+            vars: HashMap::new(),
+            execution: RuntimeExecutionContext::new(_caller_id, _context_id),
+        }
+    }
+
+    // pub fn init (&mut self, runtime: &CircomRuntime) {
+    //     let context = runtime.get_runtime_context_by_context_id(self.caller_id);
+    //     for (k, v) in context.vars.iter() {
+    //         self.assign_var(k, *v);
+    //     }
+    //     self.execution.init(context);
+    // }
+
+    // Return to caller or return from callee to push changes from a function call back to caller
+    // pub fn return_to_caller(&mut self, runtime: &CircomRuntime) {
+    //     let context = runtime.get_runtime_context_by_context_id(self.caller_id);
+    //     for (k, v) in self.vars.iter() {
+    //         context.assign_var(k, *v);
+    //     }
+    //     self.execution.return_to_caller(context);
+    // }
+
+    pub fn assign_var(&mut self, var_name: &String, last_var_id: u32) -> u32 {
+        self.vars.insert(var_name.to_string(), last_var_id);
+        self.execution.assign_var(var_name);
+        println!(
+            "[RuntimeContext] {} is now with id {}",
+            var_name, last_var_id
+        );
+        last_var_id
+    }
+
+    pub fn assign_var_val(&mut self, var_name: &String, var_val: u32) -> u32 {
+        if !self.can_get_var(var_name) {
+            return 0;
+        }
+        self.execution.assign_var_val(var_name, var_val);
+        var_val
+    }
+
+    pub fn deassign_var_val(&mut self, var_name: &String) -> u32 {
+        if !self.can_get_var(var_name) {
+            return 0;
+        }
+        self.execution.deassign_var_val(var_name);
+        0
+    }
+
+    pub fn can_get_var(&self, var_name: &String) -> bool {
+        self.vars.contains_key(var_name)
+    }
+
+    pub fn get_var(&self, var_name: &String) -> u32 {
+        if !self.can_get_var(var_name) {
+            return 0;
+        }
+        *self.vars.get(var_name).unwrap()
+    }
+
+    pub fn can_get_var_val(&self, var_name: &String) -> bool {
+        self.execution.can_get_var_val(var_name)
+    }
+
+    pub fn get_var_val(&self, var_name: &String) -> u32 {
+        if !self.execution.can_get_var_val(var_name) {
+            return 0;
+        }
+        self.execution.get_var_val(var_name)
+    }
+}
+
+/// Runtime Execution Context
+pub struct RuntimeExecutionContext {
+    pub caller_id: u32,
+    pub context_id: u32,
+    pub vars: HashMap<String, u32>,
+    pub exevars: HashMap<String, bool>,
+}
+
+impl RuntimeExecutionContext {
+    pub fn new(_caller_id: u32, _context_id: u32) -> RuntimeExecutionContext {
+        RuntimeExecutionContext {
+            caller_id: _caller_id,
+            context_id: _context_id,
+            vars: HashMap::new(),
+            exevars: HashMap::new(),
+        }
+    }
+
+    pub fn init(&mut self, context: &RuntimeContext) {
+        for (k, v) in context.execution.vars.iter() {
+            self.assign_var(k);
+            if context.execution.can_get_var_val(k) {
+                self.assign_var_val(k, *v);
+            }
+        }
+    }
+
+    // Return to caller or return from callee to push changes from a function call back to caller
+    pub fn return_to_caller(&mut self, context: &mut RuntimeContext) {
+        for (k, v) in self.vars.iter() {
+            context.execution.assign_var(k);
+            if self.can_get_var_val(k) {
+                context.execution.assign_var_val(k, *v);
+            }
+        }
+    }
+
+    pub fn assign_var(&mut self, var_name: &String) -> u32 {
+        let mut var_val = 0;
+        if self.exevars.contains_key(var_name) {
+            var_val = self.get_var_val(var_name);
+            self.vars.insert(var_name.to_string(), var_val);
+            println!(
+                "[RuntimeExecutionContext] Now {} carries over val {}",
+                var_name, var_val
+            );
+        } else {
+            self.vars.insert(var_name.to_string(), 0);
+            self.exevars.insert(var_name.to_string(), false);
+            println!(
+                "[RuntimeExecutionContext] Now {} has no val {}",
+                var_name, var_val
+            );
+        }
+        var_val
+    }
+
+    pub fn assign_var_val(&mut self, var_name: &String, var_val: u32) -> u32 {
+        self.vars.insert(var_name.to_string(), var_val);
+        self.exevars.insert(var_name.to_string(), true);
+        println!(
+            "[RuntimeExecutionContext] Now {} has val {}",
+            var_name, var_val
+        );
+        var_val
+    }
+
+    pub fn deassign_var_val(&mut self, var_name: &String) -> u32 {
+        self.vars.insert(var_name.to_string(), 0);
+        self.exevars.insert(var_name.to_string(), false);
+        println!(
+            "[RuntimeExecutionContext] Now {} has no val {}",
+            var_name, 0
+        );
+        0
+    }
+
+    pub fn get_var_val(&self, var_name: &String) -> u32 {
+        if !self.can_get_var_val(var_name) {
+            return 0;
+        }
+        *self.vars.get(var_name).unwrap()
+    }
+
+    pub fn can_get_var_val(&self, var_name: &String) -> bool {
+        if !self.exevars.contains_key(var_name) {
+            return false;
+        }
+        *self.exevars.get(var_name).unwrap()
     }
 }
