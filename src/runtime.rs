@@ -4,13 +4,14 @@
 
 use log::debug;
 use std::collections::HashMap;
+use thiserror::Error;
 
 /// Circom Runtime
 /// Handles the runtime context stack and variable tracking.
 pub struct CircomRuntime {
-    pub call_stack: Vec<RuntimeContext>,
-    pub last_context_id: u32,
-    pub last_var_id: u32,
+    call_stack: Vec<RuntimeContext>,
+    last_context_id: u32,
+    last_var_id: u32,
 }
 
 impl CircomRuntime {
@@ -24,20 +25,20 @@ impl CircomRuntime {
     }
 
     /// Retrieves a specific context by its ID.
-    pub fn get_context(&mut self, id: u32) -> Result<&mut RuntimeContext, &'static str> {
+    pub fn get_context(&mut self, id: u32) -> Result<&mut RuntimeContext, RuntimeError> {
         let index = self.call_stack.iter().position(|c| c.context_id == id);
 
         match index {
             Some(idx) => Ok(&mut self.call_stack[idx]),
-            None => Err("Context not found"),
+            None => Err(RuntimeError::ContextRetrievalError),
         }
     }
 
     /// Retrieves the current runtime context.
-    pub fn get_current_context(&self) -> Result<RuntimeContext, &'static str> {
+    pub fn get_current_context(&self) -> Result<RuntimeContext, RuntimeError> {
         match self.call_stack.pop().as_mut() {
             Some(context) => Ok(context.clone()),
-            None => Err("Context stack is empty"),
+            None => Err(RuntimeError::EmptyContextStack),
         }
     }
 
@@ -149,10 +150,10 @@ impl CircomRuntime {
 /// Handles a specific runtime context, including variable tracking and execution context.
 #[derive(Clone)]
 pub struct RuntimeContext {
-    pub caller_id: u32,
-    pub context_id: u32,
-    pub execution: ExecutionContext,
-    pub var_ids: HashMap<String, u32>, // Variable Name -> Variable ID
+    caller_id: u32,
+    context_id: u32,
+    execution: ExecutionContext,
+    var_ids: HashMap<String, u32>, // Variable Name -> Variable ID
 }
 
 impl RuntimeContext {
@@ -167,29 +168,31 @@ impl RuntimeContext {
     }
 
     /// Initializes the runtime context with the caller context.
-    pub fn init(&mut self, runtime: &CircomRuntime) -> &mut Self {
+    pub fn init(&mut self, runtime: &CircomRuntime) -> Result<&mut Self, RuntimeError> {
         // Load the caller context
-        let mut context = runtime.get_context(self.caller_id).unwrap();
+        let mut runtime_ctx = runtime.get_context(self.caller_id)?;
 
         // Copy the caller context's variable ids
-        self.var_ids = context.var_ids.clone();
+        self.var_ids = runtime_ctx.var_ids.clone();
 
         // Copy the caller context's variables
-        self.execution.load_context(context);
+        self.execution.load_context(runtime_ctx);
 
-        self
+        Ok(self)
     }
 
     /// Returns variable changes to the caller context.
-    pub fn return_to_caller(&mut self, runtime: &CircomRuntime) -> Result<(), &'static str> {
+    pub fn return_to_caller(&mut self, runtime: &CircomRuntime) -> Result<(), RuntimeError> {
         // Load the caller context
-        let mut context = runtime.get_context(self.caller_id)?;
+        let mut runtime_ctx = runtime.get_context(self.caller_id)?;
 
+        // Declare all variables in the caller context
         for (name, &id) in &self.var_ids {
-            context.declare_var(name, id);
+            runtime_ctx.declare_var(name, id);
         }
 
-        self.execution.return_to_caller(context);
+        // Return all variables to the caller context
+        self.execution.return_to_caller(runtime_ctx);
 
         Ok(())
     }
@@ -208,41 +211,31 @@ impl RuntimeContext {
 
     /// Assigns a value to a variable in the execution context.
     /// If the variable is not declared, it will return an error.
-    pub fn set_var(&mut self, name: &str, value: u32) -> Result<(), &'static str> {
-        // Check if the variable is declared
+    pub fn set_var(&mut self, name: &str, value: u32) -> Result<(), RuntimeError> {
         if !self.var_ids.contains_key(name) {
-            return Err("Variable is not declared");
+            return Err(RuntimeError::VariableNotDeclared);
         }
 
-        // Set the variable value
-        self.execution.set_var(name, value);
-
-        Ok(())
+        self.execution.set_var(name, value)
     }
 
     /// Unsets a variable in the execution context.
     /// If the variable is not declared, it will return an error.
-    pub fn unset_var(&mut self, name: &str) -> Result<(), &'static str> {
-        // Check if the variable is declared
+    pub fn unset_var(&mut self, name: &str) -> Result<(), RuntimeError> {
         if !self.var_ids.contains_key(name) {
-            return Err("Variable is not declared");
+            return Err(RuntimeError::VariableNotDeclared);
         }
 
-        // Unset the variable
-        self.execution.unset_var(name);
-
-        Ok(())
+        self.execution.unset_var(name)
     }
 
-    /// Gets the value of a variable in the execution context.
+    /// Gets the value of a variable from the execution context.
     /// If the variable is not declared, it will return an error.
-    pub fn get_value(&self, name: &str) -> Result<u32, &'static str> {
-        // Check if the variable is declared
+    pub fn get_value(&self, name: &str) -> Result<u32, RuntimeError> {
         if !self.var_ids.contains_key(name) {
-            return Err("Variable is not declared");
+            return Err(RuntimeError::VariableNotDeclared);
         }
 
-        // Get the variable value
         match self.execution.get_var(name)? {
             Some(value) => Ok(value),
             None => Ok(0),
@@ -251,11 +244,11 @@ impl RuntimeContext {
 
     /// Gets the id of a variable in the runtime context.
     /// If the variable is not declared, it will return an error.
-    pub fn get_var_id(&self, var_name: &String) -> Result<u32, &'static str> {
-        match self.var_ids.get(var_name) {
-            Some(&id) => Ok(id),
-            None => Err("Variable is not declared"),
-        }
+    pub fn get_var_id(&self, var_name: &str) -> Result<u32, RuntimeError> {
+        self.var_ids
+            .get(var_name)
+            .copied()
+            .ok_or(RuntimeError::VariableNotDeclared)
     }
 }
 
@@ -263,9 +256,9 @@ impl RuntimeContext {
 /// Handles variable operations and values for a specific runtime context.
 #[derive(Clone)]
 pub struct ExecutionContext {
-    pub caller_id: u32,
-    pub context_id: u32,
-    pub vars: HashMap<String, Option<u32>>, // Variable Name -> Variable Value
+    caller_id: u32,
+    context_id: u32,
+    vars: HashMap<String, Option<u32>>, // Variable Name -> Variable Value
 }
 
 impl ExecutionContext {
@@ -278,21 +271,25 @@ impl ExecutionContext {
         }
     }
 
-    /// Copies all variables from the specified context into this context.
+    /// Clones all variables from the specified context into this context.
     pub fn load_context(&mut self, context: &RuntimeContext) -> &mut Self {
         self.vars = context.execution.vars.clone();
         self
     }
 
-    /// Copies all variables from this context back to the caller's context.
-    pub fn return_to_caller(&mut self, context: &mut RuntimeContext) {
-        self.vars.iter().for_each(|(name, &val)| match val {
-            Some(value) => context.execution.set_var(name, value),
-            None => context.execution.unset_var(name),
-        });
+    /// Updates all variables from this context back to the caller's context.
+    pub fn return_to_caller(&mut self, context: &mut RuntimeContext) -> Result<(), RuntimeError> {
+        for (name, &val) in &self.vars {
+            match val {
+                Some(value) => context.execution.set_var(name, value)?,
+                None => context.execution.unset_var(name)?,
+            }
+        }
+        Ok(())
     }
 
     /// Declares a new variable in the context without setting its value (initialized as unset).
+    /// If the variable is already declared, it will be overwritten.
     pub fn declare_var(&mut self, var_name: &str) {
         self.vars.insert(var_name.to_owned(), None);
         debug!("[ExecutionContext] '{}' is declared", var_name);
@@ -300,24 +297,47 @@ impl ExecutionContext {
 
     /// Retrieves the value of a variable if it is set, or None if it is unset.
     /// If the variable is not declared, it will return an error.
-    pub fn get_var(&self, var_name: &str) -> Result<Option<u32>, &'static str> {
+    pub fn get_var(&self, var_name: &str) -> Result<Option<u32>, RuntimeError> {
         match self.vars.get(var_name) {
             Some(&value) => Ok(value),
-            None => Err("Variable is not declared"),
+            None => Err(RuntimeError::VariableNotDeclared),
         }
     }
 
-    /// Sets the value of a specified variable, marking it as set.
-    pub fn set_var(&mut self, var_name: &str, var_val: u32) {
-        self.vars.insert(var_name.to_owned(), Some(var_val));
-        debug!("[ExecutionContext] '{}' set to {}", var_name, var_val);
+    /// Sets the value of a declared variable, marking it as set.
+    /// If the variable is not declared, it will return an error.
+    pub fn set_var(&mut self, var_name: &str, var_val: u32) -> Result<(), RuntimeError> {
+        match self.vars.get_mut(var_name) {
+            Some(value) => {
+                *value = Some(var_val);
+                debug!("[ExecutionContext] '{}' set to {}", var_name, var_val);
+                Ok(())
+            }
+            None => Err(RuntimeError::VariableNotDeclared),
+        }
     }
 
     /// Unsets (clears) a specified variable.
-    pub fn unset_var(&mut self, var_name: &str) {
-        if self.vars.contains_key(var_name) {
-            self.vars.insert(var_name.to_owned(), None);
-            debug!("[ExecutionContext] '{}' is unset", var_name);
+    /// If the variable is not declared, it will return an error.
+    pub fn unset_var(&mut self, var_name: &str) -> Result<(), RuntimeError> {
+        match self.vars.get_mut(var_name) {
+            Some(value) => {
+                *value = None;
+                debug!("[ExecutionContext] '{}' is unset", var_name);
+                Ok(())
+            }
+            None => Err(RuntimeError::VariableNotDeclared),
         }
     }
+}
+
+/// Runtime errors
+#[derive(Error, Debug)]
+pub enum RuntimeError {
+    #[error("Error retrieving context")]
+    ContextRetrievalError,
+    #[error("Empty context stack")]
+    EmptyContextStack,
+    #[error("Variable is not declared")]
+    VariableNotDeclared,
 }
