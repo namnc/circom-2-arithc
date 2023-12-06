@@ -537,8 +537,7 @@ fn execute_statement(
             println!("[Execute] Assigning {} ? {} to {}", rhs, rhsb, &name_access);
             if rhsb {
                 println!("[Execute] Assigning {} to {}", rhs, &name_access);
-                runtime
-                    .assign_var_val_to_current_context(&name_access, rhs.parse::<u32>().unwrap());
+                runtime.set_var(&name_access, rhs.parse::<u32>().unwrap());
             }
         }
         Block { stmts, .. } => {
@@ -566,8 +565,8 @@ fn traverse_expression(
     // let mut can_be_simplified = true;
     match expr {
         Number(_, value) => {
-            let var_id = runtime.assign_var_to_current_context(&value.to_string());
-            runtime.assign_var_val_to_current_context(&value.to_string(), value.to_u32().unwrap());
+            let var_id = runtime.declare_var(&value.to_string()).unwrap();
+            runtime.set_var(&value.to_string(), value.to_u32().unwrap());
             ac.add_const_var(var_id, value.to_u32().unwrap());
             println!("[Traverse] Number value {}", value);
             value.to_string()
@@ -579,9 +578,9 @@ fn traverse_expression(
             rhe,
             ..
         } => {
-            let varlhs = runtime.assign_auto_var_to_current_context();
+            let varlhs = runtime.auto_generate_var().unwrap();
             println!("[Traverse] Auto var for lhs {}", varlhs);
-            let varrhs = runtime.assign_auto_var_to_current_context();
+            let varrhs = runtime.auto_generate_var().unwrap();
             println!("[Traverse] Auto var for rhs {}", varrhs);
             let varlop = traverse_expression(ac, runtime, &varlhs, lhe, program_archive);
             println!("[Traverse] lhs {}", varlop);
@@ -628,14 +627,13 @@ fn traverse_expression(
                     }
                 }
             }
-            if runtime.can_get_var_val_from_current_context(&name_access) {
-                let var_val = runtime
-                    .get_var_val_from_current_context(&name_access)
-                    .to_string();
+            if runtime.get_var(&name_access).is_ok() {
+                let var_val = runtime.get_var(&name_access).unwrap().to_string();
                 println!("[Traverse] Return var value {} = {}", name_access, var_val);
-                let var_id = runtime.assign_var_to_current_context(&var_val);
+                let var_id = runtime.declare_var(&var_val).unwrap();
                 let var_val_n = runtime
-                    .assign_var_val_to_current_context(&var_val, var_val.parse::<u32>().unwrap());
+                    .set_var(&var_val, var_val.parse::<u32>().unwrap())
+                    .unwrap();
                 ac.add_const_var(var_id, var_val_n);
                 return var_val.to_string();
             }
@@ -682,8 +680,8 @@ fn execute_expression(
     // let mut can_be_simplified = true;
     match expr {
         Number(_, value) => {
-            let var_id = runtime.assign_var_to_current_context(&value.to_string());
-            runtime.assign_var_val_to_current_context(&value.to_string(), value.to_u32().unwrap());
+            let var_id = runtime.declare_var(&value.to_string()).unwrap();
+            runtime.set_var(&value.to_string(), value.to_u32().unwrap());
             ac.add_const_var(var_id, value.to_u32().unwrap());
             println!("[Execute] Number value {}", value);
             (value.to_string(), true)
@@ -695,9 +693,9 @@ fn execute_expression(
             rhe,
             ..
         } => {
-            let varlhs = runtime.assign_auto_var_to_current_context();
+            let varlhs = runtime.auto_generate_var().unwrap();
             println!("[Execute] Auto var for lhs {}", varlhs);
-            let varrhs = runtime.assign_auto_var_to_current_context();
+            let varrhs = runtime.auto_generate_var().unwrap();
             println!("[Execute] Auto var for rhs {}", varrhs);
             let (varlop, lhsb) = execute_expression(ac, runtime, &varlhs, lhe, program_archive);
             println!("[Execute] lhs {} {}", varlop, lhsb);
@@ -742,6 +740,7 @@ fn execute_expression(
                     }
                 }
             }
+            // TODO: check
             if runtime.can_get_var_val_from_current_context(&name_access) {
                 let var_val = runtime
                     .get_var_val_from_current_context(&name_access)
@@ -797,11 +796,11 @@ fn traverse_infix_op(
     // For now skip traversal if can execute
 
     let mut can_execute_infix = true;
-    if !runtime.can_get_var_val_from_current_context(input_lhs) {
+    if runtime.get_var(input_lhs).is_err() {
         println!("[Traverse] cannot get lhs var val {}", input_lhs);
         can_execute_infix = false;
     }
-    if !runtime.can_get_var_val_from_current_context(input_rhs) {
+    if runtime.get_var(input_rhs).is_err() {
         println!("[Traverse] cannot get rhs var val {}", input_rhs);
         can_execute_infix = false;
     }
@@ -810,13 +809,13 @@ fn traverse_infix_op(
     if can_execute_infix {
         return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
     } else {
-        runtime.deassign_var_val_to_current_context(output);
+        runtime.unset_var(output);
         println!("[Traverse] Now mark {} as no value", output);
     }
 
-    let lhsvar_id = runtime.get_var_from_current_context(input_lhs);
-    let rhsvar_id = runtime.get_var_from_current_context(input_rhs);
-    let var_id = runtime.assign_var_to_current_context(output);
+    let lhsvar_id = runtime.get_var(input_lhs).unwrap();
+    let rhsvar_id = runtime.get_var(input_rhs).unwrap();
+    let var_id = runtime.get_var(output).unwrap();
 
     // let var = ac.add_var(var_id, &output);
 
@@ -930,27 +929,27 @@ fn execute_infix_op(
 ) -> (u32, bool) {
     // let current = runtime.get_current_runtime_context();
     let mut can_execute_infix = true;
-    if !runtime.can_get_var_val_from_current_context(input_lhs) {
+    if runtime.get_var(input_lhs).is_err() {
         println!("[Execute] cannot get lhs var val {}", input_lhs);
         can_execute_infix = false;
     }
-    if !runtime.can_get_var_val_from_current_context(input_rhs) {
+    if runtime.get_var(input_rhs).is_err() {
         println!("[Execute] cannot get rhs var val {}", input_rhs);
         can_execute_infix = false;
     }
     println!("[Execute] can execute infix {}", can_execute_infix);
 
     if !can_execute_infix {
-        runtime.deassign_var_val_to_current_context(output);
+        runtime.unset_var(output);
         println!("[Execute] Now mark {} as no value", output);
         return (0, false);
     }
 
-    let lhsvar_val = runtime.get_var_val_from_current_context(input_lhs);
+    let lhsvar_val = runtime.get_var(input_lhs).unwrap();
     println!("[Execute] infix lhs = {}", lhsvar_val);
-    let rhsvar_val = runtime.get_var_val_from_current_context(input_rhs);
+    let rhsvar_val = runtime.get_var(input_rhs).unwrap();
     println!("[Execute] infix lhs = {}", rhsvar_val);
-    let var_id = runtime.assign_var_to_current_context(output);
+    let var_id = runtime.declare_var(output).unwrap();
 
     // let var = ac.add_var(var_id, &output);
 
@@ -1088,7 +1087,7 @@ fn traverse_variable_declaration(
     dim_u32_vec: &Vec<u32>,
 ) {
     if dim_u32_vec.is_empty() {
-        let var_id = runtime.assign_var_to_current_context(&var_name.to_string());
+        let var_id = runtime.declare_var(var_name).unwrap();
         ac.add_var(var_id, var_name.to_string().as_str());
     } else {
         // let mut all_accesses = Vec::new();
@@ -1106,8 +1105,9 @@ fn traverse_variable_declaration(
         for i in 0..dim_u32 {
             let mut u32vec = Vec::new();
             u32vec.push(i);
-            let (var, var_id) =
-                runtime.assign_array_var_to_current_context(&var_name.to_string(), u32vec);
+            let (var, var_id) = runtime
+                .assign_array_var_to_current_context(&var_name.to_string(), u32vec)
+                .unwrap();
             ac.add_var(var_id, var.as_str());
         }
     }

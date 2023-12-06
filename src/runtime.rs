@@ -96,21 +96,24 @@ impl CircomRuntime {
         self.get_current_context()?.get_value(var)
     }
 
-    /// Declares a variable in the current context.
-    pub fn declare_var(&self, name: &str) -> Result<(), RuntimeError> {
-        self.last_var_id += 1;
+    /// Declares a variable in the current context and returns its identifier.
+    pub fn declare_var(&self, name: &str) -> Result<u32, RuntimeError> {
+        let var_id = self.last_var_id + 1;
 
-        self.get_current_context()?
-            .declare_var(name, self.last_var_id);
+        self.last_var_id = var_id;
+
+        self.get_current_context()?.declare_var(name, var_id);
 
         debug!("[CircomRuntime] Declared var {}", name);
 
-        Ok(())
+        Ok(var_id)
     }
 
-    /// Sets the value of a variable in the current context.
-    pub fn set_var(&self, name: &str, value: u32) -> Result<(), RuntimeError> {
-        self.get_current_context()?.set_var(name, value)
+    /// Sets the value of a variable in the current context and returns its value.
+    pub fn set_var(&self, name: &str, value: u32) -> Result<u32, RuntimeError> {
+        self.get_current_context()?.set_var(name, value)?;
+
+        Ok(value)
     }
 
     /// Unsets a variable in the current context.
