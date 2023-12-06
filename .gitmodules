@@ -1,9 +1,6 @@
 [submodule "circomlib"]
 	path = circomlib
 	url = https://github.com/iden3/circomlib.git
-[submodule "apps/--force"]
-	path = apps/--force
-	url = https://github.com/socathie/circomlib-ml.git
 [submodule "apps/circomlib-ml"]
 	path = apps/circomlib-ml
 	url = https://github.com/socathie/circomlib-ml.git
