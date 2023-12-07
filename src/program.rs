@@ -139,7 +139,6 @@ pub fn traverse_program(program_archive: &ProgramArchive) -> ArithmeticCircuit {
     let mut ac = ArithmeticCircuit::new();
 
     let mut runtime = CircomRuntime::new();
-    runtime.init();
 
     let main_file_id = program_archive.get_file_id_main();
 

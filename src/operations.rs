@@ -537,7 +537,9 @@ fn execute_statement(
             println!("[Execute] Assigning {} ? {} to {}", rhs, rhsb, &name_access);
             if rhsb {
                 println!("[Execute] Assigning {} to {}", rhs, &name_access);
-                runtime.set_var(&name_access, rhs.parse::<u32>().unwrap());
+                runtime
+                    .set_var(&name_access, rhs.parse::<u32>().unwrap())
+                    .unwrap();
             }
         }
         Block { stmts, .. } => {
@@ -566,7 +568,9 @@ fn traverse_expression(
     match expr {
         Number(_, value) => {
             let var_id = runtime.declare_var(&value.to_string()).unwrap();
-            runtime.set_var(&value.to_string(), value.to_u32().unwrap());
+            runtime
+                .set_var(&value.to_string(), value.to_u32().unwrap())
+                .unwrap();
             ac.add_const_var(var_id, value.to_u32().unwrap());
             println!("[Traverse] Number value {}", value);
             value.to_string()
@@ -681,7 +685,9 @@ fn execute_expression(
     match expr {
         Number(_, value) => {
             let var_id = runtime.declare_var(&value.to_string()).unwrap();
-            runtime.set_var(&value.to_string(), value.to_u32().unwrap());
+            runtime
+                .set_var(&value.to_string(), value.to_u32().unwrap())
+                .unwrap();
             ac.add_const_var(var_id, value.to_u32().unwrap());
             println!("[Execute] Number value {}", value);
             (value.to_string(), true)
@@ -740,15 +746,13 @@ fn execute_expression(
                     }
                 }
             }
-            // TODO: check
-            if runtime.can_get_var_val_from_current_context(&name_access) {
-                let var_val = runtime
-                    .get_var_val_from_current_context(&name_access)
-                    .to_string();
+            if runtime.get_var(&name_access).is_ok() {
+                let var_val = runtime.get_var(&name_access).unwrap().to_string();
                 println!("[Execute] Return var value {} = {}", name_access, var_val);
-                runtime.assign_var_to_current_context(&var_val);
+                runtime.declare_var(&var_val).unwrap();
                 runtime
-                    .assign_var_val_to_current_context(&var_val, var_val.parse::<u32>().unwrap());
+                    .set_var(&var_val, var_val.parse::<u32>().unwrap())
+                    .unwrap();
                 return (var_val, true);
             }
             (name_access.to_string(), false)
@@ -809,7 +813,7 @@ fn traverse_infix_op(
     if can_execute_infix {
         return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
     } else {
-        runtime.unset_var(output);
+        runtime.unset_var(output).unwrap();
         println!("[Traverse] Now mark {} as no value", output);
     }
 
@@ -940,7 +944,7 @@ fn execute_infix_op(
     println!("[Execute] can execute infix {}", can_execute_infix);
 
     if !can_execute_infix {
-        runtime.unset_var(output);
+        runtime.unset_var(output).unwrap();
         println!("[Execute] Now mark {} as no value", output);
         return (0, false);
     }

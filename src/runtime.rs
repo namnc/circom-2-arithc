@@ -41,19 +41,10 @@ impl CircomRuntime {
     }
 
     /// Retrieves the current runtime context.
-    pub fn get_current_context(&self) -> Result<RuntimeContext, RuntimeError> {
-        match self.ctx_stack.pop().as_mut() {
-            Some(context) => Ok(context.clone()),
-            None => Err(RuntimeError::EmptyContextStack),
-        }
-    }
-
-    /// Retrieves the current runtime context.
-    pub fn get_current_context_mut(&self) -> Result<&mut RuntimeContext, RuntimeError> {
-        match self.ctx_stack.pop().as_mut() {
-            Some(context) => Ok(context),
-            None => Err(RuntimeError::EmptyContextStack),
-        }
+    pub fn get_current_context(&mut self) -> Result<&mut RuntimeContext, RuntimeError> {
+        self.ctx_stack
+            .last_mut()
+            .ok_or(RuntimeError::EmptyContextStack)
     }
 
     // Should add context from calling and branching
@@ -61,11 +52,11 @@ impl CircomRuntime {
 
     /// Creates a new context for a function call or similar operation.
     pub fn add_context(&mut self, origin: ContextOrigin) -> Result<(), RuntimeError> {
-        // Retrieve the current context
-        let current_context = self.get_current_context()?;
-
         // Increment the context ID for the new context
         self.last_context_id += 1;
+
+        // Retrieve the current context
+        let current_context = self.get_current_context()?;
 
         // Determine the caller ID for the new context based on the origin
         let new_caller_id = match origin {
@@ -74,15 +65,29 @@ impl CircomRuntime {
         };
 
         // Create the new context and add it to the stack
-        let new_context = RuntimeContext::new(new_caller_id, self.last_context_id).init(self)?;
-        self.ctx_stack.push(new_context.clone());
+        let mut new_context = RuntimeContext::new(new_caller_id, self.last_context_id);
+        new_context.init(self)?;
+        self.ctx_stack.push(new_context);
 
         Ok(())
     }
 
     /// Ends the current context and returns variables to the caller.
     pub fn end_current_context(&mut self) -> Result<(), RuntimeError> {
-        self.get_current_context_mut()?.return_to_caller(&self)
+        // Pop the current context off the stack
+        if let Some(mut current_context) = self.ctx_stack.pop() {
+            // Return variables to the caller
+            let result = current_context.return_to_caller(self);
+
+            // If there's an error, push the context back to restore the state
+            if result.is_err() {
+                self.ctx_stack.push(current_context);
+            }
+
+            result
+        } else {
+            Err(RuntimeError::EmptyContextStack)
+        }
     }
 
     // If first then else, so if 1 context -> if, if 2 contexts -> if else
@@ -92,17 +97,27 @@ impl CircomRuntime {
     }
 
     /// Retrieves the value of a variable from the current context.
-    pub fn get_var(&self, var: &str) -> Result<u32, RuntimeError> {
+    pub fn get_var(&mut self, var: &str) -> Result<u32, RuntimeError> {
         self.get_current_context()?.get_value(var)
     }
 
     /// Declares a variable in the current context and returns its identifier.
-    pub fn declare_var(&self, name: &str) -> Result<u32, RuntimeError> {
+    pub fn declare_var(&mut self, name: &str) -> Result<u32, RuntimeError> {
         let var_id = self.last_var_id + 1;
 
-        self.last_var_id = var_id;
+        // Get the current context
+        let current_context = self.get_current_context()?;
 
-        self.get_current_context()?.declare_var(name, var_id);
+        // Check if the variable is already declared in the current context
+        if current_context.get_var_id(name).is_ok() {
+            return Err(RuntimeError::VariableAlreadyDeclared);
+        }
+
+        // Declare the variable
+        current_context.declare_var(name, var_id);
+
+        // Increment the last variable ID
+        self.last_var_id = var_id;
 
         debug!("[CircomRuntime] Declared var {}", name);
 
@@ -110,14 +125,14 @@ impl CircomRuntime {
     }
 
     /// Sets the value of a variable in the current context and returns its value.
-    pub fn set_var(&self, name: &str, value: u32) -> Result<u32, RuntimeError> {
+    pub fn set_var(&mut self, name: &str, value: u32) -> Result<u32, RuntimeError> {
         self.get_current_context()?.set_var(name, value)?;
 
         Ok(value)
     }
 
     /// Unsets a variable in the current context.
-    pub fn unset_var(&self, name: &str) -> Result<(), RuntimeError> {
+    pub fn unset_var(&mut self, name: &str) -> Result<(), RuntimeError> {
         self.get_current_context()?.unset_var(name)
     }
 
@@ -140,7 +155,7 @@ impl CircomRuntime {
     ) -> Result<(String, u32), RuntimeError> {
         self.last_var_id += 1;
         let var_id = self.last_var_id;
-        let current = self.get_current_context_mut()?;
+        let current = self.get_current_context()?;
         let mut access_index = String::new();
         for i in 0..indice.len() {
             access_index.push_str(&format!("_{}", indice[i]));
@@ -175,9 +190,9 @@ impl RuntimeContext {
     }
 
     /// Initializes the runtime context with the caller context.
-    pub fn init(&mut self, runtime: &CircomRuntime) -> Result<&mut Self, RuntimeError> {
+    pub fn init(&mut self, runtime: &mut CircomRuntime) -> Result<&mut Self, RuntimeError> {
         // Load the caller context
-        let mut runtime_ctx = runtime.get_context(self.caller_id)?;
+        let runtime_ctx = runtime.get_context(self.caller_id)?;
 
         // Copy the caller context's variable ids
         self.var_ids = runtime_ctx.var_ids.clone();
@@ -189,9 +204,9 @@ impl RuntimeContext {
     }
 
     /// Returns variable changes to the caller context.
-    pub fn return_to_caller(&mut self, runtime: &CircomRuntime) -> Result<(), RuntimeError> {
+    pub fn return_to_caller(&mut self, runtime: &mut CircomRuntime) -> Result<(), RuntimeError> {
         // Load the caller context
-        let mut runtime_ctx = runtime.get_context(self.caller_id)?;
+        let runtime_ctx = runtime.get_context(self.caller_id)?;
 
         // Declare all variables in the caller context
         for (name, &id) in &self.var_ids {
@@ -199,9 +214,7 @@ impl RuntimeContext {
         }
 
         // Return all variables to the caller context
-        self.execution.return_to_caller(runtime_ctx);
-
-        Ok(())
+        self.execution.return_to_caller(runtime_ctx)
     }
 
     /// Assigns a variable identifier and declares it in the execution context.
@@ -261,8 +274,6 @@ impl RuntimeContext {
 /// Handles variable operations and values for a specific runtime context.
 #[derive(Clone)]
 pub struct ExecutionContext {
-    caller_id: u32,
-    context_id: u32,
     vars: HashMap<String, Option<u32>>, // Variable Name -> Variable Value
 }
 
@@ -270,8 +281,6 @@ impl ExecutionContext {
     /// Constructs a new runtime execution context with specified caller and context IDs.
     pub fn new(caller_id: u32, context_id: u32) -> Self {
         Self {
-            caller_id,
-            context_id,
             vars: HashMap::new(),
         }
     }
@@ -343,6 +352,8 @@ pub enum RuntimeError {
     ContextRetrievalError,
     #[error("Empty context stack")]
     EmptyContextStack,
+    #[error("Variable is already declared")]
+    VariableAlreadyDeclared,
     #[error("Variable is not declared")]
     VariableNotDeclared,
 }
