@@ -124,6 +124,11 @@ impl CircomRuntime {
         Ok(var_id)
     }
 
+    /// Gets the variable identifier for a variable in the current context.
+    pub fn get_var_id(&mut self, name: &str) -> Result<u32, RuntimeError> {
+        self.get_current_context()?.get_var_id(name)
+    }
+
     /// Sets the value of a variable in the current context and returns its value.
     pub fn set_var(&mut self, name: &str, value: u32) -> Result<u32, RuntimeError> {
         self.get_current_context()?.set_var(name, value)?;
