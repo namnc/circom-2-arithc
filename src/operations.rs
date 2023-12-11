@@ -252,7 +252,12 @@ fn traverse_statement(
             // }
             // Option::None
         }
-        Return { value, .. } => {}
+        Return { value, .. } => {
+            println!("Return expression found");
+            let var = String::from("RETURN");
+            let (res, resb) = execute_expression(ac, runtime, &var, value, program_archive);
+            println!("RETURN {}", res);
+        }
         Assert { arg, meta, .. } => {}
         Substitution {
             meta,
@@ -518,7 +523,12 @@ fn execute_statement(
             // }
             // Option::None
         }
-        Return { value, .. } => {}
+        Return { value, .. } => {
+            println!("Return expression found");
+            let var = String::from("RETURN");
+            let (res, resb) = execute_expression(ac, runtime, &var, value, program_archive);
+            println!("RETURN {}", res);
+        }
         Assert { arg, meta, .. } => {}
         Substitution {
             meta,
@@ -662,7 +672,39 @@ fn traverse_expression(
         }
         Call { meta, id, args } => {
             println!("Call found {}", id.to_string());
+
+            // HERE IS CODE FOR ARGUMENTS
+            
+            let functions = program_archive.get_function_names();
+            let arg_names = if functions.contains(id) {
+                program_archive.get_function_data(id).get_name_of_params()
+            } else {
+                program_archive.get_template_data(id).get_name_of_params()
+            };
+            
+            for (arg_name, arg_value) in arg_names.iter().zip(args) {
+                // We set arg_name to have arg_value
+                let (res, resb) = execute_expression(ac, runtime, arg_name, arg_value, program_archive);
+                // TODO: set res to arg_name
+            }
+
+            // HERE IS CODE FOR FUNCTIGON
+
+            let function_boby = program_archive.get_function_data(id).get_body_as_vec();
+            traverse_sequence_of_statements(ac, runtime, &function_boby, program_archive, true);
+
+            // HERE IS CODE FOR TEMPLATE
+            
             // find the template and execute it
+            // let template_body = program_archive.get_template_data(id).get_body_as_vec();
+
+            // traverse_sequence_of_statements(
+            //     ac,
+            //     runtime,
+            //     template_body,
+            //     program_archive,
+            //     true,
+            // );
             id.to_string()
         }
         AnonymousComp {

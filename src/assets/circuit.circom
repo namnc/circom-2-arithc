@@ -1,5 +1,10 @@
 pragma circom 2.0.0;
 
+function funid ( pa, pb ) {
+
+ return pa;
+}
+
 template InnerProd (i) {  
 
    // Declaration of signals 
@@ -11,10 +16,12 @@ template InnerProd (i) {
 
    sum[0] <== input_A[0]*input_B[0];
 
+   var z = funid (0,1);
+
    // var i = 0;
-   component ip2 = InnerProd(3);
-   ip2.input_A[0] <== input_A[0];
-   ip2.ip ==> ip;
+   // component ip2 = InnerProd(3);
+   // ip2.input_A[0] <== input_A[0];
+   // ip2.ip ==> ip;
    // if (i == 0) {
    //    sum[0] <== input_A[0]*input_B[0];
    // } else {
