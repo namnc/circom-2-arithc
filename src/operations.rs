@@ -277,7 +277,11 @@ fn traverse_statement(
                         println!("[Traverse] Sub Change var name to {}", name_access);
                     }
                     Access::ComponentAccess(name) => {
-                        println!("[Traverse] Sub Component access not handled");
+                        // println!("[Traverse] Sub Component access not handled");
+                        println!("[Traverse] Sub Component access found");
+                        name_access.push_str("_");
+                        name_access.push_str(name);
+                        println!("[Traverse] Sub Change var name to {}", name_access);
                     }
                 }
             }
@@ -638,6 +642,9 @@ fn traverse_expression(
                     }
                     Access::ComponentAccess(name) => {
                         println!("[Traverse] Component access found");
+                        name_access.push_str("_");
+                        name_access.push_str(name);
+                        println!("[Traverse] Change var name to {}", name_access);
                     }
                 }
             }
