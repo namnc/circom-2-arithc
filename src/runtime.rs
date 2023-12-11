@@ -10,6 +10,8 @@ use thiserror::Error;
 pub enum ContextOrigin {
     Call,
     Branch,
+    Loop,
+    Block
 }
 
 /// Circom Runtime
@@ -61,7 +63,9 @@ impl CircomRuntime {
         // Determine the caller ID for the new context based on the origin
         let new_caller_id = match origin {
             ContextOrigin::Call => current_context.context_id,
-            ContextOrigin::Branch => current_context.caller_id,
+            ContextOrigin::Branch => current_context.context_id,
+            ContextOrigin::Loop => current_context.context_id,
+            ContextOrigin::Block => current_context.context_id
         };
 
         // Create the new context and add it to the stack
@@ -109,11 +113,13 @@ impl CircomRuntime {
         let current_context = self.get_current_context()?;
 
         // Check if the variable is already declared in the current context
-        if current_context.get_var_id(name).is_ok() {
-            return Err(RuntimeError::VariableAlreadyDeclared);
-        }
+        // TODO: may be we can make a re_declare_var?
+        // if current_context.get_var_id(name).is_ok() {
+        //     return Err(RuntimeError::VariableAlreadyDeclared);
+        // }
 
         // Declare the variable
+        // TODO: for consistency, this function call does not check if var is declared
         current_context.declare_var(name, var_id);
 
         // Increment the last variable ID
