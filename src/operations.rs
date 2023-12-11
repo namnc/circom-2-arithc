@@ -127,6 +127,16 @@ fn traverse_statement(
             else_case,
             ..
         } => {
+            let var = String::from("IFTHENELSE");
+            let (res, resb) = execute_expression(ac, runtime, &var, cond, program_archive);
+            let else_case = else_case.as_ref().map(|e| e.as_ref());
+            if res.contains("0") {
+                if let Option::Some(else_stmt) = else_case {
+                    traverse_statement(ac, runtime, else_stmt, program_archive);
+                }
+            } else {
+                traverse_statement(ac, runtime, if_case, program_archive)
+            }
             // let var = String::from("IFTHENELSE");
             // ac.add_var(&var, SignalType::Intermediate);
             // let lhs = traverse_expression(ac, &var, cond, program_archive);

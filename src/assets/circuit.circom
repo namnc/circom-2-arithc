@@ -11,9 +11,17 @@ template InnerProd () {
 
    sum[0] <== input_A[0]*input_B[0];
 
-   for (var i = 1; i < 3; i++) {
-      sum[i] <== sum[i-1] + input_A[i] * input_B[i];
+   var i = 0;
+
+   if (i == 0) {
+      sum[0] <== input_A[0]*input_B[0];
+   } else {
+      sum[0] <== input_A[1]*input_B[1];
    }
+
+   // for (var i = 1; i < 3; i++) {
+   //    sum[i] <== sum[i-1] + input_A[i] * input_B[i];
+   // }
 
    // var sum = 0;
 
