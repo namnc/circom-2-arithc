@@ -10,6 +10,9 @@ use circom_program_structure::ast::{
 };
 use circom_program_structure::program_archive::ProgramArchive;
 
+// Traverse on signals
+// Execute on variables
+
 /// Processes a sequence of statements, handling each based on its specific type and context.
 pub fn traverse_sequence_of_statements(
     ac: &mut ArithmeticCircuit,
@@ -329,6 +332,7 @@ fn execute_statement(
                 //     );
                 // }
                 _ => {
+                    // Process index in case of array
                     let mut dim_u32_vec = Vec::new();
                     for dimension in dimensions.iter() {
                         let dim_u32_str =
