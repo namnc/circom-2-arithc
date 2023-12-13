@@ -44,22 +44,20 @@ impl Runtime {
 
         // Create the new context using data from the caller context
         let new_context = match origin {
-            ContextOrigin::Call => {
-                Context::new(new_id, self.current_ctx, HashMap::new())?;
-            },
+            ContextOrigin::Call => Context::new(new_id, self.current_ctx, HashMap::new())?,
             ContextOrigin::Branch => {
-                Context::new(new_id, self.current_ctx, caller_context.values.clone())?;
-            },
+                Context::new(new_id, self.current_ctx, caller_context.values.clone())?
+            }
             ContextOrigin::Loop => {
-                Context::new(new_id, self.current_ctx, caller_context.values.clone())?;
-            },
+                Context::new(new_id, self.current_ctx, caller_context.values.clone())?
+            }
             ContextOrigin::Block => {
-                Context::new(new_id, self.current_ctx, caller_context.values.clone())?;
-            },
+                Context::new(new_id, self.current_ctx, caller_context.values.clone())?
+            }
         };
-        
+
         // NOTE: above could be the simplest way to do what I wrote below. We just let Call be with an empty map and there will be declaration and initialization coming in from operations code.
-        
+
         // TODO: we might want to distiguish the context creation reason here
         // this behavior right now is good for if_then_else, loop, and block because all variables and signals declare in the caller are accessible inside those
         // for template and function call we don't really have access to variables and signals outside of the template and function definition

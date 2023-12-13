@@ -1,17 +1,17 @@
-//! # Operations Module
+//! # Traverse Module
 //!
-//! This module provides functionality for traversing and executing statements and expressions within arithmetic circuits.
+//! This module provides functionality for traversing statements, expressions, infix operations and declaration of components, signals and variables.
+//!
+//! It's main purpose is to traverse signals.
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
+use crate::execute::{execute_expression, execute_infix_op, execute_statement};
 use crate::runtime::{DataContent, DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
     Access, Expression, ExpressionInfixOpcode, SignalType, Statement, VariableType,
 };
 use circom_program_structure::program_archive::ProgramArchive;
-
-// Traverse on signals
-// Execute on variables
 
 /// Processes a sequence of statements, handling each based on its specific type and context.
 pub fn traverse_sequence_of_statements(
@@ -30,7 +30,7 @@ pub fn traverse_sequence_of_statements(
 }
 
 /// Analyzes a single statement, delegating to specialized functions based on the statement's nature.
-fn traverse_statement(
+pub fn traverse_statement(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     stmt: &Statement,
@@ -292,7 +292,7 @@ fn traverse_statement(
 }
 
 /// Examines an expression to determine its structure and dependencies before execution.
-fn traverse_expression(
+pub fn traverse_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     var: &String,
@@ -419,7 +419,7 @@ fn traverse_expression(
 }
 
 /// Prepares an infix operation (like addition, subtraction) for execution by analyzing its components.
-fn traverse_infix_op(
+pub fn traverse_infix_op(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     output: &String,
@@ -552,7 +552,7 @@ fn traverse_infix_op(
 }
 
 /// Processes the declaration of a component.
-fn traverse_component_declaration(
+pub fn traverse_component_declaration(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     comp_name: &str,
@@ -564,7 +564,7 @@ fn traverse_component_declaration(
 }
 
 /// Processes a signal declaration, integrating it into the circuit's variable management system.
-fn traverse_signal_declaration(
+pub fn traverse_signal_declaration(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     signal_name: &str,
@@ -575,7 +575,7 @@ fn traverse_signal_declaration(
 }
 
 /// Handles the declaration of variables, allocating and initializing them within the circuit.
-fn traverse_variable_declaration(
+pub fn traverse_variable_declaration(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     var_name: &str,

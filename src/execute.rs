@@ -1,22 +1,21 @@
-//! # Operations Module
+//! # Execute Module
 //!
-//! This module provides functionality for traversing and executing statements and expressions within arithmetic circuits.
+//! This module provides functionality to handle variables execution (not signals).
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::runtime::{DataContent, DataType, Runtime};
+use crate::runtime::{DataContent, Runtime};
+use crate::traverse::{
+    traverse_component_declaration, traverse_expression, traverse_sequence_of_statements,
+    traverse_signal_declaration, traverse_variable_declaration,
+};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
-    Access, Expression, ExpressionInfixOpcode, SignalType, Statement, VariableType,
+    Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
 };
 use circom_program_structure::program_archive::ProgramArchive;
 
-// Traverse on signals
-// Execute on variables
-
-// NOTE: ALL BELOW ARE TO HANDLE VARS
-
 /// Executes a given statement, applying its logic or effects within the circuit's context.
-fn execute_statement(
+pub fn execute_statement(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     stmt: &Statement,
@@ -289,7 +288,7 @@ fn execute_statement(
 }
 
 /// Computes the value or effect of an expression within the circuit.
-fn execute_expression(
+pub fn execute_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     var: &String,
@@ -408,7 +407,7 @@ fn execute_expression(
 // TODO: named_access should support multi-dimension, right now 1
 
 /// Executes an infix operation, performing the specified arithmetic or logical computation.
-fn execute_infix_op(
+pub fn execute_infix_op(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     output: &String,
