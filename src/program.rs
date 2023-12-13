@@ -5,7 +5,7 @@
 use crate::circuit::ArithmeticCircuit;
 use crate::compiler::{analyse_project, parse_project, Input};
 use crate::operations::traverse_sequence_of_statements;
-use crate::runtime::CircomRuntime;
+use crate::runtime::Runtime;
 use circom_program_structure::ast::Expression;
 use circom_program_structure::program_archive::ProgramArchive;
 use mpz_circuits::types::ValueType;
@@ -138,7 +138,7 @@ pub fn parse_circom(filename: &str, inputs: &[ValueType], outputs: &[ValueType])
 pub fn traverse_program(program_archive: &ProgramArchive) -> ArithmeticCircuit {
     let mut ac = ArithmeticCircuit::new();
 
-    let mut runtime = CircomRuntime::new();
+    let mut runtime = Runtime::new();
 
     let main_file_id = program_archive.get_file_id_main();
 

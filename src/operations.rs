@@ -3,7 +3,7 @@
 //! This module provides functionality for traversing and executing statements and expressions within arithmetic circuits.
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::runtime::CircomRuntime;
+use crate::runtime::{DataContent, DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
     Access, Expression, ExpressionInfixOpcode, SignalType, Statement, VariableType,
@@ -16,7 +16,7 @@ use circom_program_structure::program_archive::ProgramArchive;
 /// Processes a sequence of statements, handling each based on its specific type and context.
 pub fn traverse_sequence_of_statements(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     stmts: &[Statement],
     program_archive: &ProgramArchive,
     is_complete_template: bool,
@@ -32,7 +32,7 @@ pub fn traverse_sequence_of_statements(
 /// Analyzes a single statement, delegating to specialized functions based on the statement's nature.
 fn traverse_statement(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     stmt: &Statement,
     program_archive: &ProgramArchive,
 ) {
@@ -294,7 +294,7 @@ fn traverse_statement(
 /// Executes a given statement, applying its logic or effects within the circuit's context.
 fn execute_statement(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     stmt: &Statement,
     program_archive: &ProgramArchive,
 ) {
@@ -542,7 +542,12 @@ fn execute_statement(
             if rhsb {
                 println!("[Execute] Assigning {} to {}", rhs, &name_access);
                 runtime
-                    .set_var(&name_access, rhs.parse::<u32>().unwrap())
+                    .get_current_context()
+                    .unwrap()
+                    .set_data_item(
+                        &name_access,
+                        DataContent::Scalar(rhs.parse::<u32>().unwrap()),
+                    )
                     .unwrap();
             }
         }
@@ -562,7 +567,7 @@ fn execute_statement(
 /// Examines an expression to determine its structure and dependencies before execution.
 fn traverse_expression(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     var: &String,
     expr: &Expression,
     program_archive: &ProgramArchive,
@@ -571,11 +576,21 @@ fn traverse_expression(
     // let mut can_be_simplified = true;
     match expr {
         Number(_, value) => {
-            let var_id = runtime.declare_var(&value.to_string()).unwrap();
-            runtime
-                .set_var(&value.to_string(), value.to_u32().unwrap())
+            let var_id = runtime
+                .get_current_context()
+                .unwrap()
+                .declare_data_item(&value.to_string(), DataType::Variable)
                 .unwrap();
-            ac.add_const_var(var_id, value.to_u32().unwrap());
+            runtime
+                .get_current_context()
+                .unwrap()
+                .set_data_item(
+                    &value.to_string(),
+                    DataContent::Scalar(value.to_u32().unwrap()),
+                )
+                .unwrap();
+            // TODO: What should I do here? Is this a variable or a signal?
+            // ac.add_const_var(var_id, value.to_u32().unwrap());
             println!("[Traverse] Number value {}", value);
             value.to_string()
         }
@@ -679,7 +694,7 @@ fn traverse_expression(
 /// Computes the value or effect of an expression within the circuit.
 fn execute_expression(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     var: &String,
     expr: &Expression,
     program_archive: &ProgramArchive,
@@ -793,7 +808,7 @@ fn execute_expression(
 /// Prepares an infix operation (like addition, subtraction) for execution by analyzing its components.
 fn traverse_infix_op(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     output: &String,
     input_lhs: &String,
     input_rhs: &String,
@@ -929,7 +944,7 @@ fn traverse_infix_op(
 /// Executes an infix operation, performing the specified arithmetic or logical computation.
 fn execute_infix_op(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     output: &String,
     input_lhs: &String,
     input_rhs: &String,
@@ -1067,7 +1082,7 @@ fn execute_infix_op(
 /// Processes the declaration of a component.
 fn traverse_component_declaration(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     comp_name: &str,
     dim_u32_vec: &Vec<u32>,
 ) {
@@ -1079,7 +1094,7 @@ fn traverse_component_declaration(
 /// Processes a signal declaration, integrating it into the circuit's variable management system.
 fn traverse_signal_declaration(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     signal_name: &str,
     signal_type: SignalType,
     dim_u32_vec: &Vec<u32>,
@@ -1090,7 +1105,7 @@ fn traverse_signal_declaration(
 /// Handles the declaration of variables, allocating and initializing them within the circuit.
 fn traverse_variable_declaration(
     ac: &mut ArithmeticCircuit,
-    runtime: &mut CircomRuntime,
+    runtime: &mut Runtime,
     var_name: &str,
     dim_u32_vec: &Vec<u32>,
 ) {
