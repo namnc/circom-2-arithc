@@ -2,6 +2,57 @@
 //!
 //! This module provides functionality for traversing and executing statements and expressions within arithmetic circuits.
 
+//! High level operations
+//! the main component will be a template call
+//! the main component will have some initialized variables (this will probably be in InitializationBlock)
+//! the main component's body will be traverse using traverse_sequence_of_statements
+//! each statement in the component's body will be handled with traverse_statement
+//! a statement can be
+//! - declaration of var, signal, either scalar or array, here we can just add a data item based on the type and dimension
+//! - if_then_else, here we evaluate the condition to know if we should execute the then or the else, 
+//! -- the condition contains only variables or function calls, in general anything that actually evaluated to a value that let the interpreter decides to choose which branch to traverse, so here we should call the execute_expression
+//! -- then upon knowing we can just go to the corresponding branch and execute the body of that branch using traverse_sequence_of_statements
+//! - while/for loop is the same, we have evaluations on variables and condition to break (when it is evaluated to false), the body of the while/for block is traverse using traverse_sequence_of_statements
+//! - I dont know what is ConstraintEquality but it is probably used only in ZK not MPC
+//! - Return is a statement in function body, here we just need to assign the value to the variable that is the lhs of the call, like a = func(), the return will write the result to a, the lhs can also be an auto_var if func() is called as a part of an expression like a = a + func()
+//! - I dont know what is Assert but it is probably used only in ZK not MPC
+//! - Substitution, is something like a <== b + c, the rhs is an expression will be processed by traverse_expression
+//! -- Here is the only place we actually need to execute a substitution statement, we could detect if the lhs is a variable then we execute using execute_expression instead of traverse_expression
+//! - Block, we just traverse using traverse_sequence_of_statements
+//! - LogCall is probably for debug we don't use it now
+//! - UnderscoreSubstitution is probably an anonymous substitution, we can hanlde it later (if the circomlib-ml use it)
+//! now we move to expression, an expression is the rhs of a substitution or the condition of the if_then_else or while/for loop condition
+//! - Number, it is a constant, just return the constant is sufficient, we can maybe add a varible named as the constant to the context, like "1" with value 1, this is to ease the case where we have signals mixed with vars in an expression\
+//! - Infix-op, if the rhs is a variable, call execute_infix_op, otherwise call traverse_infix_op
+//! -- here it is a bit tricky when vars are mixed with signals (the case where rhs is a signal), we will call traverse_infix_op and will have auto-named signals, like sum[1] = sum[0] + input_A[0]*input_B[0], in this case we need to generate an intermediate "signal" for input_A[0]*input_B[0], we could potentially check if one of input_A[0] and input_B[0] are signals then we generate an auto-named signal (we also cover the case where we have a signal and a constant), otherwise if both are variables then we just call execute_infix_op and return the value, then this value can be made a constant variable if it is used with a signal (like "1" with value 1).
+//! -- the execute_infix_op is straighforward evaluation of the ops like a = b + c where b has value 1 and c has value 2 then a = 1 + 2 = 3
+//! - Prefix-op can be handled similarly as the case of infix-op
+//! - Inline-switch should be handled as the case of If-then-else (Inline-switch is shortcut for if-then-else and substitution)
+//! - ParallelOp -> let's not touch this now
+//! - Variable -> if it is a signal return the id, if variable return the value hold inside
+//! - Call
+//! -- we take the name of the call and see whether it is a template or a function
+//! -- in either cases we have to map the defined args to its initialized values when called
+//! -- then we take the body of the template/function and traverse using traverse_sequence_of_statements
+//! -- if it is a function you can image that it will only process variables but we took care of them already above (I HOPE THIS IS THE CASE THAT A FUNCTION BODY CANNOT HAVE A TEMPLATE CALL)
+//! -- if it is a template we already process it as the main call above.
+//! --- however for template call there is the delayed mapping of inputs and outputs signals, so after traversal of the template we need to map the signals of the called template to the signals of the caller
+//! --- e.g. component c = Template(), where Template has signal input I and output O
+//! --- then in the caller code we can also have signal I and O and we map c.I = I and c.O = O
+//! --- I believe this is what happens in traverse_sequence_of_statements the part where execute_delayed_declarations is called
+//! ---- if is_complete_template {
+//! ----     execute_delayed_declarations(program_archive, runtime, actual_node, flags)?;
+//! ---- }
+//! - AnonymousComponent -> I haven't touched this
+//! - ArrayInLine -> I haven't touched this
+//! - Tuple -> I haven't touched this
+//! - UniformArray -> I haven't touched this
+
+//! NOW about creating gates and stuffs:
+//! only when we traverse_infix_op that we need to create gate
+//! depending on the infix op we can create a fan-in-2 gate and add it to the circuit
+//! e.g. when we traverse_infix_op and we get id_1 = id_2 + id_3 then just create an add gate with id_2 and id_3 as input and id_1 as output.
+
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::runtime::{DataContent, DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
@@ -803,6 +854,139 @@ fn execute_expression(
             (var.to_string(), false)
         }
     }
+}
+
+/// Prepares an infix operation (like addition, subtraction) for execution by analyzing its components.
+fn traverse_infix_op(
+    ac: &mut ArithmeticCircuit,
+    runtime: &mut Runtime,
+    output: &String,
+    input_lhs: &String,
+    input_rhs: &String,
+    infixop: ExpressionInfixOpcode,
+) -> (u32, bool) {
+    // let current = runtime.get_current_runtime_context();
+
+    // For now skip traversal if can execute
+
+    let mut can_execute_infix = true;
+    if runtime.get_var(input_lhs).is_err() {
+        println!("[Traverse] cannot get lhs var val {}", input_lhs);
+        can_execute_infix = false;
+    }
+    if runtime.get_var(input_rhs).is_err() {
+        println!("[Traverse] cannot get rhs var val {}", input_rhs);
+        can_execute_infix = false;
+    }
+    println!("[Traverse] can execute infix {}", can_execute_infix);
+
+    if can_execute_infix {
+        return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
+    } else {
+        runtime.unset_var(output).unwrap();
+        println!("[Traverse] Now mark {} as no value", output);
+    }
+
+    let lhsvar_id = runtime.get_var(input_lhs).unwrap();
+    let rhsvar_id = runtime.get_var(input_rhs).unwrap();
+    let var_id = runtime.get_var(output).unwrap();
+
+    // let var = ac.add_var(var_id, &output);
+
+    // let lvar = ac.get_var(lhsvar_id);
+    // let rvar = ac.get_var(rhsvar_id);
+
+    use ExpressionInfixOpcode::*;
+    let mut gate_type = AGateType::AAdd;
+    match infixop {
+        Mul => {
+            println!(
+                "[Traverse] Mul op {} = {} * {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AMul;
+        }
+        Div => {
+            println!(
+                "[Traverse] Div op {} = {} / {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::ADiv;
+        }
+        Add => {
+            println!(
+                "[Traverse] Add op {} = {} + {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AAdd;
+        }
+        Sub => {
+            println!(
+                "[Traverse] Sub op {} = {} - {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::ASub;
+        }
+        // Pow => {},
+        // IntDiv => {},
+        // Mod => {},
+        // ShiftL => {},
+        // ShiftR => {},
+        LesserEq => {
+            println!(
+                "[Traverse] LEq op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::ALEq;
+        }
+        GreaterEq => {
+            println!(
+                "[Traverse] GEq op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AGEq;
+        }
+        Lesser => {
+            println!(
+                "[Traverse] Ls op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::ALt;
+        }
+        Greater => {
+            println!(
+                "[Traverse] Gt op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AGt;
+        }
+        Eq => {
+            println!(
+                "[Traverse] Eq op {} = {} == {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::AEq;
+        }
+        NotEq => {
+            println!(
+                "[Traverse] Neq op {} = {} != {}",
+                output, input_lhs, input_rhs
+            );
+            gate_type = AGateType::ANeq;
+        }
+        // BoolOr => {},
+        // BoolAnd => {},
+        // BitOr => {},
+        // BitAnd => {},
+        // BitXor => {},
+        _ => {
+            unreachable!()
+        }
+    };
+
+    ac.add_gate(&output, var_id, lhsvar_id, rhsvar_id, gate_type);
+
+    (0, false)
 }
 
 //WIP HERE
