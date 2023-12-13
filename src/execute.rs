@@ -299,13 +299,12 @@ pub fn execute_expression(
     // let mut can_be_simplified = true;
     match expr {
         Number(_, value) => {
-            //TODO: here we handle constant expression, we can do something like declare_if_not_exists for constant variables
-            let var_id = runtime.declare_var(&value.to_string()).unwrap();
-            runtime
-                .set_var(&value.to_string(), value.to_u32().unwrap())
-                .unwrap();
-            ac.add_const_var(var_id, value.to_u32().unwrap());
-            println!("[Execute] Number value {}", value);
+            // Declaring a constant.
+            let val = value.to_u32().unwrap();
+            let ctx = runtime.get_current_context().unwrap();
+            ctx.declare_const(val).unwrap();
+            ac.add_const_var(val, val);
+            println!("[Execute] Declared const {}", val);
             (value.to_string(), true)
         }
         InfixOp {

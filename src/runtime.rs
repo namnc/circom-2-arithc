@@ -165,6 +165,48 @@ impl Context {
             Err(RuntimeError::DataItemNotDeclared)
         }
     }
+
+    /// Declares a new signal.
+    pub fn declare_signal(&mut self, name: &str) -> Result<(), RuntimeError> {
+        if self.values.contains_key(name) {
+            Err(RuntimeError::DataItemAlreadyDeclared)
+        } else {
+            debug!("Declaring signal '{}'", name);
+            self.values
+                .insert(name.to_string(), DataItem::new(DataType::Signal));
+            self.set_data_item(name, DataContent::Scalar(self.generate_signal_id()))?;
+            Ok(())
+        }
+    }
+
+    /// Declares a new const value as a signal.
+    /// Sets the value of the signal to the given value. This being the signal id.
+    pub fn declare_const(&mut self, value: u32) -> Result<(), RuntimeError> {
+        let const_name = value.to_string();
+        if self.values.contains_key(&const_name) {
+            Err(RuntimeError::DataItemAlreadyDeclared)
+        } else {
+            debug!("Declaring const '{}'", const_name);
+            self.values
+                .insert(const_name, DataItem::new(DataType::Signal));
+            self.set_data_item(&const_name, DataContent::Scalar(value))?;
+            Ok(())
+        }
+    }
+
+    /// Gets the value of a const signal.
+    pub fn get_const(&self, value: u32) -> Result<&DataItem, RuntimeError> {
+        let const_name = value.to_string();
+        self.get_data_item(&const_name)
+    }
+
+    /// Generates a unique signal ID based on the context. (Temporary implementation)
+    pub fn generate_signal_id(&mut self) -> u32 {
+        let items = self.values.len() as u32 * 1000;
+        let ctx = self.id * 100 ^ self.caller_id * 10;
+
+        ctx ^ items
+    }
 }
 
 /// Data type
