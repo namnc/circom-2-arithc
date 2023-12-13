@@ -28,7 +28,7 @@ impl Runtime {
         debug!("Creating new Runtime");
         Self {
             ctx_stack: Vec::new(),
-            current_ctx: u32::default(),
+            current_ctx: u32::default(), //TODO: why not just concretely set as 0 so we have precise control on this initial value?
             last_ctx: u32::default(),
         }
     }
@@ -43,7 +43,28 @@ impl Runtime {
         let new_id = self.generate_context_id();
 
         // Create the new context using data from the caller context
-        let new_context = Context::new(new_id, self.current_ctx, caller_context.values.clone())?;
+        let new_context = match origin {
+            ContextOrigin::Call => {
+                Context::new(new_id, self.current_ctx, HashMap::new())?;
+            },
+            ContextOrigin::Branch => {
+                Context::new(new_id, self.current_ctx, caller_context.values.clone())?;
+            },
+            ContextOrigin::Loop => {
+                Context::new(new_id, self.current_ctx, caller_context.values.clone())?;
+            },
+            ContextOrigin::Block => {
+                Context::new(new_id, self.current_ctx, caller_context.values.clone())?;
+            },
+        };
+        
+        // NOTE: above could be the simplest way to do what I wrote below. We just let Call be with an empty map and there will be declaration and initialization coming in from operations code.
+        
+        // TODO: we might want to distiguish the context creation reason here
+        // this behavior right now is good for if_then_else, loop, and block because all variables and signals declare in the caller are accessible inside those
+        // for template and function call we don't really have access to variables and signals outside of the template and function definition
+        // for template we pass some values to initialize the variables define in the args of the template and inside the function we can actually re-declare variables and signals.
+        // for function we also pass some values to initialize the variables define in the args of the function and inside the function we can actually re-declare variables (no signals in functions).
 
         // Push the new context onto the stack and update current_ctx
         self.ctx_stack.push(new_context);
