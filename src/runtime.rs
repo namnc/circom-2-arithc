@@ -1,12 +1,12 @@
 //! # Runtime Module
 //!
-//! This module manages the runtime environment for arithmetic circuit computation, handling variable and execution context tracking.
+//! This module manages the main runtime, keeping track of the multiple contexts and data items in the program.
 
 use log::debug;
-use rand::Rng;
 use std::collections::HashMap;
 use thiserror::Error;
 
+#[derive(Debug)]
 /// New context origin
 pub enum ContextOrigin {
     Call,
@@ -15,306 +15,232 @@ pub enum ContextOrigin {
     Block,
 }
 
-/// Data type
-#[derive(Clone)]
-pub enum DataType {
-    Signal,
-    Variable,
-}
-
 /// Runtime - manages the scope stack and variable tracking.
 pub struct Runtime {
-    current_scope: u32,
-    scopes: Vec<Scope>,
+    ctx_stack: Vec<Context>,
+    current_ctx: u32,
+    last_ctx: u32,
 }
 
 impl Runtime {
     /// Constructs a new Runtime with an empty stack.
     pub fn new() -> Self {
+        debug!("Creating new Runtime");
         Self {
-            current_scope: u32::default(),
-            scopes: Vec::new(),
+            ctx_stack: Vec::new(),
+            current_ctx: u32::default(),
+            last_ctx: u32::default(),
         }
-    }
-
-    /// Retrieves a specific scope by its ID.
-    pub fn get_scope(&mut self, id: u32) -> Result<&mut Scope, RuntimeError> {
-        let index = self.scopes.iter().position(|scope| scope.id == id);
-
-        match index {
-            Some(i) => Ok(&mut self.scopes[i]),
-            None => Err(RuntimeError::ScopeRetrievalError),
-        }
-    }
-
-    /// TODO: FIX, this should retreive the current scope with id, not the last one in the stack.
-    /// Retrieves the current runtime context.
-    pub fn get_current_scope(&mut self) -> Result<&mut Scope, RuntimeError> {
-        self.scopes.last_mut().ok_or(RuntimeError::EmptyScopeStack)
     }
 
     /// Creates a new context for a function call or similar operation.
-    pub fn add_scope(&mut self, origin: ContextOrigin) -> Result<(), RuntimeError> {
-        // Retrieve the current context
-        let current_scope = self.get_current_scope()?;
+    pub fn add_context(&mut self, origin: ContextOrigin) -> Result<(), RuntimeError> {
+        debug!("Adding new context for origin: {:?}", origin);
+        // Retrieve the caller context
+        let caller_context = self.get_current_context()?;
 
-        // Create the new context and add it to the stack
-        let mut new_scope = Scope::new(self)?;
+        // Generate a unique ID for the new context
+        let new_id = self.generate_context_id();
 
-        self.scopes.push(new_scope);
-        self.current_scope = new_scope.id;
+        // Create the new context using data from the caller context
+        let new_context = Context::new(new_id, self.current_ctx, caller_context.values.clone())?;
+
+        // Push the new context onto the stack and update current_ctx
+        self.ctx_stack.push(new_context);
+        self.current_ctx = new_id;
+
+        debug!(
+            "New context added successfully. Current context ID: {}",
+            self.current_ctx
+        );
 
         Ok(())
     }
 
-    /// Ends the current context and returns variables to the caller.
-    // pub fn end_current_context(&mut self) -> Result<(), RuntimeError> {
-    //     // Pop the current context off the stack
-    //     if let Some(mut current_context) = self.ctx_stack.pop() {
-    //         // Return variables to the caller
-    //         let result = current_context.return_to_caller(self);
-
-    //         // If there's an error, push the context back to restore the state
-    //         if result.is_err() {
-    //             self.ctx_stack.push(current_context);
-    //         }
-
-    //         result
-    //     } else {
-    //         Err(RuntimeError::EmptyContextStack)
-    //     }
-    // }
-
-    // If first then else, so if 1 context -> if, if 2 contexts -> if else
-    /// Merges the current branches and returns variables to the caller.
-    pub fn merge_branches(&mut self) -> Result<(), RuntimeError> {
-        todo!()
+    /// Retrieves a specific context by its ID.
+    pub fn get_context(&mut self, id: u32) -> Result<&mut Context, RuntimeError> {
+        self.ctx_stack
+            .iter_mut()
+            .find(|ctx| ctx.id == id)
+            .ok_or(RuntimeError::ContextNotFound)
     }
 
-    /// Retrieves the value of a variable from the current context.
-    pub fn get_var(&mut self, var: &str) -> Result<u32, RuntimeError> {
-        todo!()
+    /// Retrieves the current runtime context.
+    pub fn get_current_context(&mut self) -> Result<&mut Context, RuntimeError> {
+        self.get_context(self.current_ctx)
     }
 
-    /// Declares a variable in the current context and returns its identifier.
-    pub fn declare_var(&mut self, name: &str) -> Result<u32, RuntimeError> {
-        todo!()
+    /// Generates a unique context ID.
+    fn generate_context_id(&mut self) -> u32 {
+        self.last_ctx += 1;
+        self.last_ctx
     }
 }
 
-/// Runtime scope
+/// Context
 /// Handles a specific scope value tracking.
 #[derive(Clone)]
-pub struct Scope { // Context
+pub struct Context {
     id: u32,
-    parent_id: u32,
-    values: HashMap<String, DataItem<DataType>>, // Name -> Value
+    caller_id: u32,
+    values: HashMap<String, DataItem>, // Name -> Value
 }
 
-impl Scope {
-    /// Constructs a new Scope.
-    pub fn new(runtime: &mut Runtime) -> Result<Self, RuntimeError> {
-        // Load the parent scope
-        let mut rng = rand::thread_rng();
-        let parent_scope = runtime.get_current_scope()?;
-
+impl Context {
+    /// Constructs a new Context.
+    pub fn new(
+        id: u32,
+        caller_id: u32,
+        values: HashMap<String, DataItem>,
+    ) -> Result<Self, RuntimeError> {
+        debug!("Creating new context with id: {}", id);
         Ok(Self {
-            id: rng.gen(),
-            parent_id: parent_scope.id,
-            values: parent_scope.values.clone(),
+            id,
+            caller_id,
+            values,
         })
     }
 
-    /// Declares a value in the scope
-    pub fn declare_data_item(&mut self, name: &str) {
-        todo!()
+    /// Declares a new data item in the context with the given name and data type.
+    /// Returns an error if the data item is already declared.
+    pub fn declare_data_item(
+        &mut self,
+        name: &str,
+        data_type: DataType,
+    ) -> Result<(), RuntimeError> {
+        debug!("Declaring data item '{}' with type {:?}", name, data_type);
+        if self.values.contains_key(name) {
+            Err(RuntimeError::DataItemAlreadyDeclared)
+        } else {
+            self.values
+                .insert(name.to_string(), DataItem::new(data_type));
+            Ok(())
+        }
     }
 
-    /// Assigns a value to a data item in the scope.
-    /// If the data item is not declared, it will return an error.
-    pub fn set_data_item(&mut self, name: &str, value: u32) -> Result<(), RuntimeError> {
-        todo!()
+    /// Assigns a value to a data item in the context.
+    /// Returns an error if the data item is not found.
+    pub fn set_data_item(&mut self, name: &str, content: DataContent) -> Result<(), RuntimeError> {
+        debug!("Setting content for data item '{}'", name);
+        match self.values.get_mut(name) {
+            Some(data_item) => data_item.set_content(content),
+            None => Err(RuntimeError::DataItemNotDeclared),
+        }
+    }
+
+    /// Retrieves a reference to a data item by name.
+    /// Returns an error if the data item is not found.
+    pub fn get_data_item(&self, name: &str) -> Result<&DataItem, RuntimeError> {
+        self.values
+            .get(name)
+            .ok_or(RuntimeError::DataItemNotDeclared)
+    }
+
+    /// Removes a data item from the context.
+    /// Returns an error if the data item is not found.
+    pub fn remove_data_item(&mut self, name: &str) -> Result<(), RuntimeError> {
+        debug!("Removing data item '{}'", name);
+        if self.values.remove(name).is_some() {
+            Ok(())
+        } else {
+            Err(RuntimeError::DataItemNotDeclared)
+        }
     }
 }
 
-#[derive(Clone)]
-pub struct DataItem<T> {
-    data_type: T,
-    content: Option<DataContent>,
+/// Data type
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DataType {
+    Signal,
+    Variable,
 }
 
-#[derive(Clone, Debug)]
+/// Data content
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DataContent {
     Scalar(u32),
     Array(Vec<DataContent>),
 }
 
-/// Runtime errors
-#[derive(Error, Debug)]
-pub enum RuntimeError {
-    #[error("Error retrieving scope")]
-    ScopeRetrievalError,
-    #[error("Empty scope stack")]
-    EmptyScopeStack,
-    #[error("Variable is already declared")]
-    VariableAlreadyDeclared,
-    #[error("Variable is not declared")]
-    VariableNotDeclared,
+/// Data item
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DataItem {
+    data_type: DataType,
+    content: Option<DataContent>,
 }
 
-// /// Runtime Context
-// /// Handles a specific runtime context, including variable tracking and execution context.
-// #[derive(Clone)]
-// pub struct RuntimeContext {
-//     caller_id: u32,
-//     context_id: u32,
-//     execution: ExecutionContext,
-//     var_ids: HashMap<String, u32>, // Variable Name -> Variable ID
-// }
+impl DataItem {
+    /// Constructs a new DataItem.
+    pub fn new(data_type: DataType) -> Self {
+        Self {
+            data_type,
+            content: None,
+        }
+    }
 
-// impl RuntimeContext {
+    /// Sets the content of the data item. Returns an error if the item is a signal and is already set.
+    pub fn set_content(&mut self, content: DataContent) -> Result<(), RuntimeError> {
+        debug!("Setting content for DataItem: {:?} - {:?}", self, content);
+        match self.data_type {
+            DataType::Signal if self.content.is_some() => Err(RuntimeError::SignalAlreadySet),
+            _ => {
+                self.content = Some(content);
+                Ok(())
+            }
+        }
+    }
 
-//     /// Returns variable changes to the caller context.
-//     pub fn return_to_caller(&mut self, runtime: &mut CircomRuntime) -> Result<(), RuntimeError> {
-//         // Load the caller context
-//         let runtime_ctx = runtime.get_context(self.caller_id)?;
+    /// Gets the content of the data item.
+    pub fn get_content(&self) -> Option<&DataContent> {
+        self.content.as_ref()
+    }
 
-//         // Declare all variables in the caller context
-//         for (name, &id) in &self.var_ids {
-//             runtime_ctx.declare_var(name, id);
-//         }
+    /// Retrieves an item from the array content at the specified index.
+    /// Returns an error if the content is not an array or the index is out of bounds.
+    pub fn get_array_item(&self, index: usize) -> Result<&DataContent, RuntimeError> {
+        match &self.content {
+            Some(DataContent::Array(array)) => {
+                array.get(index).ok_or(RuntimeError::IndexOutOfBounds)
+            }
+            Some(DataContent::Scalar(_)) => Err(RuntimeError::NotAnArray),
+            None => Err(RuntimeError::EmptyDataItem),
+        }
+    }
 
-//         // Return all variables to the caller context
-//         self.execution.return_to_caller(runtime_ctx)
-//     }
+    /// Gets the data type of the data item.
+    pub fn get_data_type(&self) -> &DataType {
+        &self.data_type
+    }
 
-//     /// Assigns a variable identifier and declares it in the execution context.
-//     pub fn declare_var(&mut self, name: &str, id: u32) {
-//         // Set the variable id
-//         self.var_ids.insert(name.to_string(), id);
-//         debug!("[RuntimeContext] {} is now with id {}", name, id);
+    /// Checks if the content of the data item is an array.
+    pub fn is_array(&self) -> bool {
+        if let Some(DataContent::Array(_)) = self.content {
+            true
+        } else {
+            false
+        }
+    }
+}
 
-//         // Declare the variable in the execution context
-//         self.execution.declare_var(name);
-//     }
-
-//     /// Assigns a value to a variable in the execution context.
-//     /// If the variable is not declared, it will return an error.
-//     pub fn set_var(&mut self, name: &str, value: u32) -> Result<(), RuntimeError> {
-//         if !self.var_ids.contains_key(name) {
-//             return Err(RuntimeError::VariableNotDeclared);
-//         }
-
-//         self.execution.set_var(name, value)
-//     }
-
-//     /// Unsets a variable in the execution context.
-//     /// If the variable is not declared, it will return an error.
-//     pub fn unset_var(&mut self, name: &str) -> Result<(), RuntimeError> {
-//         if !self.var_ids.contains_key(name) {
-//             return Err(RuntimeError::VariableNotDeclared);
-//         }
-
-//         self.execution.unset_var(name)
-//     }
-
-//     /// Gets the value of a variable from the execution context.
-//     /// If the variable is not declared, it will return an error.
-//     pub fn get_value(&self, name: &str) -> Result<u32, RuntimeError> {
-//         if !self.var_ids.contains_key(name) {
-//             return Err(RuntimeError::VariableNotDeclared);
-//         }
-
-//         match self.execution.get_var(name)? {
-//             Some(value) => Ok(value),
-//             None => Ok(0),
-//         }
-//     }
-
-//     /// Gets the id of a variable in the runtime context.
-//     /// If the variable is not declared, it will return an error.
-//     pub fn get_var_id(&self, var_name: &str) -> Result<u32, RuntimeError> {
-//         self.var_ids
-//             .get(var_name)
-//             .copied()
-//             .ok_or(RuntimeError::VariableNotDeclared)
-//     }
-// }
-
-// // TODO: add signal and variable type
-// // Split signal and variable
-
-// /// Execution Context
-// /// Handles variable operations and values for a specific runtime context.
-// #[derive(Clone)]
-// pub struct ExecutionContext {
-//     vars: HashMap<String, Option<u32>>, // Variable Name -> Variable Value
-// }
-
-// impl ExecutionContext {
-//     /// Constructs a new runtime execution context with specified caller and context IDs.
-//     pub fn new(caller_id: u32, context_id: u32) -> Self {
-//         Self {
-//             vars: HashMap::new(),
-//         }
-//     }
-
-//     /// Clones all variables from the specified context into this context.
-//     pub fn load_context(&mut self, context: &RuntimeContext) -> &mut Self {
-//         self.vars = context.execution.vars.clone();
-//         self
-//     }
-
-//     /// Updates all variables from this context back to the caller's context.
-//     pub fn return_to_caller(&mut self, context: &mut RuntimeContext) -> Result<(), RuntimeError> {
-//         for (name, &val) in &self.vars {
-//             match val {
-//                 Some(value) => context.execution.set_var(name, value)?,
-//                 None => context.execution.unset_var(name)?,
-//             }
-//         }
-//         Ok(())
-//     }
-
-//     /// Declares a new variable in the context without setting its value (initialized as unset).
-//     /// If the variable is already declared, it will be overwritten.
-//     pub fn declare_var(&mut self, var_name: &str) {
-//         self.vars.insert(var_name.to_owned(), None);
-//         debug!("[ExecutionContext] '{}' is declared", var_name);
-//     }
-
-//     /// Retrieves the value of a variable if it is set, or None if it is unset.
-//     /// If the variable is not declared, it will return an error.
-//     pub fn get_var(&self, var_name: &str) -> Result<Option<u32>, RuntimeError> {
-//         match self.vars.get(var_name) {
-//             Some(&value) => Ok(value),
-//             None => Err(RuntimeError::VariableNotDeclared),
-//         }
-//     }
-
-//     /// Sets the value of a declared variable, marking it as set.
-//     /// If the variable is not declared, it will return an error.
-//     pub fn set_var(&mut self, var_name: &str, var_val: u32) -> Result<(), RuntimeError> {
-//         match self.vars.get_mut(var_name) {
-//             Some(value) => {
-//                 *value = Some(var_val);
-//                 debug!("[ExecutionContext] '{}' set to {}", var_name, var_val);
-//                 Ok(())
-//             }
-//             None => Err(RuntimeError::VariableNotDeclared),
-//         }
-//     }
-
-//     /// Unsets (clears) a specified variable.
-//     /// If the variable is not declared, it will return an error.
-//     pub fn unset_var(&mut self, var_name: &str) -> Result<(), RuntimeError> {
-//         match self.vars.get_mut(var_name) {
-//             Some(value) => {
-//                 *value = None;
-//                 debug!("[ExecutionContext] '{}' is unset", var_name);
-//                 Ok(())
-//             }
-//             None => Err(RuntimeError::VariableNotDeclared),
-//         }
-//     }
-// }
+/// Runtime errors
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum RuntimeError {
+    #[error("Error retrieving context")]
+    ContextRetrievalError,
+    #[error("Context not found")]
+    ContextNotFound,
+    #[error("Data Item already declared")]
+    DataItemAlreadyDeclared,
+    #[error("Data Item not declared")]
+    DataItemNotDeclared,
+    #[error("Empty context stack")]
+    EmptyContextStack,
+    #[error("Empty data item")]
+    EmptyDataItem,
+    #[error("Index out of bounds")]
+    IndexOutOfBounds,
+    #[error("Data Item content is not an array")]
+    NotAnArray,
+    #[error("Cannot modify an already set signal")]
+    SignalAlreadySet,
+}
