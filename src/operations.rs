@@ -52,6 +52,9 @@
 //! only when we traverse_infix_op that we need to create gate
 //! depending on the infix op we can create a fan-in-2 gate and add it to the circuit
 //! e.g. when we traverse_infix_op and we get id_1 = id_2 + id_3 then just create an add gate with id_2 and id_3 as input and id_1 as output.
+//! 
+//! NOTES on special gates like comparison, negative/positive, zero check
+//! right now circom use the advice way of doing them, we should catch the template calls of these (when we process Call of traverse expression, just match the template name) and replace with a comparison, sign and zero equality check gate
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::runtime::{DataContent, DataType, Runtime};
