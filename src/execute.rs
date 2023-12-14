@@ -13,6 +13,7 @@ use circom_program_structure::ast::{
     Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
 };
 use circom_program_structure::program_archive::ProgramArchive;
+use log::debug;
 
 /// Executes a given statement, applying its logic or effects within the circuit's context.
 pub fn execute_statement(
@@ -303,7 +304,7 @@ pub fn execute_expression(
             let val = value.to_u32().unwrap();
             let ctx = runtime.get_current_context().unwrap();
             ctx.declare_const(val).unwrap();
-            ac.add_const_var(val, val);
+            ac.add_const_var(val, val); // Setting as id the constant value
             println!("[Execute] Declared const {}", val);
             (value.to_string(), true)
         }
@@ -314,10 +315,11 @@ pub fn execute_expression(
             rhe,
             ..
         } => {
+            let ctx = runtime.get_current_context().unwrap();
             //TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
-            let varlhs = runtime.auto_generate_var().unwrap();
+            let varlhs = ctx.declare_auto_var().unwrap();
             println!("[Execute] Auto var for lhs {}", varlhs);
-            let varrhs = runtime.auto_generate_var().unwrap();
+            let varrhs = ctx.declare_auto_var().unwrap();
             println!("[Execute] Auto var for rhs {}", varrhs);
             let (varlop, lhsb) = execute_expression(ac, runtime, &varlhs, lhe, program_archive);
             println!("[Execute] lhs {} {}", varlop, lhsb);
@@ -343,33 +345,32 @@ pub fn execute_expression(
         } => todo!(),
         ParallelOp { meta, rhe } => todo!(),
         Variable { meta, name, access } => {
+            let ctx = runtime.get_current_context().unwrap();
             let mut name_access = String::from(name);
-            println!("[Execute] Variable found {}", name.to_string());
+            debug!("[Execute] Variable found {}", name.to_string());
             for a in access.iter() {
                 match a {
                     Access::ArrayAccess(expr) => {
-                        println!("[Execute] Array access found");
-                        // let mut dim_u32_vec = Vec::new();
+                        debug!("[Execute] Array access found");
                         let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
-                        // dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
                         name_access.push_str("_");
                         name_access.push_str(dim_u32_str.as_str());
-                        println!("[Execute] Change var name to {}", name_access);
+                        debug!("[Execute] Changed var name to {}", name_access);
                     }
                     Access::ComponentAccess(name) => {
-                        println!("Component access found");
+                        debug!("Component access found");
                     }
                 }
             }
-            if runtime.get_var(&name_access).is_ok() {
-                let var_val = runtime.get_var(&name_access).unwrap().to_string();
-                println!("[Execute] Return var value {} = {}", name_access, var_val);
-                runtime.declare_var(&var_val).unwrap();
-                runtime
-                    .set_var(&var_val, var_val.parse::<u32>().unwrap())
-                    .unwrap();
-                return (var_val, true);
+            if ctx.get_data_item(&name_access).is_ok() {
+                let data_item = ctx.get_data_item(&name_access).unwrap();
+                // We're assuming data item is not an array
+                if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
+                    // TODO: Check if this is a constant
+                    debug!("[Execute] Return var value {} = {}", name_access, val);
+                    ctx.declare_const(val.clone()).unwrap();
+                }
             }
             (name_access.to_string(), false)
         }
@@ -414,29 +415,30 @@ pub fn execute_infix_op(
     input_rhs: &String,
     infixop: ExpressionInfixOpcode,
 ) -> (u32, bool) {
-    // let current = runtime.get_current_runtime_context();
+    let ctx = runtime.get_current_context().unwrap();
+
     let mut can_execute_infix = true;
-    if runtime.get_var(input_lhs).is_err() {
+    if ctx.get_data_item(input_lhs).is_err() {
         println!("[Execute] cannot get lhs var val {}", input_lhs);
         can_execute_infix = false;
     }
-    if runtime.get_var(input_rhs).is_err() {
+    if ctx.get_data_item(input_rhs).is_err() {
         println!("[Execute] cannot get rhs var val {}", input_rhs);
         can_execute_infix = false;
     }
     println!("[Execute] can execute infix {}", can_execute_infix);
 
     if !can_execute_infix {
-        runtime.unset_var(output).unwrap();
+        ctx.clear_data_item(output).unwrap();
         println!("[Execute] Now mark {} as no value", output);
         return (0, false);
     }
 
-    let lhsvar_val = runtime.get_var(input_lhs).unwrap();
+    let lhsvar_val = ctx.get_data_item(input_lhs).unwrap().get_u32().unwrap();
     println!("[Execute] infix lhs = {}", lhsvar_val);
-    let rhsvar_val = runtime.get_var(input_rhs).unwrap();
+    let rhsvar_val = ctx.get_data_item(input_rhs).unwrap().get_u32().unwrap();
     println!("[Execute] infix lhs = {}", rhsvar_val);
-    let var_id = runtime.declare_var(output).unwrap();
+    let var_id = ctx.declare_signal(output).unwrap();
 
     // let var = ac.add_var(var_id, &output);
 

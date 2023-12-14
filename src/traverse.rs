@@ -6,12 +6,13 @@
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::execute::{execute_expression, execute_infix_op, execute_statement};
-use crate::runtime::{DataContent, DataType, Runtime};
+use crate::runtime::{DataContent, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
     Access, Expression, ExpressionInfixOpcode, SignalType, Statement, VariableType,
 };
 use circom_program_structure::program_archive::ProgramArchive;
+use log::debug;
 
 /// Processes a sequence of statements, handling each based on its specific type and context.
 pub fn traverse_sequence_of_statements(
@@ -303,23 +304,13 @@ pub fn traverse_expression(
     // let mut can_be_simplified = true;
     match expr {
         Number(_, value) => {
-            let var_id = runtime
-                .get_current_context()
-                .unwrap()
-                .declare_data_item(&value.to_string(), DataType::Variable)
-                .unwrap();
-            runtime
-                .get_current_context()
-                .unwrap()
-                .set_data_item(
-                    &value.to_string(),
-                    DataContent::Scalar(value.to_u32().unwrap()),
-                )
-                .unwrap();
-            // TODO: What should I do here? Is this a variable or a signal?
-            // ac.add_const_var(var_id, value.to_u32().unwrap());
-            println!("[Traverse] Number value {}", value);
-            value.to_string()
+            // Declaring a constant.
+            let val = value.to_u32().unwrap();
+            let ctx = runtime.get_current_context().unwrap();
+            ctx.declare_const(val).unwrap();
+            ac.add_const_var(val, val); // Setting as id the constant value
+            println!("[Traverse] Number value {}", val);
+            val.to_string()
         }
         InfixOp {
             meta,
@@ -328,9 +319,11 @@ pub fn traverse_expression(
             rhe,
             ..
         } => {
-            let varlhs = runtime.auto_generate_var().unwrap();
+            let ctx = runtime.get_current_context().unwrap();
+            //TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
+            let varlhs = ctx.declare_auto_var().unwrap();
             println!("[Traverse] Auto var for lhs {}", varlhs);
-            let varrhs = runtime.auto_generate_var().unwrap();
+            let varrhs = ctx.declare_auto_var().unwrap();
             println!("[Traverse] Auto var for rhs {}", varrhs);
             let varlop = traverse_expression(ac, runtime, &varlhs, lhe, program_archive);
             println!("[Traverse] lhs {}", varlop);
@@ -358,34 +351,32 @@ pub fn traverse_expression(
         } => todo!(),
         ParallelOp { meta, rhe } => todo!(),
         Variable { meta, name, access } => {
+            let ctx = runtime.get_current_context().unwrap();
             let mut name_access = String::from(name);
-            println!("[Traverse] Variable found {}", name.to_string());
+            debug!("[Execute] Variable found {}", name.to_string());
             for a in access.iter() {
                 match a {
                     Access::ArrayAccess(expr) => {
-                        println!("[Traverse] Array access found");
-                        // let mut dim_u32_vec = Vec::new();
+                        debug!("[Execute] Array access found");
                         let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
-                        // dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
                         name_access.push_str("_");
                         name_access.push_str(dim_u32_str.as_str());
-                        println!("[Traverse] Change var name to {}", name_access);
+                        debug!("[Execute] Changed var name to {}", name_access);
                     }
                     Access::ComponentAccess(name) => {
-                        println!("[Traverse] Component access found");
+                        debug!("Component access found");
                     }
                 }
             }
-            if runtime.get_var(&name_access).is_ok() {
-                let var_val = runtime.get_var(&name_access).unwrap().to_string();
-                println!("[Traverse] Return var value {} = {}", name_access, var_val);
-                let var_id = runtime.declare_var(&var_val).unwrap();
-                let var_val_n = runtime
-                    .set_var(&var_val, var_val.parse::<u32>().unwrap())
-                    .unwrap();
-                ac.add_const_var(var_id, var_val_n);
-                return var_val.to_string();
+            if ctx.get_data_item(&name_access).is_ok() {
+                let data_item = ctx.get_data_item(&name_access).unwrap();
+                // We're assuming data item is not an array
+                if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
+                    // TODO: Check if this is a constant
+                    debug!("[Execute] Return var value {} = {}", name_access, val);
+                    ctx.declare_const(val.clone()).unwrap();
+                }
             }
             name_access.to_string()
         }
@@ -427,16 +418,15 @@ pub fn traverse_infix_op(
     input_rhs: &String,
     infixop: ExpressionInfixOpcode,
 ) -> (u32, bool) {
-    // let current = runtime.get_current_runtime_context();
+    let ctx = runtime.get_current_context().unwrap();
 
     // For now skip traversal if can execute
-
     let mut can_execute_infix = true;
-    if runtime.get_var(input_lhs).is_err() {
+    if ctx.get_data_item(input_lhs).is_err() {
         println!("[Traverse] cannot get lhs var val {}", input_lhs);
         can_execute_infix = false;
     }
-    if runtime.get_var(input_rhs).is_err() {
+    if ctx.get_data_item(input_rhs).is_err() {
         println!("[Traverse] cannot get rhs var val {}", input_rhs);
         can_execute_infix = false;
     }
@@ -445,13 +435,13 @@ pub fn traverse_infix_op(
     if can_execute_infix {
         return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
     } else {
-        runtime.unset_var(output).unwrap();
+        ctx.clear_data_item(output).unwrap();
         println!("[Traverse] Now mark {} as no value", output);
     }
 
-    let lhsvar_id = runtime.get_var(input_lhs).unwrap();
-    let rhsvar_id = runtime.get_var(input_rhs).unwrap();
-    let var_id = runtime.get_var(output).unwrap();
+    let lhsvar_id = ctx.get_data_item(input_lhs).unwrap().get_u32().unwrap();
+    let rhsvar_id = ctx.get_data_item(input_rhs).unwrap().get_u32().unwrap();
+    let var_id = ctx.get_data_item(output).unwrap().get_u32().unwrap();
 
     // let var = ac.add_var(var_id, &output);
 
@@ -581,9 +571,11 @@ pub fn traverse_variable_declaration(
     var_name: &str,
     dim_u32_vec: &Vec<u32>,
 ) {
+    // Assuming this is a signal
+    let ctx = runtime.get_current_context().unwrap();
     if dim_u32_vec.is_empty() {
-        let var_id = runtime.declare_var(var_name).unwrap();
-        ac.add_var(var_id, var_name.to_string().as_str());
+        let signal_id = ctx.declare_signal(var_name).unwrap();
+        ac.add_var(signal_id, var_name.to_string().as_str());
     } else {
         // let mut all_accesses = Vec::new();
         // for u32s in dim_u32_vec.iter() {
@@ -600,10 +592,11 @@ pub fn traverse_variable_declaration(
         for i in 0..dim_u32 {
             let mut u32vec = Vec::new();
             u32vec.push(i);
-            let (var, var_id) = runtime
-                .assign_array_var_to_current_context(&var_name.to_string(), u32vec)
-                .unwrap();
-            ac.add_var(var_id, var.as_str());
+            // TODO: Implement
+            // let (var, var_id) = runtime
+            //     .assign_array_var_to_current_context(&var_name.to_string(), u32vec)
+            //     .unwrap();
+            // ac.add_var(var_id, var.as_str());
         }
     }
 }

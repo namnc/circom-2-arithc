@@ -12,16 +12,16 @@ This document outlines the high-level operations and how we process statements, 
 
 Each statement in the component's body is handled by `traverse_statement`. These include:
 
-1. **DataItem Declaration**: Declaring variables or signals, either as single scalar or array. Here we can just add a `DataItem` based on the type and dimension
-2. **If-Then-Else**: Evaluates conditions (variables or function calls) with `execute_expression`, then executes the chosen path using `traverse_sequence_of_statements`.
-3. **Loops (While/For)**: Similar to `if-then-else`, but repeats based on a condition (breaks if it's `false`). Uses `traverse_sequence_of_statements` for the loop body.
-4. **ConstraintEquality**: Probably only for ZK, not MPC.
-5. **Return Statement**: In a function body, this statement assigns the result directly to the variable on the left-hand side of the call. For instance, in `a = func()`, the return value of `func()` is assigned to `a`. This also applies when `func()` is part of a larger expression, like in `a = a + func()`, where the return value is used as part of the expression calculation.
-6. **Assert**: Probably only for ZK, not MPC.
-7. **Substitution**: Like `a <== b + c`, the right-hand side is an expression processed by `traverse_expression`. This is the primary instance where a substitution statement is executed. If the left-hand side is a variable, we use `execute_expression` for execution instead of `traverse_expression`.
-8. **Block**: Traversed with `traverse_sequence_of_statements`.
-9. **LogCall**: For debugging, not used.
-10. **UnderscoreSubstitution**: Probably an anonymous substitution, to be handled later (if `circomlib-ml` uses it).
+- **DataItem Declaration**: Declaring variables or signals, either as single scalar or array. Here we can just add a `DataItem` based on the type and dimension
+- **If-Then-Else**: Evaluates conditions (variables or function calls) with `execute_expression`, then executes the chosen path using `traverse_sequence_of_statements`.
+- **Loops (While/For)**: Similar to `if-then-else`, but repeats based on a condition (breaks if it's `false`). Uses `traverse_sequence_of_statements` for the loop body.
+- **ConstraintEquality**: Probably only for ZK, not MPC.
+- **Return Statement**: In a function body, this statement assigns the result directly to the variable on the left-hand side of the call. For instance, in `a = func()`, the return value of `func()` is assigned to `a`. This also applies when `func()` is part of a larger expression, like in `a = a + func()`, where the return value is used as part of the expression calculation.
+- **Assert**: Probably only for ZK, not MPC.
+- **Substitution**: Like `a <== b + c`, the right-hand side is an expression processed by `traverse_expression`. This is the primary instance where a substitution statement is executed. If the left-hand side is a variable, we use `execute_expression` for execution instead of `traverse_expression`.
+- **Block**: Traversed with `traverse_sequence_of_statements`.
+- **LogCall**: For debugging, not used.
+- **UnderscoreSubstitution**: Probably an anonymous substitution, to be handled later (if `circomlib-ml` uses it).
 
 ## Expressions
 
@@ -53,4 +53,4 @@ Parts of statements, like the right side of a substitution or a flow control (if
 
 ### Special Gates
 
-- **Special Gates (Comparison, Negative/Positive, Zero Check)**: Currently, Circom implements these using an advisory approach. Our strategy should involve identifying these specific gates during the processing of template calls within `traverse expression`. We do this by matching the template name and then substituting them with dedicated gates for comparison, sign checking, and zero equality.
+For the Comparison, Negative/Positive, and Zero Check gates, Circom implements these using an advisory approach. Our strategy should involve identifying these specific gates during the processing of template calls within `traverse expression`. We do this by matching the template name and then substituting them with dedicated gates for comparison, sign checking, and zero equality.

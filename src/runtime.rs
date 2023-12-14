@@ -28,8 +28,8 @@ impl Runtime {
         debug!("Creating new Runtime");
         Self {
             ctx_stack: Vec::new(),
-            current_ctx: u32::default(), //TODO: why not just concretely set as 0 so we have precise control on this initial value?
-            last_ctx: u32::default(),
+            current_ctx: 0,
+            last_ctx: 0,
         }
     }
 
@@ -43,21 +43,15 @@ impl Runtime {
         let new_id = self.generate_context_id();
 
         // Create the new context using data from the caller context
-        let new_context = match origin {
-            ContextOrigin::Call => Context::new(new_id, self.current_ctx, HashMap::new())?,
-            ContextOrigin::Branch => {
-                Context::new(new_id, self.current_ctx, caller_context.values.clone())?
-            }
-            ContextOrigin::Loop => {
-                Context::new(new_id, self.current_ctx, caller_context.values.clone())?
-            }
-            ContextOrigin::Block => {
-                Context::new(new_id, self.current_ctx, caller_context.values.clone())?
-            }
+        let values = match origin {
+            ContextOrigin::Call => HashMap::new(),
+            ContextOrigin::Branch => caller_context.values.clone(),
+            ContextOrigin::Loop => caller_context.values.clone(),
+            ContextOrigin::Block => caller_context.values.clone(),
         };
+        let new_context = Context::new(new_id, self.current_ctx, values)?;
 
         // NOTE: above could be the simplest way to do what I wrote below. We just let Call be with an empty map and there will be declaration and initialization coming in from operations code.
-
         // TODO: we might want to distiguish the context creation reason here
         // this behavior right now is good for if_then_else, loop, and block because all variables and signals declare in the caller are accessible inside those
         // for template and function call we don't really have access to variables and signals outside of the template and function definition
@@ -166,16 +160,30 @@ impl Context {
         }
     }
 
+    /// Clears the content of a data item in the context.
+    /// Returns an error if the data item is not found.
+    pub fn clear_data_item(&mut self, name: &str) -> Result<(), RuntimeError> {
+        debug!("Clearing content for data item '{}'", name);
+        match self.values.get_mut(name) {
+            Some(data_item) => {
+                data_item.clear_content();
+                Ok(())
+            }
+            None => Err(RuntimeError::DataItemNotDeclared),
+        }
+    }
+
     /// Declares a new signal.
-    pub fn declare_signal(&mut self, name: &str) -> Result<(), RuntimeError> {
+    pub fn declare_signal(&mut self, name: &str) -> Result<u32, RuntimeError> {
+        let signal_id = self.generate_id();
         if self.values.contains_key(name) {
             Err(RuntimeError::DataItemAlreadyDeclared)
         } else {
             debug!("Declaring signal '{}'", name);
             self.values
                 .insert(name.to_string(), DataItem::new(DataType::Signal));
-            self.set_data_item(name, DataContent::Scalar(self.generate_signal_id()))?;
-            Ok(())
+            self.set_data_item(name, DataContent::Scalar(signal_id))?;
+            Ok(signal_id)
         }
     }
 
@@ -188,9 +196,22 @@ impl Context {
         } else {
             debug!("Declaring const '{}'", const_name);
             self.values
-                .insert(const_name, DataItem::new(DataType::Signal));
+                .insert(const_name.clone(), DataItem::new(DataType::Signal));
             self.set_data_item(&const_name, DataContent::Scalar(value))?;
             Ok(())
+        }
+    }
+
+    /// Declares a new auto generated variable.
+    pub fn declare_auto_var(&mut self) -> Result<String, RuntimeError> {
+        let auto_var_name = format!("auto_var_{}", self.generate_id());
+        if self.values.contains_key(&auto_var_name) {
+            Err(RuntimeError::DataItemAlreadyDeclared)
+        } else {
+            debug!("Declaring auto generated variable '{}'", auto_var_name);
+            self.values
+                .insert(auto_var_name.clone(), DataItem::new(DataType::Variable));
+            Ok(auto_var_name)
         }
     }
 
@@ -200,8 +221,10 @@ impl Context {
         self.get_data_item(&const_name)
     }
 
-    /// Generates a unique signal ID based on the context. (Temporary implementation)
-    pub fn generate_signal_id(&mut self) -> u32 {
+    // DataItem id generation needs to be reviewed. There could be collisions between
+    // different contexts due to constant signals haivng arbitrary values.
+    /// Generates a unique ID for a DataItem based on the context. (Temporary implementation)
+    pub fn generate_id(&mut self) -> u32 {
         let items = self.values.len() as u32 * 1000;
         let ctx = self.id * 100 ^ self.caller_id * 10;
 
@@ -251,9 +274,24 @@ impl DataItem {
         }
     }
 
+    /// Clears the content of the data item.
+    pub fn clear_content(&mut self) {
+        self.content = None;
+    }
+
     /// Gets the content of the data item.
     pub fn get_content(&self) -> Option<&DataContent> {
         self.content.as_ref()
+    }
+
+    /// Gets the u32 value if the content is a scalar.
+    /// Returns an error if the content is an array or not set.
+    pub fn get_u32(&self) -> Result<u32, RuntimeError> {
+        match &self.content {
+            Some(DataContent::Scalar(value)) => Ok(*value),
+            Some(DataContent::Array(_)) => Err(RuntimeError::NotAScalar),
+            None => Err(RuntimeError::EmptyDataItem),
+        }
     }
 
     /// Retrieves an item from the array content at the specified index.
@@ -302,6 +340,8 @@ pub enum RuntimeError {
     IndexOutOfBounds,
     #[error("Data Item content is not an array")]
     NotAnArray,
+    #[error("Data Item content is not a scalar")]
+    NotAScalar,
     #[error("Cannot modify an already set signal")]
     SignalAlreadySet,
 }
