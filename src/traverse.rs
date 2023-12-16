@@ -59,7 +59,7 @@ pub fn traverse_statement(
             dimensions,
             ..
         } => {
-            println!("[Traverse] Declaration of {}", name);
+            debug!("Declaration of {}", name);
             match xtype {
                 // VariableType::AnonymousComponent => {
                 //     execute_anonymous_component_declaration(
@@ -184,13 +184,13 @@ pub fn traverse_statement(
             if res.contains("0") {
                 break;
             }
-            println!("[Traverse] While res = {} {}", res, rb);
+            debug!("While res = {} {}", res, rb);
             traverse_statement(ac, runtime, stmt, program_archive);
             // traverse_expression(ac, runtime, var, cond, program_archive);
             // let var = String::from("while");
             // ac.add_var(&var, SignalType::Intermediate);
             // let lhs = traverse_expression(ac, runtime, &var, cond, program_archive);
-            // println!("While cond {}", lhs);
+            // debug!("While cond {}", lhs);
             // traverse_statement(ac, stmt, program_archive);
         },
         ConstraintEquality { meta, lhe, rhe, .. } => {
@@ -257,26 +257,24 @@ pub fn traverse_statement(
             ..
         } => {
             let mut name_access = String::from(var);
-            println!("[Traverse] Sub Variable found {}", var.to_string());
+            debug!("Sub Variable found {}", var.to_string());
             for a in access.iter() {
                 match a {
                     Access::ArrayAccess(expr) => {
-                        println!("[Traverse] Sub Array access found");
-                        // let mut dim_u32_vec = Vec::new();
+                        debug!("Sub Array access found");
                         let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
-                        // dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
                         name_access.push_str("_");
                         name_access.push_str(dim_u32_str.as_str());
-                        println!("[Traverse] Sub Change var name to {}", name_access);
+                        debug!("Sub Change var name to {}", name_access);
                     }
                     Access::ComponentAccess(name) => {
-                        println!("[Traverse] Sub Component access not handled");
+                        debug!("Sub Component access not handled");
                     }
                 }
             }
             let rhs = traverse_expression(ac, runtime, &name_access, rhe, program_archive);
-            println!("[Traverse] Sub Assigning {} to {}", rhs, &name_access);
+            debug!("Sub Assigning {} to {}", rhs, &name_access);
             execute_statement(ac, runtime, stmt, program_archive);
         }
         Block { stmts, .. } => {
@@ -284,7 +282,7 @@ pub fn traverse_statement(
         }
         LogCall { args, .. } => {}
         UnderscoreSubstitution { meta, rhe, op } => {
-            println!("UnderscoreSubstitution found");
+            debug!("UnderscoreSubstitution found");
         }
         _ => {
             unimplemented!()
@@ -306,10 +304,14 @@ pub fn traverse_expression(
         Number(_, value) => {
             // Declaring a constant.
             let val = value.to_u32().unwrap();
-            let ctx = runtime.get_current_context().unwrap();
-            ctx.declare_const(val).unwrap();
-            ac.add_const_var(val, val); // Setting as id the constant value
-            println!("[Traverse] Number value {}", val);
+            debug!("Number value {}", val);
+
+            let res = runtime.get_current_context().unwrap().declare_const(val);
+            if res.is_ok() {
+                res.unwrap();
+                ac.add_const_var(val, val); // Setting as id the constant value
+            }
+
             val.to_string()
         }
         InfixOp {
@@ -322,13 +324,13 @@ pub fn traverse_expression(
             let ctx = runtime.get_current_context().unwrap();
             //TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
             let varlhs = ctx.declare_auto_var().unwrap();
-            println!("[Traverse] Auto var for lhs {}", varlhs);
+            debug!("Auto var for lhs {}", varlhs);
             let varrhs = ctx.declare_auto_var().unwrap();
-            println!("[Traverse] Auto var for rhs {}", varrhs);
+            debug!("Auto var for rhs {}", varrhs);
             let varlop = traverse_expression(ac, runtime, &varlhs, lhe, program_archive);
-            println!("[Traverse] lhs {}", varlop);
+            debug!("lhs {}", varlop);
             let varrop = traverse_expression(ac, runtime, &varrhs, rhe, program_archive);
-            println!("[Traverse] rhs {}", varlop);
+            debug!("rhs {}", varlop);
             let (res, ret) = traverse_infix_op(ac, runtime, var, &varlop, &varrop, *infix_op);
             if ret {
                 return res.to_string();
@@ -340,7 +342,7 @@ pub fn traverse_expression(
             prefix_op,
             rhe,
         } => {
-            println!("Prefix found ");
+            debug!("Prefix found ");
             var.to_string()
         }
         InlineSwitchOp {
@@ -351,37 +353,40 @@ pub fn traverse_expression(
         } => todo!(),
         ParallelOp { meta, rhe } => todo!(),
         Variable { meta, name, access } => {
-            let ctx = runtime.get_current_context().unwrap();
             let mut name_access = String::from(name);
-            debug!("[Execute] Variable found {}", name.to_string());
+            debug!("Variable found {}", name.to_string());
             for a in access.iter() {
                 match a {
                     Access::ArrayAccess(expr) => {
-                        debug!("[Execute] Array access found");
+                        debug!("Array access found");
                         let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
                         name_access.push_str("_");
                         name_access.push_str(dim_u32_str.as_str());
-                        debug!("[Execute] Changed var name to {}", name_access);
+                        debug!("Changed var name to {}", name_access);
                     }
                     Access::ComponentAccess(name) => {
                         debug!("Component access found");
                     }
                 }
             }
+            let ctx = runtime.get_current_context().unwrap();
             if ctx.get_data_item(&name_access).is_ok() {
                 let data_item = ctx.get_data_item(&name_access).unwrap();
                 // We're assuming data item is not an array
                 if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
                     // TODO: Check if this is a constant
-                    debug!("[Execute] Return var value {} = {}", name_access, val);
-                    ctx.declare_const(val.clone()).unwrap();
+                    let cloned_val = val.clone();
+                    debug!("Return var value {} = {}", name_access, cloned_val);
+                    ctx.declare_const(cloned_val).unwrap();
+                    ac.add_const_var(cloned_val, cloned_val);
+                    return cloned_val.to_string();
                 }
             }
             name_access.to_string()
         }
         Call { meta, id, args } => {
-            println!("Call found {}", id.to_string());
+            debug!("Call found {}", id.to_string());
             // find the template and execute it
             id.to_string()
         }
@@ -394,7 +399,7 @@ pub fn traverse_expression(
             names,
         } => todo!(),
         ArrayInLine { meta, values } => {
-            println!("ArrayInLine found");
+            debug!("ArrayInLine found");
             var.to_string()
         }
         Tuple { meta, values } => todo!(),
@@ -403,7 +408,7 @@ pub fn traverse_expression(
             value,
             dimension,
         } => {
-            println!("UniformArray found");
+            debug!("UniformArray found");
             var.to_string()
         }
     }
@@ -423,20 +428,20 @@ pub fn traverse_infix_op(
     // For now skip traversal if can execute
     let mut can_execute_infix = true;
     if ctx.get_data_item(input_lhs).is_err() {
-        println!("[Traverse] cannot get lhs var val {}", input_lhs);
+        debug!("Cannot get lhs var val {}", input_lhs);
         can_execute_infix = false;
     }
     if ctx.get_data_item(input_rhs).is_err() {
-        println!("[Traverse] cannot get rhs var val {}", input_rhs);
+        debug!("Cannot get rhs var val {}", input_rhs);
         can_execute_infix = false;
     }
-    println!("[Traverse] can execute infix {}", can_execute_infix);
+    debug!("Can execute infix {}", can_execute_infix);
 
     if can_execute_infix {
         return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
     } else {
         ctx.clear_data_item(output).unwrap();
-        println!("[Traverse] Now mark {} as no value", output);
+        debug!("Now mark {} as no value", output);
     }
 
     let lhsvar_id = ctx.get_data_item(input_lhs).unwrap().get_u32().unwrap();
@@ -452,31 +457,19 @@ pub fn traverse_infix_op(
     let mut gate_type = AGateType::AAdd;
     match infixop {
         Mul => {
-            println!(
-                "[Traverse] Mul op {} = {} * {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("Mul op {} = {} * {}", output, input_lhs, input_rhs);
             gate_type = AGateType::AMul;
         }
         Div => {
-            println!(
-                "[Traverse] Div op {} = {} / {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("Div op {} = {} / {}", output, input_lhs, input_rhs);
             gate_type = AGateType::ADiv;
         }
         Add => {
-            println!(
-                "[Traverse] Add op {} = {} + {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("Add op {} = {} + {}", output, input_lhs, input_rhs);
             gate_type = AGateType::AAdd;
         }
         Sub => {
-            println!(
-                "[Traverse] Sub op {} = {} - {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("Sub op {} = {} - {}", output, input_lhs, input_rhs);
             gate_type = AGateType::ASub;
         }
         // Pow => {},
@@ -485,45 +478,27 @@ pub fn traverse_infix_op(
         // ShiftL => {},
         // ShiftR => {},
         LesserEq => {
-            println!(
-                "[Traverse] LEq op {} = {} == {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("LEq op {} = {} == {}", output, input_lhs, input_rhs);
             gate_type = AGateType::ALEq;
         }
         GreaterEq => {
-            println!(
-                "[Traverse] GEq op {} = {} == {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("GEq op {} = {} == {}", output, input_lhs, input_rhs);
             gate_type = AGateType::AGEq;
         }
         Lesser => {
-            println!(
-                "[Traverse] Ls op {} = {} == {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("Ls op {} = {} == {}", output, input_lhs, input_rhs);
             gate_type = AGateType::ALt;
         }
         Greater => {
-            println!(
-                "[Traverse] Gt op {} = {} == {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("Gt op {} = {} == {}", output, input_lhs, input_rhs);
             gate_type = AGateType::AGt;
         }
         Eq => {
-            println!(
-                "[Traverse] Eq op {} = {} == {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("Eq op {} = {} == {}", output, input_lhs, input_rhs);
             gate_type = AGateType::AEq;
         }
         NotEq => {
-            println!(
-                "[Traverse] Neq op {} = {} != {}",
-                output, input_lhs, input_rhs
-            );
+            debug!("Neq op {} = {} != {}", output, input_lhs, input_rhs);
             gate_type = AGateType::ANeq;
         }
         // BoolOr => {},
@@ -550,7 +525,7 @@ pub fn traverse_component_declaration(
 ) {
     // let var_id = runtime.assign_var_to_current_context(&var_name.to_string());
     // ac.add_var(var_id, comp_name.to_string().as_str());
-    println!("Found component {}", comp_name);
+    debug!("Found component {}", comp_name);
 }
 
 /// Processes a signal declaration, integrating it into the circuit's variable management system.
@@ -590,13 +565,10 @@ pub fn traverse_variable_declaration(
         // }
         let dim_u32 = *dim_u32_vec.last().unwrap();
         for i in 0..dim_u32 {
-            let mut u32vec = Vec::new();
-            u32vec.push(i);
-            // TODO: Implement
-            // let (var, var_id) = runtime
-            //     .assign_array_var_to_current_context(&var_name.to_string(), u32vec)
-            //     .unwrap();
-            // ac.add_var(var_id, var.as_str());
+            let (name, id) = ctx
+                .declare_signal_array(&var_name.to_string(), vec![i])
+                .unwrap();
+            ac.add_var(id, &name);
         }
     }
 }

@@ -265,14 +265,25 @@ pub fn execute_statement(
             println!("[Execute] Assigning {} ? {} to {}", rhs, rhsb, &name_access);
             if rhsb {
                 println!("[Execute] Assigning {} to {}", rhs, &name_access);
-                runtime
-                    .get_current_context()
-                    .unwrap()
-                    .set_data_item(
-                        &name_access,
-                        DataContent::Scalar(rhs.parse::<u32>().unwrap()),
-                    )
-                    .unwrap();
+                // TODO: revisit this
+                // Check if the signal already has this value assigned. If it doesn't, assign it.
+                let ctx = runtime.get_current_context().unwrap();
+                let res = ctx.get_data_item(&name_access);
+                let expected: u32 = rhs.parse().unwrap();
+
+                if res.is_ok() {
+                    if expected == res.unwrap().get_u32().unwrap() {
+                        println!(
+                            "[Execute] Signal {} already has value {}",
+                            &name_access, expected
+                        );
+                    } else {
+                        ctx.clear_data_item(&name_access).unwrap();
+                    }
+                } else {
+                    ctx.set_data_item(&name_access, DataContent::Scalar(expected))
+                        .unwrap();
+                }
             }
         }
         Block { stmts, .. } => {
@@ -302,11 +313,15 @@ pub fn execute_expression(
         Number(_, value) => {
             // Declaring a constant.
             let val = value.to_u32().unwrap();
-            let ctx = runtime.get_current_context().unwrap();
-            ctx.declare_const(val).unwrap();
-            ac.add_const_var(val, val); // Setting as id the constant value
-            println!("[Execute] Declared const {}", val);
-            (value.to_string(), true)
+            debug!("Number value {}", val);
+
+            let res = runtime.get_current_context().unwrap().declare_const(val);
+            if res.is_ok() {
+                res.unwrap();
+                ac.add_const_var(val, val); // Setting as id the constant value
+            }
+
+            (val.to_string(), true)
         }
         InfixOp {
             meta,
@@ -345,7 +360,6 @@ pub fn execute_expression(
         } => todo!(),
         ParallelOp { meta, rhe } => todo!(),
         Variable { meta, name, access } => {
-            let ctx = runtime.get_current_context().unwrap();
             let mut name_access = String::from(name);
             debug!("[Execute] Variable found {}", name.to_string());
             for a in access.iter() {
@@ -361,15 +375,6 @@ pub fn execute_expression(
                     Access::ComponentAccess(name) => {
                         debug!("Component access found");
                     }
-                }
-            }
-            if ctx.get_data_item(&name_access).is_ok() {
-                let data_item = ctx.get_data_item(&name_access).unwrap();
-                // We're assuming data item is not an array
-                if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
-                    // TODO: Check if this is a constant
-                    debug!("[Execute] Return var value {} = {}", name_access, val);
-                    ctx.declare_const(val.clone()).unwrap();
                 }
             }
             (name_access.to_string(), false)
@@ -438,10 +443,13 @@ pub fn execute_infix_op(
     println!("[Execute] infix lhs = {}", lhsvar_val);
     let rhsvar_val = ctx.get_data_item(input_rhs).unwrap().get_u32().unwrap();
     println!("[Execute] infix lhs = {}", rhsvar_val);
-    let var_id = ctx.declare_signal(output).unwrap();
+    let declare_res = ctx.declare_signal(output);
+
+    if declare_res.is_ok() {
+        declare_res.unwrap();
+    }
 
     // let var = ac.add_var(var_id, &output);
-
     // let lvar = ac.get_var(lhsvar_id);
     // let rvar = ac.get_var(rhsvar_id);
 

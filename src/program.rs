@@ -138,7 +138,7 @@ pub fn parse_circom(filename: &str, inputs: &[ValueType], outputs: &[ValueType])
 pub fn traverse_program(program_archive: &ProgramArchive) -> ArithmeticCircuit {
     let mut ac = ArithmeticCircuit::new();
 
-    let mut runtime = Runtime::new();
+    let mut runtime = Runtime::new().unwrap();
 
     let main_file_id = program_archive.get_file_id_main();
 

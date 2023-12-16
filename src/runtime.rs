@@ -24,30 +24,27 @@ pub struct Runtime {
 
 impl Runtime {
     /// Constructs a new Runtime with an empty stack.
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, RuntimeError> {
         debug!("Creating new Runtime");
-        Self {
-            ctx_stack: Vec::new(),
+        Ok(Self {
+            ctx_stack: vec![Context::new(0, 0, HashMap::new())?],
             current_ctx: 0,
             last_ctx: 0,
-        }
+        })
     }
 
     /// Creates a new context for a function call or similar operation.
     pub fn add_context(&mut self, origin: ContextOrigin) -> Result<(), RuntimeError> {
         debug!("Adding new context for origin: {:?}", origin);
-        // Retrieve the caller context
-        let caller_context = self.get_current_context()?;
-
         // Generate a unique ID for the new context
         let new_id = self.generate_context_id();
 
         // Create the new context using data from the caller context
         let values = match origin {
             ContextOrigin::Call => HashMap::new(),
-            ContextOrigin::Branch => caller_context.values.clone(),
-            ContextOrigin::Loop => caller_context.values.clone(),
-            ContextOrigin::Block => caller_context.values.clone(),
+            ContextOrigin::Branch => self.get_current_context()?.values.clone(),
+            ContextOrigin::Loop => self.get_current_context()?.values.clone(),
+            ContextOrigin::Block => self.get_current_context()?.values.clone(),
         };
         let new_context = Context::new(new_id, self.current_ctx, values)?;
 
@@ -225,10 +222,26 @@ impl Context {
     // different contexts due to constant signals haivng arbitrary values.
     /// Generates a unique ID for a DataItem based on the context. (Temporary implementation)
     pub fn generate_id(&mut self) -> u32 {
-        let items = self.values.len() as u32 * 1000;
-        let ctx = self.id * 100 ^ self.caller_id * 10;
+        self.values.len() as u32 * 2 + 1000
+    }
 
-        ctx ^ items
+    // TODO: array auto var should support multi-dimension, right now 1
+    // TODO: temporary implementation, need to be reviewed
+    /// Creates a unique signal for an array element based on its indices and assigns it a unique identifier.
+    pub fn declare_signal_array(
+        &mut self,
+        name: &str,
+        indice: Vec<u32>,
+    ) -> Result<(String, u32), RuntimeError> {
+        let mut signal_name = name.to_string();
+
+        for i in 0..indice.len() {
+            signal_name.push_str(&format!("_{}", indice[i]));
+        }
+
+        let signal_id = self.declare_signal(&signal_name)?;
+
+        Ok((signal_name, signal_id))
     }
 }
 
@@ -264,7 +277,7 @@ impl DataItem {
 
     /// Sets the content of the data item. Returns an error if the item is a signal and is already set.
     pub fn set_content(&mut self, content: DataContent) -> Result<(), RuntimeError> {
-        debug!("Setting content for DataItem: {:?} - {:?}", self, content);
+        debug!("Setting content {:?} - {:?}", self.data_type, content);
         match self.data_type {
             DataType::Signal if self.content.is_some() => Err(RuntimeError::SignalAlreadySet),
             _ => {
