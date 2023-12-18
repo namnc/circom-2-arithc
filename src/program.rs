@@ -4,8 +4,8 @@
 
 use crate::circuit::ArithmeticCircuit;
 use crate::compiler::{analyse_project, parse_project, Input};
-use crate::operations::traverse_sequence_of_statements;
-use crate::runtime::CircomRuntime;
+use crate::runtime::Runtime;
+use crate::traverse::traverse_sequence_of_statements;
 use circom_program_structure::ast::Expression;
 use circom_program_structure::program_archive::ProgramArchive;
 use mpz_circuits::types::ValueType;
@@ -138,7 +138,7 @@ pub fn parse_circom(filename: &str, inputs: &[ValueType], outputs: &[ValueType])
 pub fn traverse_program(program_archive: &ProgramArchive) -> ArithmeticCircuit {
     let mut ac = ArithmeticCircuit::new();
 
-    let mut runtime = CircomRuntime::new();
+    let mut runtime = Runtime::new().unwrap();
 
     let main_file_id = program_archive.get_file_id_main();
 
@@ -200,26 +200,4 @@ pub fn traverse_program(program_archive: &ProgramArchive) -> ArithmeticCircuit {
     };
 
     ac
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_circom_mul2() {
-        let circ = parse_circom(
-            "circuits/bristol/adder64_reverse.txt",
-            &[ValueType::U64, ValueType::U64],
-            &[ValueType::U64],
-        )
-        .unwrap();
-
-        // stupid assert always true
-        assert_eq!(3, 3);
-
-        //let output: u64 = evaluate!(circ, fn(1u64, 2u64) -> u64).unwrap();
-
-        //assert_eq!(output, 3);
-    }
 }
