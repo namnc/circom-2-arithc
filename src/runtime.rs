@@ -15,7 +15,7 @@ pub enum ContextOrigin {
     Block,
 }
 
-/// Runtime - manages the scope stack and variable tracking.
+/// Runtime - manages the context stack and variable tracking.
 pub struct Runtime {
     ctx_stack: Vec<Context>,
     current_ctx: u32,

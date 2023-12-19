@@ -376,6 +376,7 @@ pub enum SimplificationStyle {
     O1,
     O2(usize),
 }
+
 pub fn get_simplification_style(matches: &ArgMatches) -> Result<SimplificationStyle, ()> {
     let o_0 = matches.is_present("no_simplification");
     let o_1 = matches.is_present("reduced_simplification");

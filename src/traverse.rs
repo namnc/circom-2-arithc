@@ -71,7 +71,7 @@ pub fn traverse_statement(
                 VariableType::Signal(signal_type, _tag_list) => {
                     traverse_signal_declaration(ac, runtime, name, *signal_type, &dim_u32_vec)
                 }
-                VariableType::AnonymousComponent => unimplemented!(),
+                _ => unimplemented!(),
             }
         }
         Statement::While { cond, stmt, .. } => loop {

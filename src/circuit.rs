@@ -3,6 +3,7 @@
 //! This module defines structures and operations for arithmetic circuits, including variables, gates, and circuit composition.
 
 use circom_program_structure::ast::ExpressionInfixOpcode;
+use log::debug;
 use mpz_circuits::{BuilderError, GateType};
 use regex::Captures;
 use serde::{Deserialize, Serialize};
@@ -150,10 +151,7 @@ impl ArithmeticCircuit {
     }
 
     pub fn add_var(&mut self, var_id: u32, var_name: &str) -> &ArithmeticVar {
-        println!(
-            "[ArithmeticCircuit] Add var {} with id {}",
-            var_name, var_id
-        );
+        debug!("Add var {} with id {}", var_name, var_id);
 
         // Not sure if var_count is needed
         self.var_count += 1;
@@ -164,10 +162,7 @@ impl ArithmeticCircuit {
     }
 
     pub fn add_const_var(&mut self, var_id: u32, var_val: u32) -> &ArithmeticVar {
-        println!(
-            "[ArithmeticCircuit] var {} now has value {}",
-            var_id, var_val
-        );
+        debug!("var {} now has value {}", var_id, var_val);
 
         // Not sure if var_count is needed
         self.var_count += 1;
@@ -187,7 +182,7 @@ impl ArithmeticCircuit {
         self.vars.get_mut(&var_id).unwrap()
     }
 
-    //We support ADD, MUL, CADD, CMUL, DIV, CDIV, CINVERT, IFTHENELSE, FOR
+    // We support ADD, MUL, CADD, CMUL, DIV, CDIV, CINVERT, IFTHENELSE, FOR
 
     pub fn add_gate(
         &mut self,
@@ -203,8 +198,8 @@ impl ArithmeticCircuit {
         let var_output = self.get_var(output_id);
         let var_lhs = self.get_var(lhs_id);
         let var_rhs = self.get_var(rhs_id);
-        println!(
-            "[ArithmeticCircuit] Gate added id {}: ({}, {}, {}) = ({}, {}, {}) {} ({}, {}, {})",
+        debug!(
+            "Gate added id {}: ({}, {}, {}) = ({}, {}, {}) {} ({}, {}, {})",
             node.gate_id,
             node.output_id,
             var_output.is_const,
@@ -272,18 +267,17 @@ impl ArithmeticCircuit {
     }
 
     pub fn print_ac(&self) {
-        println!("[ArithmeticCircuit] Whole Arithmetic Circuit");
+        println!("Whole Arithmetic Circuit");
         for i in 1..(self.gate_count + 1) {
             if !self.gates.contains_key(&i) {
                 continue;
             }
             let node = self.gates.get(&(i)).unwrap();
-            // println!("[ArithmeticCircuit] Gate {}: {} = {} [{}] {}", i, anv.output_id, anv.input_lhs_id, anv.gate_type.to_string(), anv.input_rhs_id);
             let var_output = self.get_var(node.output_id);
             let var_lhs = self.get_var(node.input_lhs_id);
             let var_rhs = self.get_var(node.input_rhs_id);
             println!(
-                "[ArithmeticCircuit] Gate id {}: ({}, {}, {}) = ({}, {}, {}) {} ({}, {}, {})",
+                "Gate id {}: ({}, {}, {}) = ({}, {}, {}) {} ({}, {}, {})",
                 node.gate_id,
                 node.output_id,
                 var_output.is_const,

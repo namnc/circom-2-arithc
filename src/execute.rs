@@ -37,7 +37,6 @@ pub fn execute_statement(
             ..
         } => {
             debug!("Declaration of {}", name);
-
             // Process index in case of array
             let dim_u32_vec: Vec<u32> = dimensions
                 .iter()
@@ -58,7 +57,7 @@ pub fn execute_statement(
                 VariableType::Signal(signal_type, _tag_list) => {
                     traverse_signal_declaration(ac, runtime, name, *signal_type, &dim_u32_vec)
                 }
-                VariableType::AnonymousComponent => unimplemented!(),
+                _ => unimplemented!(),
             }
         }
         Statement::While { cond, stmt, .. } => loop {
