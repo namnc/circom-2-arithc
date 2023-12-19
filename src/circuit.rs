@@ -3,6 +3,7 @@
 //! This module defines structures and operations for arithmetic circuits, including variables, gates, and circuit composition.
 
 use crate::compiler::ParseError;
+use circom_program_structure::ast::ExpressionInfixOpcode;
 use mpz_circuits::GateType;
 use regex::Captures;
 use serde::{Deserialize, Serialize};
@@ -14,17 +15,17 @@ use std::{
 /// Types of gates that can be used in an arithmetic circuit.
 #[derive(Serialize, Deserialize, Debug)]
 pub enum AGateType {
-    ANone,
     AAdd,
-    ASub,
-    AMul,
     ADiv,
     AEq,
-    ANeq,
-    ALEq,
     AGEq,
-    ALt,
     AGt,
+    ALEq,
+    ALt,
+    AMul,
+    ANeq,
+    ANone,
+    ASub,
 }
 
 impl Display for AGateType {
@@ -41,6 +42,24 @@ impl Display for AGateType {
             AGateType::AGEq => write!(f, "AGEq"),
             AGateType::ALt => write!(f, "ALt"),
             AGateType::AGt => write!(f, "AGt"),
+        }
+    }
+}
+
+impl From<&ExpressionInfixOpcode> for AGateType {
+    fn from(opcode: &ExpressionInfixOpcode) -> Self {
+        match opcode {
+            ExpressionInfixOpcode::Add => AGateType::AAdd,
+            ExpressionInfixOpcode::Div => AGateType::ADiv,
+            ExpressionInfixOpcode::Eq => AGateType::AEq,
+            ExpressionInfixOpcode::Greater => AGateType::AGt,
+            ExpressionInfixOpcode::GreaterEq => AGateType::AGEq,
+            ExpressionInfixOpcode::Lesser => AGateType::ALt,
+            ExpressionInfixOpcode::LesserEq => AGateType::ALEq,
+            ExpressionInfixOpcode::Mul => AGateType::AMul,
+            ExpressionInfixOpcode::NotEq => AGateType::ANeq,
+            ExpressionInfixOpcode::Sub => AGateType::ASub,
+            _ => AGateType::ANone,
         }
     }
 }
@@ -167,7 +186,7 @@ impl ArithmeticCircuit {
 
     pub fn add_gate(
         &mut self,
-        output_name: &String,
+        output_name: &str,
         output_id: u32,
         lhs_id: u32,
         rhs_id: u32,
@@ -195,20 +214,6 @@ impl ArithmeticCircuit {
         );
         self.gates.insert(self.gate_count, node);
     }
-
-    // pub fn add_gate(
-    //     &mut self,
-    //     output: &ArithmeticVar,
-    //     lhs: &ArithmeticVar,
-    //     rhs: &ArithmeticVar,
-    //     gate_type: AGateType) {
-
-    //     self.gate_count += 1;
-    //     let node = ArithmeticNode::new(self.gate_count, gate_type, lhs.var_id, rhs.var_id, output.var_id);
-
-    //     self.gates.insert(self.gate_count, node);
-
-    // }
 
     pub fn replace_input_var_in_gate(&mut self, var_id: u32, new_var_id: u32) {
         for i in 1..(self.gate_count + 1) {
@@ -302,7 +307,7 @@ impl ArithmeticCircuit {
         let deserialized: ArithmeticCircuit = serde_json::from_str(&serialized).unwrap();
 
         // Prints deserialized = Point { x: 1, y: 2 }
-        println!("deserialized = {:?}", deserialized);
+        println!("deserialized = {:#?}", deserialized);
     }
 }
 

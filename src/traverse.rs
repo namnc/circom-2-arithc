@@ -5,7 +5,7 @@
 //! It's main purpose is to traverse signals.
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::execute::{execute_expression, execute_infix_op, execute_statement};
+use crate::execute::{execute_expression, execute_statement};
 use crate::runtime::{DataContent, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
@@ -331,7 +331,7 @@ pub fn traverse_expression(
             debug!("lhs {}", varlop);
             let varrop = traverse_expression(ac, runtime, &varrhs, rhe, program_archive);
             debug!("rhs {}", varlop);
-            let (res, ret) = traverse_infix_op(ac, runtime, var, &varlop, &varrop, *infix_op);
+            let (res, ret) = traverse_infix_op(ac, runtime, var, &varlop, &varrop, infix_op);
             if ret {
                 return res.to_string();
             }
@@ -342,7 +342,7 @@ pub fn traverse_expression(
             prefix_op,
             rhe,
         } => {
-            debug!("Prefix found ");
+            debug!("Prefix found");
             var.to_string()
         }
         InlineSwitchOp {
@@ -418,100 +418,35 @@ pub fn traverse_expression(
 pub fn traverse_infix_op(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    output: &String,
-    input_lhs: &String,
-    input_rhs: &String,
-    infixop: ExpressionInfixOpcode,
+    output: &str,
+    input_lhs: &str,
+    input_rhs: &str,
+    infixop: &ExpressionInfixOpcode,
 ) -> (u32, bool) {
+    debug!("Traversing infix op");
     let ctx = runtime.get_current_context().unwrap();
 
-    // For now skip traversal if can execute
-    let mut can_execute_infix = true;
-    if ctx.get_data_item(input_lhs).is_err() {
-        debug!("Cannot get lhs var val {}", input_lhs);
-        can_execute_infix = false;
-    }
-    if ctx.get_data_item(input_rhs).is_err() {
-        debug!("Cannot get rhs var val {}", input_rhs);
-        can_execute_infix = false;
-    }
-    debug!("Can execute infix {}", can_execute_infix);
+    // Check availability of lhs and rhs values
+    let lhsvar_res = ctx.get_data_item(input_lhs);
+    let rhsvar_res = ctx.get_data_item(input_rhs);
 
-    if can_execute_infix {
-        return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
-    } else {
-        ctx.clear_data_item(output).unwrap();
-        debug!("Now mark {} as no value", output);
-    }
+    // TODO: HERE IS WHERE INFIX OP CREATE GATES BUT BECAUSE WE CAN GET VALUES FROM lhs and rhs IT WILL EXECUTE INSTEAD
+    // Skip traversal if can execute
+    // if lhsvar_res.is_ok() && rhsvar_res.is_ok() {
+    //     return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
+    // }
+    // debug!("Can't get variables: lhs={}, rhs={}", input_lhs, input_rhs);
+    // let _ = ctx.clear_data_item(output).unwrap();
 
-    let lhsvar_id = ctx.get_data_item(input_lhs).unwrap().get_u32().unwrap();
-    let rhsvar_id = ctx.get_data_item(input_rhs).unwrap().get_u32().unwrap();
-    let var_id = ctx.get_data_item(output).unwrap().get_u32().unwrap();
+    // Traverse the infix operation
+    let lhsvar_id = lhsvar_res.unwrap().get_u32().unwrap();
+    let rhsvar_id = rhsvar_res.unwrap().get_u32().unwrap();
+    let output_id = ctx.get_data_item(output).unwrap().get_u32().unwrap();
 
-    // let var = ac.add_var(var_id, &output);
+    let gate_type = AGateType::from(infixop);
+    debug!("{} = {} {} {}", output, input_lhs, gate_type, input_rhs);
 
-    // let lvar = ac.get_var(lhsvar_id);
-    // let rvar = ac.get_var(rhsvar_id);
-
-    use ExpressionInfixOpcode::*;
-    let mut gate_type = AGateType::AAdd;
-    match infixop {
-        Mul => {
-            debug!("Mul op {} = {} * {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AMul;
-        }
-        Div => {
-            debug!("Div op {} = {} / {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::ADiv;
-        }
-        Add => {
-            debug!("Add op {} = {} + {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AAdd;
-        }
-        Sub => {
-            debug!("Sub op {} = {} - {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::ASub;
-        }
-        // Pow => {},
-        // IntDiv => {},
-        // Mod => {},
-        // ShiftL => {},
-        // ShiftR => {},
-        LesserEq => {
-            debug!("LEq op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::ALEq;
-        }
-        GreaterEq => {
-            debug!("GEq op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AGEq;
-        }
-        Lesser => {
-            debug!("Ls op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::ALt;
-        }
-        Greater => {
-            debug!("Gt op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AGt;
-        }
-        Eq => {
-            debug!("Eq op {} = {} == {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::AEq;
-        }
-        NotEq => {
-            debug!("Neq op {} = {} != {}", output, input_lhs, input_rhs);
-            gate_type = AGateType::ANeq;
-        }
-        // BoolOr => {},
-        // BoolAnd => {},
-        // BitOr => {},
-        // BitAnd => {},
-        // BitXor => {},
-        _ => {
-            unreachable!()
-        }
-    };
-
-    ac.add_gate(&output, var_id, lhsvar_id, rhsvar_id, gate_type);
+    ac.add_gate(output, output_id, lhsvar_id, rhsvar_id, gate_type);
 
     (0, false)
 }
