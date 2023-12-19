@@ -10,10 +10,10 @@ use circom_program_structure::ast::Expression;
 use circom_program_structure::program_archive::ProgramArchive;
 
 /// Parses a Circom file, processes its content, and sets up the necessary structures for circuit analysis.
-pub fn parse_circom() -> Result<(), ()> {
-    let user_input = Input::default()?;
-    let mut program_archive = parse_project(&user_input)?;
-    analyse_project(&mut program_archive)?;
+pub fn parse_circom() -> Result<(), &'static str> {
+    let user_input = Input::default();
+    let mut program_archive = parse_project(&user_input).map_err(|_| "Parsing failed")?;
+    analyse_project(&mut program_archive).map_err(|_| "Analysis failed")?;
 
     let mut circuit = traverse_program(&program_archive);
 

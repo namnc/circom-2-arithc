@@ -139,8 +139,6 @@ pub fn execute_expression(
 
             let res = runtime.get_current_context().unwrap().declare_const(val);
             if res.is_ok() {
-                res.unwrap();
-
                 // Setting as id the constant value
                 ac.add_const_var(val, val);
             }

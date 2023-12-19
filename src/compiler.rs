@@ -2,6 +2,9 @@
 //!
 //! This module contains code from the circom compiler repository.
 //! See: <https://github.com/iden3/circom>
+//!
+
+#![allow(clippy::result_unit_err)]
 
 use circom_compiler::compiler_interface;
 use circom_compiler::compiler_interface::{Config, VCP};
@@ -9,7 +12,6 @@ use circom_program_structure::error_definition::Report;
 use circom_program_structure::program_archive::ProgramArchive;
 use circom_type_analysis::check_types::check_types;
 use clap::{App, Arg, ArgMatches};
-use mpz_circuits::BuilderError;
 use std::env::current_dir;
 use std::path::Path;
 use std::path::PathBuf;
@@ -139,14 +141,14 @@ const DAT: &str = "dat";
 const SYM: &str = "sym";
 const JSON: &str = "json";
 
-impl Input {
-    pub fn default() -> Result<Input, ()> {
+impl Default for Input {
+    fn default() -> Self {
         let input_program = PathBuf::from(format!(
             "{}/src/assets/circuit.circom",
             current_dir().unwrap().display()
         ));
 
-        let input = Input {
+        Input {
             input_program,
             out_r1cs: PathBuf::from("./assets/tmp"),
             out_json_constraints: PathBuf::from("./assets/tmp"),
@@ -177,9 +179,11 @@ impl Input {
             flag_verbose: true,
             prime: String::from("bn128"),
             link_libraries: Vec::new(),
-        };
-        Ok(input)
+        }
     }
+}
+
+impl Input {
     pub fn new() -> Result<Input, ()> {
         // use SimplificationStyle;
         let matches = view();
@@ -233,15 +237,15 @@ impl Input {
         })
     }
 
-    fn build_folder(output_path: &PathBuf, filename: &str, ext: &str) -> PathBuf {
-        let mut file = output_path.clone();
+    fn build_folder(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
+        let mut file = output_path.to_path_buf().clone();
         let folder_name = format!("{}_{}", filename, ext);
         file.push(folder_name);
         file
     }
 
-    fn build_output(output_path: &PathBuf, filename: &str, ext: &str) -> PathBuf {
-        let mut file = output_path.clone();
+    fn build_output(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
+        let mut file = output_path.to_path_buf().clone();
         file.push(format!("{}.{}", filename, ext));
         file
     }
@@ -382,7 +386,7 @@ pub fn get_simplification_style(matches: &ArgMatches) -> Result<SimplificationSt
         (_, true, _, _) => Ok(SimplificationStyle::O1),
         (_, _, true, _) => {
             let o_2_argument = matches.value_of("simplification_rounds").unwrap();
-            let rounds_r = usize::from_str_radix(o_2_argument, 10);
+            let rounds_r = o_2_argument.parse::<usize>();
             if let Result::Ok(no_rounds) = rounds_r {
                 if no_rounds == 0 {
                     Ok(SimplificationStyle::O1)
@@ -681,18 +685,4 @@ pub fn analyse_project(program_archive: &mut ProgramArchive) -> Result<(), ()> {
             Ok(())
         }
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ParseError {
-    #[error(transparent)]
-    IOError(#[from] std::io::Error),
-    #[error(transparent)]
-    ParseIntError(#[from] std::num::ParseIntError),
-    #[error("uninitialized feed: {0}")]
-    UninitializedFeed(usize),
-    #[error("unsupported gate type: {0}")]
-    UnsupportedGateType(String),
-    #[error(transparent)]
-    BuilderError(#[from] BuilderError),
 }

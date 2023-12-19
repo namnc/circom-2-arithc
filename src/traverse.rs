@@ -120,7 +120,7 @@ pub fn traverse_expression(
     runtime: &mut Runtime,
     var: &String,
     expression: &Expression,
-    program_archive: &ProgramArchive,
+    _program_archive: &ProgramArchive,
 ) -> String {
     match expression {
         Expression::Number(_, value) => {
@@ -130,7 +130,6 @@ pub fn traverse_expression(
 
             let res = runtime.get_current_context().unwrap().declare_const(val);
             if res.is_ok() {
-                res.unwrap();
                 ac.add_const_var(val, val); // Setting as id the constant value
             }
 
@@ -145,9 +144,9 @@ pub fn traverse_expression(
             debug!("Auto var for lhs {}", varlhs);
             let varrhs = ctx.declare_auto_var().unwrap();
             debug!("Auto var for rhs {}", varrhs);
-            let varlop = traverse_expression(ac, runtime, &varlhs, lhe, program_archive);
+            let varlop = traverse_expression(ac, runtime, &varlhs, lhe, _program_archive);
             debug!("lhs {}", varlop);
-            let varrop = traverse_expression(ac, runtime, &varrhs, rhe, program_archive);
+            let varrop = traverse_expression(ac, runtime, &varrhs, rhe, _program_archive);
             debug!("rhs {}", varlop);
             let (res, ret) = traverse_infix_op(ac, runtime, var, &varlop, &varrop, infix_op);
             if ret {
@@ -167,7 +166,7 @@ pub fn traverse_expression(
                     Access::ArrayAccess(expr) => {
                         debug!("Array access found");
                         let dim_u32_str =
-                            traverse_expression(ac, runtime, var, expr, program_archive);
+                            traverse_expression(ac, runtime, var, expr, _program_archive);
                         name_access.push('_');
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Changed var name to {}", name_access);
@@ -252,7 +251,7 @@ pub fn traverse_component_declaration(
     _ac: &mut ArithmeticCircuit,
     _runtime: &mut Runtime,
     _comp_name: &str,
-    _dim_u32_vec: &Vec<u32>,
+    _dim_u32_vec: &[u32],
 ) {
     todo!()
 }
@@ -283,9 +282,7 @@ pub fn traverse_variable_declaration(
     } else {
         let dim_u32 = *dim_u32_vec.last().unwrap();
         for i in 0..dim_u32 {
-            let (name, id) = ctx
-                .declare_signal_array(var_name, vec![i])
-                .unwrap();
+            let (name, id) = ctx.declare_signal_array(var_name, vec![i]).unwrap();
             ac.add_var(id, &name);
         }
     }

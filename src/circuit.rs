@@ -2,9 +2,8 @@
 //!
 //! This module defines structures and operations for arithmetic circuits, including variables, gates, and circuit composition.
 
-use crate::compiler::ParseError;
 use circom_program_structure::ast::ExpressionInfixOpcode;
-use mpz_circuits::GateType;
+use mpz_circuits::{BuilderError, GateType};
 use regex::Captures;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -351,4 +350,18 @@ impl UncheckedGate {
             gate_type,
         })
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+    #[error(transparent)]
+    IOError(#[from] std::io::Error),
+    #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
+    #[error("uninitialized feed: {0}")]
+    UninitializedFeed(usize),
+    #[error("unsupported gate type: {0}")]
+    UnsupportedGateType(String),
+    #[error(transparent)]
+    BuilderError(#[from] BuilderError),
 }
