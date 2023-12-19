@@ -126,6 +126,12 @@ pub struct ArithmeticCircuit {
     pub gates: HashMap<u32, ArithmeticNode>,
 }
 
+impl Default for ArithmeticCircuit {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArithmeticCircuit {
     pub fn new() -> ArithmeticCircuit {
         ArithmeticCircuit {
@@ -207,7 +213,7 @@ impl ArithmeticCircuit {
             node.input_lhs_id,
             var_lhs.is_const,
             var_lhs.const_value,
-            node.gate_type.to_string(),
+            node.gate_type,
             node.input_rhs_id,
             var_rhs.is_const,
             var_rhs.const_value
@@ -286,7 +292,7 @@ impl ArithmeticCircuit {
                 node.input_lhs_id,
                 var_lhs.is_const,
                 var_lhs.const_value,
-                node.gate_type.to_string(),
+                node.gate_type,
                 node.input_rhs_id,
                 var_rhs.is_const,
                 var_rhs.const_value

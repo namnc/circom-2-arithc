@@ -77,7 +77,7 @@ pub fn traverse_statement(
         Statement::While { cond, stmt, .. } => loop {
             let var = String::from("while");
             let (res, rb) = execute_expression(ac, runtime, &var, cond, program_archive);
-            if res.contains("0") {
+            if res.contains('0') {
                 break;
             }
             debug!("While res = {} {}", res, rb);
@@ -94,7 +94,7 @@ pub fn traverse_statement(
                         debug!("Sub Array access found");
                         let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
-                        name_access.push_str("_");
+                        name_access.push('_');
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Sub Change var name to {}", name_access);
                     }
@@ -168,7 +168,7 @@ pub fn traverse_expression(
                         debug!("Array access found");
                         let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
-                        name_access.push_str("_");
+                        name_access.push('_');
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Changed var name to {}", name_access);
                     }
@@ -184,7 +184,7 @@ pub fn traverse_expression(
                 // We're assuming data item is not an array
                 if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
                     // TODO: Check if this is a constant
-                    let cloned_val = val.clone();
+                    let cloned_val = *val;
                     debug!("Return var value {} = {}", name_access, cloned_val);
                     ctx.declare_const(cloned_val).unwrap();
                     ac.add_const_var(cloned_val, cloned_val);
@@ -284,7 +284,7 @@ pub fn traverse_variable_declaration(
         let dim_u32 = *dim_u32_vec.last().unwrap();
         for i in 0..dim_u32 {
             let (name, id) = ctx
-                .declare_signal_array(&var_name.to_string(), vec![i])
+                .declare_signal_array(var_name, vec![i])
                 .unwrap();
             ac.add_var(id, &name);
         }

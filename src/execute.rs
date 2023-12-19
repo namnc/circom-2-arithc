@@ -66,7 +66,7 @@ pub fn execute_statement(
             let (res, rb) = execute_expression(ac, runtime, &var, cond, program_archive);
             debug!("res = {} {}", res, rb);
             execute_statement(ac, runtime, stmt, program_archive);
-            if res.contains("0") {
+            if res.contains('0') {
                 break;
             }
         },
@@ -81,7 +81,7 @@ pub fn execute_statement(
                         debug!("Array access found");
                         let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
-                        name_access.push_str("_");
+                        name_access.push('_');
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Change var name to {}", name_access);
                     }
@@ -177,7 +177,7 @@ pub fn execute_expression(
                         debug!("Array access found");
                         let dim_u32_str =
                             traverse_expression(ac, runtime, var, expr, program_archive);
-                        name_access.push_str("_");
+                        name_access.push('_');
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Changed var name to {}", name_access);
                     }
