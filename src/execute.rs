@@ -31,7 +31,6 @@ pub fn execute_statement(
             }
         }
         Statement::Declaration {
-            meta,
             xtype,
             name,
             dimensions,
@@ -72,12 +71,7 @@ pub fn execute_statement(
             }
         },
         Statement::Substitution {
-            meta,
-            var,
-            access,
-            op,
-            rhe,
-            ..
+            var, access, rhe, ..
         } => {
             let mut name_access = String::from(var);
             debug!("Variable found {}", var.to_string());
@@ -91,8 +85,8 @@ pub fn execute_statement(
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Change var name to {}", name_access);
                     }
-                    Access::ComponentAccess(name) => {
-                        debug!("Component access not handled");
+                    Access::ComponentAccess(_) => {
+                        todo!("Component access not handled");
                     }
                 }
             }
@@ -137,7 +131,6 @@ pub fn execute_expression(
     expr: &Expression,
     program_archive: &ProgramArchive,
 ) -> (String, bool) {
-    use Expression::*;
     match expr {
         Expression::Number(_, value) => {
             // Declaring a constant.
@@ -155,10 +148,7 @@ pub fn execute_expression(
             (val.to_string(), true)
         }
         Expression::InfixOp {
-            meta,
-            lhe,
-            infix_op,
-            rhe,
+            lhe, infix_op, rhe, ..
         } => {
             let ctx = runtime.get_current_context().unwrap();
             //TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
@@ -174,16 +164,11 @@ pub fn execute_expression(
             debug!("infix out res {}", res);
             (res.to_string(), rb)
         }
-        Expression::PrefixOp {
-            meta,
-            prefix_op,
-            rhe,
-        } => {
+        Expression::PrefixOp { .. } => {
             debug!("Prefix found ");
             (var.to_string(), false)
         }
-        Expression::ParallelOp { meta, rhe } => todo!(),
-        Expression::Variable { meta, name, access } => {
+        Expression::Variable { name, access, .. } => {
             let mut name_access = String::from(name);
             debug!("Variable found {}", name.to_string());
             for a in access.iter() {
@@ -196,27 +181,23 @@ pub fn execute_expression(
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Changed var name to {}", name_access);
                     }
-                    Access::ComponentAccess(name) => {
-                        debug!("Component access found");
+                    Access::ComponentAccess(_) => {
+                        todo!("Component access found");
                     }
                 }
             }
             (name_access.to_string(), false)
         }
-        Expression::Call { meta, id, args } => {
+        Expression::Call { id, .. } => {
             debug!("Call found {}", id.to_string());
             // find the template and execute it
             (id.to_string(), false)
         }
-        ArrayInLine { meta, values } => {
+        Expression::ArrayInLine { .. } => {
             debug!("ArrayInLine found");
             (var.to_string(), false)
         }
-        UniformArray {
-            meta,
-            value,
-            dimension,
-        } => {
+        Expression::UniformArray { .. } => {
             debug!("UniformArray found");
             (var.to_string(), false)
         }
@@ -226,7 +207,7 @@ pub fn execute_expression(
 
 /// Executes an infix operation, performing the specified arithmetic or logical computation.
 pub fn execute_infix_op(
-    ac: &mut ArithmeticCircuit,
+    _ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     output: &str,
     input_lhs: &str,

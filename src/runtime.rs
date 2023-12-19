@@ -92,6 +92,7 @@ impl Runtime {
 #[derive(Clone)]
 pub struct Context {
     id: u32,
+    #[allow(dead_code)]
     caller_id: u32,
     values: HashMap<String, DataItem>, // Name -> Value
 }

@@ -20,7 +20,7 @@ pub fn traverse_sequence_of_statements(
     runtime: &mut Runtime,
     stmts: &[Statement],
     program_archive: &ProgramArchive,
-    is_complete_template: bool,
+    _is_complete_template: bool,
 ) {
     for stmt in stmts.iter() {
         traverse_statement(ac, runtime, stmt, program_archive);
@@ -44,7 +44,6 @@ pub fn traverse_statement(
             }
         }
         Statement::Declaration {
-            meta,
             xtype,
             name,
             dimensions,
@@ -85,12 +84,7 @@ pub fn traverse_statement(
             traverse_statement(ac, runtime, stmt, program_archive);
         },
         Statement::Substitution {
-            meta,
-            var,
-            access,
-            op,
-            rhe,
-            ..
+            var, access, rhe, ..
         } => {
             let mut name_access = String::from(var);
             debug!("Sub Variable found {}", var.to_string());
@@ -104,8 +98,8 @@ pub fn traverse_statement(
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Sub Change var name to {}", name_access);
                     }
-                    Access::ComponentAccess(name) => {
-                        debug!("Sub Component access not handled");
+                    Access::ComponentAccess(_) => {
+                        todo!("Sub Component access not handled");
                     }
                 }
             }
@@ -143,10 +137,7 @@ pub fn traverse_expression(
             val.to_string()
         }
         Expression::InfixOp {
-            meta,
-            lhe,
-            infix_op,
-            rhe,
+            lhe, infix_op, rhe, ..
         } => {
             let ctx = runtime.get_current_context().unwrap();
             //TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
@@ -164,22 +155,11 @@ pub fn traverse_expression(
             }
             var.to_string()
         }
-        Expression::PrefixOp {
-            meta,
-            prefix_op,
-            rhe,
-        } => {
+        Expression::PrefixOp { .. } => {
             debug!("Prefix found");
             var.to_string()
         }
-        Expression::InlineSwitchOp {
-            meta,
-            cond,
-            if_true,
-            if_false,
-        } => todo!(),
-        Expression::ParallelOp { meta, rhe } => todo!(),
-        Expression::Variable { meta, name, access } => {
+        Expression::Variable { name, access, .. } => {
             let mut name_access = String::from(name);
             debug!("Variable found {}", name.to_string());
             for a in access.iter() {
@@ -192,8 +172,9 @@ pub fn traverse_expression(
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Changed var name to {}", name_access);
                     }
-                    Access::ComponentAccess(name) => {
+                    Access::ComponentAccess(_) => {
                         debug!("Component access found");
+                        todo!()
                     }
                 }
             }
@@ -212,32 +193,20 @@ pub fn traverse_expression(
             }
             name_access.to_string()
         }
-        Expression::Call { meta, id, args } => {
+        Expression::Call { id, .. } => {
             debug!("Call found {}", id.to_string());
             // TODO: Find the template and execute it
             id.to_string()
         }
-        Expression::AnonymousComp {
-            meta,
-            id,
-            is_parallel,
-            params,
-            signals,
-            names,
-        } => todo!(),
-        Expression::ArrayInLine { meta, values } => {
+        Expression::ArrayInLine { .. } => {
             debug!("ArrayInLine found");
             var.to_string()
         }
-        Expression::Tuple { meta, values } => todo!(),
-        Expression::UniformArray {
-            meta,
-            value,
-            dimension,
-        } => {
+        Expression::UniformArray { .. } => {
             debug!("UniformArray found");
             var.to_string()
         }
+        _ => unimplemented!("Expression not implemented"),
     }
 }
 
@@ -280,10 +249,10 @@ pub fn traverse_infix_op(
 
 /// Processes the declaration of a component.
 pub fn traverse_component_declaration(
-    ac: &mut ArithmeticCircuit,
-    runtime: &mut Runtime,
-    comp_name: &str,
-    dim_u32_vec: &Vec<u32>,
+    _ac: &mut ArithmeticCircuit,
+    _runtime: &mut Runtime,
+    _comp_name: &str,
+    _dim_u32_vec: &Vec<u32>,
 ) {
     todo!()
 }
@@ -293,7 +262,7 @@ pub fn traverse_signal_declaration(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     signal_name: &str,
-    signal_type: SignalType,
+    _signal_type: SignalType,
     dim_u32_vec: &Vec<u32>,
 ) {
     traverse_variable_declaration(ac, runtime, signal_name, dim_u32_vec);

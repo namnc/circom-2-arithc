@@ -5,7 +5,6 @@
 
 use circom_compiler::compiler_interface;
 use circom_compiler::compiler_interface::{Config, VCP};
-use circom_constraint_writers::debug_writer::DebugWriter;
 use circom_program_structure::error_definition::Report;
 use circom_program_structure::program_archive::ProgramArchive;
 use circom_type_analysis::check_types::check_types;
@@ -43,7 +42,7 @@ pub fn compile(config: CompilerConfig) -> Result<(), ()> {
     // config.wasm_flag = false;
     // config.wat_flag = false;
 
-    let circuit = compiler_interface::run_compiler(
+    compiler_interface::run_compiler(
         config.vcp,
         Config {
             debug_output: config.debug_output,
@@ -52,37 +51,6 @@ pub fn compile(config: CompilerConfig) -> Result<(), ()> {
         },
         VERSION,
     )?;
-
-    // Sample code for calling writer
-
-    // if config.c_flag {
-    //     compiler_interface::write_c(
-    //         &circuit,
-    //         &config.c_folder,
-    //         &config.c_run_name,
-    //         &config.c_file,
-    //         &config.dat_file,
-    //     )?;
-    //     println!(
-    //         "{} {} and {}",
-    //         Colour::Green.paint("Written successfully:"),
-    //         config.c_file,
-    //         config.dat_file
-    //     );
-    //     println!(
-    //         "{} {}/{}, {}, {}, {}, {}, {}, {} and {}",
-    //         Colour::Green.paint("Written successfully:"),
-    //         &config.c_folder,
-    //         "main.cpp".to_string(),
-    //         "circom.hpp".to_string(),
-    //         "calcwit.hpp".to_string(),
-    //         "calcwit.cpp".to_string(),
-    //         "fr.hpp".to_string(),
-    //         "fr.cpp".to_string(),
-    //         "fr.asm".to_string(),
-    //         "Makefile".to_string()
-    //     );
-    // }
 
     Ok(())
 }
@@ -110,7 +78,7 @@ pub fn execute_project(
     config: ExecutionConfig,
 ) -> Result<VCP, ()> {
     use circom_constraint_generation::{build_circuit, BuildConfig};
-    let debug = DebugWriter::new(config.json_constraints).unwrap();
+
     let build_config = BuildConfig {
         no_rounds: config.no_rounds,
         flag_json_sub: config.json_substitution_flag,
@@ -122,74 +90,11 @@ pub fn execute_project(
         flag_old_heuristics: config.flag_old_heuristics,
         prime: config.prime,
     };
-    let custom_gates = program_archive.custom_gates;
-    let (exporter, vcp) = build_circuit(program_archive, build_config)?;
 
-    // Sample code for generate constraints but we don't need it now
-    // Maybe later for generate for Garbler and Evaluator
-
-    // if config.r1cs_flag {
-    //     generate_output_r1cs(&config.r1cs, exporter.as_ref(), custom_gates)?;
-    // }
-    // if config.sym_flag {
-    //     generate_output_sym(&config.sym, exporter.as_ref())?;
-    // }
-    // if config.json_constraint_flag {
-    //     generate_json_constraints(&debug, exporter.as_ref())?;
-    // }
+    let (_, vcp) = build_circuit(program_archive, build_config)?;
 
     Result::Ok(vcp)
 }
-
-// fn generate_output_r1cs(
-//     file: &str,
-//     exporter: &dyn ConstraintExporter,
-//     custom_gates: bool,
-// ) -> Result<(), ()> {
-//     if let Result::Ok(()) = exporter.r1cs(file, custom_gates) {
-//         println!("{} {}", Colour::Green.paint("Written successfully:"), file);
-//         Result::Ok(())
-//     } else {
-//         eprintln!(
-//             "{}",
-//             Colour::Red.paint("Could not write the output in the given path")
-//         );
-//         Result::Err(())
-//     }
-// }
-
-// fn generate_output_sym(file: &str, exporter: &dyn ConstraintExporter) -> Result<(), ()> {
-//     if let Result::Ok(()) = exporter.sym(file) {
-//         println!("{} {}", Colour::Green.paint("Written successfully:"), file);
-//         Result::Ok(())
-//     } else {
-//         eprintln!(
-//             "{}",
-//             Colour::Red.paint("Could not write the output in the given path")
-//         );
-//         Result::Err(())
-//     }
-// }
-
-// fn generate_json_constraints(
-//     debug: &DebugWriter,
-//     exporter: &dyn ConstraintExporter,
-// ) -> Result<(), ()> {
-//     if let Ok(()) = exporter.json_constraints(&debug) {
-//         println!(
-//             "{} {}",
-//             Colour::Green.paint("Constraints written in:"),
-//             debug.json_constraints
-//         );
-//         Result::Ok(())
-//     } else {
-//         eprintln!(
-//             "{}",
-//             Colour::Red.paint("Could not write the output in the given path")
-//         );
-//         Result::Err(())
-//     }
-// }
 
 pub struct Input {
     pub input_program: PathBuf,

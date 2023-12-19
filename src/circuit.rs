@@ -311,6 +311,7 @@ impl ArithmeticCircuit {
     }
 }
 
+#[allow(dead_code)]
 /// Represents a gate in its raw, unchecked form, used during parsing.
 struct UncheckedGate {
     xref: usize,
@@ -320,7 +321,8 @@ struct UncheckedGate {
 }
 
 impl UncheckedGate {
-    fn parse(captures: Captures) -> Result<Self, ParseError> {
+    #[allow(dead_code)]
+    pub fn parse(captures: Captures) -> Result<Self, ParseError> {
         let xref: usize = captures.name("xref").unwrap().as_str().parse()?;
         let yref: Option<usize> = captures
             .name("yref")
