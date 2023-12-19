@@ -430,10 +430,11 @@ pub fn traverse_infix_op(
     let lhsvar_res = ctx.get_data_item(input_lhs);
     let rhsvar_res = ctx.get_data_item(input_rhs);
 
+    // TODO: HERE IS WHERE INFIX OP CREATE GATES BUT BECAUSE WE CAN GET VALUES FROM lhs and rhs IT WILL EXECUTE INSTEAD
     // Skip traversal if can execute
-    if lhsvar_res.is_ok() && rhsvar_res.is_ok() {
-        return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
-    }
+    // if lhsvar_res.is_ok() && rhsvar_res.is_ok() {
+    //     return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
+    // }
 
     // Unreachable code
 
