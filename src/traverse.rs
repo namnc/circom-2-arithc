@@ -25,9 +25,7 @@ pub fn traverse_sequence_of_statements(
     for stmt in stmts.iter() {
         traverse_statement(ac, runtime, stmt, program_archive);
     }
-    if is_complete_template {
-        //execute_delayed_declarations(program_archive, runtime, actual_node, flags)?;
-    }
+    // TODO: handle complete template
 }
 
 /// Analyzes a single statement, delegating to specialized functions based on the statement's nature.
@@ -37,22 +35,15 @@ pub fn traverse_statement(
     stmt: &Statement,
     program_archive: &ProgramArchive,
 ) {
-    use Statement::*;
-    let id = stmt.get_meta().elem_id;
-
-    // Analysis::reached(&mut runtime.analysis, id);
-
-    // let mut can_be_simplified = true;
-
     match stmt {
-        InitializationBlock {
+        Statement::InitializationBlock {
             initializations, ..
         } => {
-            for istmt in initializations.iter() {
-                traverse_statement(ac, runtime, istmt, program_archive);
+            for statement in initializations {
+                traverse_statement(ac, runtime, statement, program_archive);
             }
         }
-        Declaration {
+        Statement::Declaration {
             meta,
             xtype,
             name,
@@ -60,125 +51,31 @@ pub fn traverse_statement(
             ..
         } => {
             debug!("Declaration of {}", name);
+
+            // Process index in case of array
+            let dim_u32_vec: Vec<u32> = dimensions
+                .iter()
+                .map(|dimension| {
+                    let dim_u32_str =
+                        traverse_expression(ac, runtime, name, dimension, program_archive);
+                    dim_u32_str
+                        .parse::<u32>()
+                        .expect("Failed to parse dimension")
+                })
+                .collect();
+
             match xtype {
-                // VariableType::AnonymousComponent => {
-                //     execute_anonymous_component_declaration(
-                //         name,
-                //         meta.clone(),
-                //         &dimensions,
-                //         &mut runtime.environment,
-                //         &mut runtime.anonymous_components,
-                //     );
-                // }
-                _ => {
-                    let mut dim_u32_vec = Vec::new();
-                    for dimension in dimensions.iter() {
-                        let dim_u32_str =
-                            traverse_expression(ac, runtime, name, dimension, program_archive);
-                        dim_u32_vec.push(dim_u32_str.parse::<u32>().unwrap());
-                    }
-                    // treat_result_with_memory_error_void(
-                    //     valid_array_declaration(&arithmetic_values),
-                    //     meta,
-                    //     &mut runtime.runtime_errors,
-                    //     &runtime.call_trace,
-                    // )?;
-                    // let usable_dimensions =
-                    //     if let Option::Some(dimensions) = cast_indexing(&arithmetic_values) {
-                    //         dimensions
-                    //     } else {
-                    //         let err = Result::Err(ExecutionError::ArraySizeTooBig);
-                    //         treat_result_with_execution_error(
-                    //             err,
-                    //             meta,
-                    //             &mut runtime.runtime_errors,
-                    //             &runtime.call_trace,
-                    //         )?
-                    //     };
-                    match xtype {
-                        VariableType::Component => traverse_component_declaration(
-                            ac,
-                            runtime,
-                            name,
-                            &dim_u32_vec, // &usable_dimensions
-                                          // &mut runtime.environment,
-                                          // actual_node
-                        ),
-                        VariableType::Var => traverse_variable_declaration(
-                            ac,
-                            runtime,
-                            name,
-                            &dim_u32_vec, // &usable_dimensions
-                        ),
-                        VariableType::Signal(signal_type, tag_list) => traverse_signal_declaration(
-                            ac,
-                            runtime,
-                            name,
-                            *signal_type,
-                            &dim_u32_vec, // &usable_dimensions
-                        ),
-                        _ => {
-                            unreachable!()
-                        }
-                    }
+                VariableType::Component => {
+                    traverse_component_declaration(ac, runtime, name, &dim_u32_vec)
                 }
+                VariableType::Var => traverse_variable_declaration(ac, runtime, name, &dim_u32_vec),
+                VariableType::Signal(signal_type, _tag_list) => {
+                    traverse_signal_declaration(ac, runtime, name, *signal_type, &dim_u32_vec)
+                }
+                VariableType::AnonymousComponent => unimplemented!(),
             }
-            // Option::None
         }
-        IfThenElse {
-            cond,
-            if_case,
-            else_case,
-            ..
-        } => {
-            // let var = String::from("IFTHENELSE");
-            // ac.add_var(&var, SignalType::Intermediate);
-            // let lhs = traverse_expression(ac, &var, cond, program_archive);
-            // traverse_statement(ac, &if_case, program_archive);
-            // let else_case = else_case.as_ref().map(|e| e.as_ref());
-            // traverse_statement(ac, else_case.unwrap(), program_archive);
-            //     let else_case = else_case.as_ref().map(|e| e.as_ref());
-            //     let (possible_return, can_simplify, _) = execute_conditional_statement(
-            //         cond,
-            //         if_case,
-            //         else_case,
-            //         program_archive,
-            //         runtime,
-            //         actual_node,
-            //         flags
-            //     )?;
-            //     can_be_simplified = can_simplify;
-            //     possible_return
-            // }
-            // While { cond, stmt, .. } => loop {
-            //     let (returned, can_simplify, condition_result) = execute_conditional_statement(
-            //         cond,
-            //         stmt,
-            //         Option::None,
-            //         program_archive,
-            //         runtime,
-            //         actual_node,
-            //         flags
-            //     )?;
-            //     can_be_simplified &= can_simplify;
-            //     if returned.is_some() {
-            //         break returned;
-            //     } else if condition_result.is_none() {
-            //         let (returned, _, _) = execute_conditional_statement(
-            //             cond,
-            //             stmt,
-            //             None,
-            //             program_archive,
-            //             runtime,
-            //             actual_node,
-            //             flags
-            //         )?;
-            //         break returned;
-            //     } else if !condition_result.unwrap() {
-            //         break returned;
-            //     }
-        }
-        While { cond, stmt, .. } => loop {
+        Statement::While { cond, stmt, .. } => loop {
             let var = String::from("while");
             let (res, rb) = execute_expression(ac, runtime, &var, cond, program_archive);
             if res.contains("0") {
@@ -186,69 +83,8 @@ pub fn traverse_statement(
             }
             debug!("While res = {} {}", res, rb);
             traverse_statement(ac, runtime, stmt, program_archive);
-            // traverse_expression(ac, runtime, var, cond, program_archive);
-            // let var = String::from("while");
-            // ac.add_var(&var, SignalType::Intermediate);
-            // let lhs = traverse_expression(ac, runtime, &var, cond, program_archive);
-            // debug!("While cond {}", lhs);
-            // traverse_statement(ac, stmt, program_archive);
         },
-        ConstraintEquality { meta, lhe, rhe, .. } => {
-            // debug_assert!(actual_node.is_some());
-            // let f_left = execute_expression(lhe, program_archive, runtime, flags)?;
-            // let f_right = execute_expression(rhe, program_archive, runtime, flags)?;
-            // let arith_left = safe_unwrap_to_arithmetic_slice(f_left, line!());
-            // let arith_right = safe_unwrap_to_arithmetic_slice(f_right, line!());
-
-            // let correct_dims_result = AExpressionSlice::check_correct_dims(&arith_left, &Vec::new(), &arith_right, true);
-            // treat_result_with_memory_error_void(
-            //     correct_dims_result,
-            //     meta,
-            //     &mut runtime.runtime_errors,
-            //     &runtime.call_trace,
-            // )?;
-            // for i in 0..AExpressionSlice::get_number_of_cells(&arith_left){
-            //     let value_left = treat_result_with_memory_error(
-            //         AExpressionSlice::access_value_by_index(&arith_left, i),
-            //         meta,
-            //         &mut runtime.runtime_errors,
-            //         &runtime.call_trace,
-            //     )?;
-            //     let value_right = treat_result_with_memory_error(
-            //         AExpressionSlice::access_value_by_index(&arith_right, i),
-            //         meta,
-            //         &mut runtime.runtime_errors,
-            //         &runtime.call_trace,
-            //     )?;
-            //     let possible_non_quadratic =
-            //         AExpr::sub(
-            //             &value_left,
-            //             &value_right,
-            //             &runtime.constants.get_p()
-            //         );
-            //     if possible_non_quadratic.is_nonquadratic() {
-            //         treat_result_with_execution_error(
-            //             Result::Err(ExecutionError::NonQuadraticConstraint),
-            //             meta,
-            //             &mut runtime.runtime_errors,
-            //             &runtime.call_trace,
-            //         )?;
-            //     }
-            //     let quadratic_expression = possible_non_quadratic;
-            //     let constraint_expression = AExpr::transform_expression_to_constraint_form(
-            //         quadratic_expression,
-            //         runtime.constants.get_p(),
-            //     )
-            //     .unwrap();
-            //     if let Option::Some(node) = actual_node {
-            //         node.add_constraint(constraint_expression);
-            //     }
-            // }
-            // Option::None
-        }
-        Return { value, .. } => {}
-        Assert { arg, meta, .. } => {}
-        Substitution {
+        Statement::Substitution {
             meta,
             var,
             access,
@@ -277,16 +113,10 @@ pub fn traverse_statement(
             debug!("Sub Assigning {} to {}", rhs, &name_access);
             execute_statement(ac, runtime, stmt, program_archive);
         }
-        Block { stmts, .. } => {
+        Statement::Block { stmts, .. } => {
             traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true);
         }
-        LogCall { args, .. } => {}
-        UnderscoreSubstitution { meta, rhe, op } => {
-            debug!("UnderscoreSubstitution found");
-        }
-        _ => {
-            unimplemented!()
-        }
+        _ => unimplemented!("Statement not implemented"),
     }
 }
 
@@ -295,13 +125,11 @@ pub fn traverse_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     var: &String,
-    expr: &Expression,
+    expression: &Expression,
     program_archive: &ProgramArchive,
 ) -> String {
-    use Expression::*;
-    // let mut can_be_simplified = true;
-    match expr {
-        Number(_, value) => {
+    match expression {
+        Expression::Number(_, value) => {
             // Declaring a constant.
             let val = value.to_u32().unwrap();
             debug!("Number value {}", val);
@@ -314,12 +142,11 @@ pub fn traverse_expression(
 
             val.to_string()
         }
-        InfixOp {
+        Expression::InfixOp {
             meta,
             lhe,
             infix_op,
             rhe,
-            ..
         } => {
             let ctx = runtime.get_current_context().unwrap();
             //TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
@@ -337,7 +164,7 @@ pub fn traverse_expression(
             }
             var.to_string()
         }
-        PrefixOp {
+        Expression::PrefixOp {
             meta,
             prefix_op,
             rhe,
@@ -345,14 +172,14 @@ pub fn traverse_expression(
             debug!("Prefix found");
             var.to_string()
         }
-        InlineSwitchOp {
+        Expression::InlineSwitchOp {
             meta,
             cond,
             if_true,
             if_false,
         } => todo!(),
-        ParallelOp { meta, rhe } => todo!(),
-        Variable { meta, name, access } => {
+        Expression::ParallelOp { meta, rhe } => todo!(),
+        Expression::Variable { meta, name, access } => {
             let mut name_access = String::from(name);
             debug!("Variable found {}", name.to_string());
             for a in access.iter() {
@@ -385,12 +212,12 @@ pub fn traverse_expression(
             }
             name_access.to_string()
         }
-        Call { meta, id, args } => {
+        Expression::Call { meta, id, args } => {
             debug!("Call found {}", id.to_string());
-            // find the template and execute it
+            // TODO: Find the template and execute it
             id.to_string()
         }
-        AnonymousComp {
+        Expression::AnonymousComp {
             meta,
             id,
             is_parallel,
@@ -398,12 +225,12 @@ pub fn traverse_expression(
             signals,
             names,
         } => todo!(),
-        ArrayInLine { meta, values } => {
+        Expression::ArrayInLine { meta, values } => {
             debug!("ArrayInLine found");
             var.to_string()
         }
-        Tuple { meta, values } => todo!(),
-        UniformArray {
+        Expression::Tuple { meta, values } => todo!(),
+        Expression::UniformArray {
             meta,
             value,
             dimension,
@@ -458,9 +285,7 @@ pub fn traverse_component_declaration(
     comp_name: &str,
     dim_u32_vec: &Vec<u32>,
 ) {
-    // let var_id = runtime.assign_var_to_current_context(&var_name.to_string());
-    // ac.add_var(var_id, comp_name.to_string().as_str());
-    debug!("Found component {}", comp_name);
+    todo!()
 }
 
 /// Processes a signal declaration, integrating it into the circuit's variable management system.
@@ -487,17 +312,6 @@ pub fn traverse_variable_declaration(
         let signal_id = ctx.declare_signal(var_name).unwrap();
         ac.add_var(signal_id, var_name.to_string().as_str());
     } else {
-        // let mut all_accesses = Vec::new();
-        // for u32s in dim_u32_vec.iter() {
-        //     let mut accesses = Vec::new();
-        //     for i in 0..*u32s {
-        //         accesses.push(i);
-        //     }
-        //     all_accesses.push(accesses);
-        // }
-        // for accesses in all_accesses.iter() {
-
-        // }
         let dim_u32 = *dim_u32_vec.last().unwrap();
         for i in 0..dim_u32 {
             let (name, id) = ctx
