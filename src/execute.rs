@@ -3,7 +3,7 @@
 //! This module provides functionality to handle variables execution (not signals).
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::runtime::{DataContent, Runtime};
+use crate::runtime::{DataContent, DataType, Runtime};
 use crate::traverse::{
     traverse_component_declaration, traverse_expression, traverse_sequence_of_statements,
     traverse_signal_declaration, traverse_variable_declaration,
@@ -266,7 +266,7 @@ pub fn execute_statement(
             if rhsb {
                 debug!("Assigning {} to {}", rhs, &name_access);
                 // TODO: revisit this
-                // Check if the signal already has this value assigned. If it doesn't, assign it.
+                // Check if the var already has this value assigned. If it doesn't, assign it.
                 let ctx = runtime.get_current_context().unwrap();
                 let res = ctx.get_data_item(&name_access);
                 let expected: u32 = rhs.parse().unwrap();
@@ -278,6 +278,8 @@ pub fn execute_statement(
                         ctx.clear_data_item(&name_access).unwrap();
                     }
                 } else {
+                    ctx.declare_data_item(&name_access, DataType::Variable)
+                        .unwrap();
                     ctx.set_data_item(&name_access, DataContent::Scalar(expected))
                         .unwrap();
                 }
@@ -337,7 +339,7 @@ pub fn execute_expression(
             debug!("lhs {} {}", varlop, lhsb);
             let (varrop, rhsb) = execute_expression(ac, runtime, &varrhs, rhe, program_archive);
             debug!("rhs {} {}", varrop, rhsb);
-            let (res, rb) = execute_infix_op(ac, runtime, var, &varlop, &varrop, *infix_op);
+            let (res, rb) = execute_infix_op(ac, runtime, var, &varlop, &varrop, infix_op);
             debug!("infix out res {}", res);
             (res.to_string(), rb)
         }
@@ -412,7 +414,7 @@ pub fn execute_infix_op(
     output: &str,
     input_lhs: &str,
     input_rhs: &str,
-    infixop: ExpressionInfixOpcode,
+    infixop: &ExpressionInfixOpcode,
 ) -> (u32, bool) {
     debug!("Executing infix op");
     let ctx = runtime.get_current_context().unwrap();

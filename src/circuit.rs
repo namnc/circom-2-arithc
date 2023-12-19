@@ -46,8 +46,8 @@ impl Display for AGateType {
     }
 }
 
-impl From<ExpressionInfixOpcode> for AGateType {
-    fn from(opcode: ExpressionInfixOpcode) -> Self {
+impl From<&ExpressionInfixOpcode> for AGateType {
+    fn from(opcode: &ExpressionInfixOpcode) -> Self {
         match opcode {
             ExpressionInfixOpcode::Add => AGateType::AAdd,
             ExpressionInfixOpcode::Div => AGateType::ADiv,

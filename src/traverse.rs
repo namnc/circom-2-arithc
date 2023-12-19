@@ -5,7 +5,7 @@
 //! It's main purpose is to traverse signals.
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::execute::{execute_expression, execute_infix_op, execute_statement};
+use crate::execute::{execute_expression, execute_statement};
 use crate::runtime::{DataContent, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
@@ -331,7 +331,7 @@ pub fn traverse_expression(
             debug!("lhs {}", varlop);
             let varrop = traverse_expression(ac, runtime, &varrhs, rhe, program_archive);
             debug!("rhs {}", varlop);
-            let (res, ret) = traverse_infix_op(ac, runtime, var, &varlop, &varrop, *infix_op);
+            let (res, ret) = traverse_infix_op(ac, runtime, var, &varlop, &varrop, infix_op);
             if ret {
                 return res.to_string();
             }
@@ -342,7 +342,7 @@ pub fn traverse_expression(
             prefix_op,
             rhe,
         } => {
-            debug!("Prefix found ");
+            debug!("Prefix found");
             var.to_string()
         }
         InlineSwitchOp {
@@ -421,7 +421,7 @@ pub fn traverse_infix_op(
     output: &str,
     input_lhs: &str,
     input_rhs: &str,
-    infixop: ExpressionInfixOpcode,
+    infixop: &ExpressionInfixOpcode,
 ) -> (u32, bool) {
     debug!("Traversing infix op");
     let ctx = runtime.get_current_context().unwrap();
@@ -435,9 +435,6 @@ pub fn traverse_infix_op(
     // if lhsvar_res.is_ok() && rhsvar_res.is_ok() {
     //     return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
     // }
-
-    // Unreachable code
-
     // debug!("Can't get variables: lhs={}, rhs={}", input_lhs, input_rhs);
     // let _ = ctx.clear_data_item(output).unwrap();
 
