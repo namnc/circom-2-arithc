@@ -55,7 +55,7 @@ pub fn traverse_statement(
             let dim_u32_vec: Vec<u32> = dimensions
                 .iter()
                 .map(|dimension| {
-                    let (dim_u32_str, dim_u32_bool) =
+                    let (dim_u32_str, _) =
                         execute_expression(ac, runtime, name, dimension, program_archive);
                     dim_u32_str
                         .parse::<u32>()
@@ -90,16 +90,16 @@ pub fn traverse_statement(
             ..
         } => {
             let var = String::from("IFTHENELSE");
-            let (res, resb) = execute_expression(ac, runtime, &var, cond, program_archive);
+            let (res, _) = execute_expression(ac, runtime, &var, cond, program_archive);
             let else_case = else_case.as_ref().map(|e| e.as_ref());
-            if res.contains("0") {
+            if res.contains('0') {
                 if let Option::Some(else_stmt) = else_case {
                     traverse_statement(ac, runtime, else_stmt, program_archive);
                 }
             } else {
                 traverse_statement(ac, runtime, if_case, program_archive)
             }
-        },
+        }
         Statement::Substitution {
             var, access, rhe, ..
         } => {
@@ -209,31 +209,31 @@ pub fn traverse_expression(
             }
             name_access.to_string()
         }
-        Expression::Call { meta, id, args } => {
-            println!("Call found {}", id.to_string());
+        Expression::Call { id, args, .. } => {
+            println!("Call found {}", id);
 
             // HERE IS CODE FOR ARGUMENTS
-            
+
             let functions = _program_archive.get_function_names();
             let arg_names = if functions.contains(id) {
                 _program_archive.get_function_data(id).get_name_of_params()
             } else {
                 _program_archive.get_template_data(id).get_name_of_params()
             };
-            
+
             for (arg_name, arg_value) in arg_names.iter().zip(args) {
                 // We set arg_name to have arg_value
-                let (res, resb) = execute_expression(ac, runtime, arg_name, arg_value, _program_archive);
+                let (_, _) = execute_expression(ac, runtime, arg_name, arg_value, _program_archive);
                 // TODO: set res to arg_name
             }
 
             // HERE IS CODE FOR FUNCTIGON
 
-            let function_boby = _program_archive.get_function_data(id).get_body_as_vec();
-            traverse_sequence_of_statements(ac, runtime, &function_boby, _program_archive, true);
+            let fn_body = _program_archive.get_function_data(id).get_body_as_vec();
+            traverse_sequence_of_statements(ac, runtime, fn_body, _program_archive, true);
 
             // HERE IS CODE FOR TEMPLATE
-            
+
             // find the template and execute it
             // let template_body = program_archive.get_template_data(id).get_body_as_vec();
 

@@ -5,8 +5,8 @@
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::runtime::{DataContent, DataType, Runtime};
 use crate::traverse::{
-    traverse_component_declaration, traverse_expression, traverse_sequence_of_statements,
-    traverse_signal_declaration, traverse_variable_declaration,
+    traverse_component_declaration, traverse_sequence_of_statements, traverse_signal_declaration,
+    traverse_variable_declaration,
 };
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
@@ -42,7 +42,7 @@ pub fn execute_statement(
             let dim_u32_vec: Vec<u32> = dimensions
                 .iter()
                 .map(|dimension| {
-                    let (dim_u32_str, dim_u32_bool) =
+                    let (dim_u32_str, _) =
                         execute_expression(ac, runtime, name, dimension, program_archive);
                     dim_u32_str
                         .parse::<u32>()
@@ -77,16 +77,16 @@ pub fn execute_statement(
             ..
         } => {
             let var = String::from("IFTHENELSE");
-            let (res, resb) = execute_expression(ac, runtime, &var, cond, program_archive);
+            let (res, _) = execute_expression(ac, runtime, &var, cond, program_archive);
             let else_case = else_case.as_ref().map(|e| e.as_ref());
-            if res.contains("0") {
+            if res.contains('0') {
                 if let Option::Some(else_stmt) = else_case {
                     execute_statement(ac, runtime, else_stmt, program_archive);
                 }
             } else {
                 execute_statement(ac, runtime, if_case, program_archive)
             }
-        },
+        }
         Statement::Substitution {
             var, access, rhe, ..
         } => {
@@ -96,7 +96,7 @@ pub fn execute_statement(
                 match a {
                     Access::ArrayAccess(expr) => {
                         debug!("Array access found");
-                        let (dim_u32_str, dim_u32_bool) =
+                        let (dim_u32_str, _) =
                             execute_expression(ac, runtime, var, expr, program_archive);
                         name_access.push('_');
                         name_access.push_str(dim_u32_str.as_str());
@@ -130,11 +130,11 @@ pub fn execute_statement(
                         .unwrap();
                 }
             }
-        },
+        }
         Statement::Return { value, .. } => {
             println!("Return expression found");
             let var = String::from("RETURN");
-            let (res, resb) = execute_expression(ac, runtime, &var, value, program_archive);
+            let (res, _) = execute_expression(ac, runtime, &var, value, program_archive);
             println!("RETURN {}", res);
         }
         Statement::Block { stmts, .. } => {
@@ -196,7 +196,7 @@ pub fn execute_expression(
                 match a {
                     Access::ArrayAccess(expr) => {
                         debug!("Array access found");
-                        let (dim_u32_str, dim_u32_bool) =
+                        let (dim_u32_str, _) =
                             execute_expression(ac, runtime, var, expr, program_archive);
                         name_access.push('_');
                         name_access.push_str(dim_u32_str.as_str());
@@ -209,8 +209,8 @@ pub fn execute_expression(
             }
             (name_access.to_string(), false)
         }
-        Expression::Call { meta, id, args } => {
-            println!("Call found {}", id.to_string());
+        Expression::Call { id, args, .. } => {
+            println!("Call found {}", id);
 
             // HERE IS CODE FOR ARGUMENTS
             // TODO: HERE WE SHOULD NOT HAVE TEMPLATE CALL
@@ -220,20 +220,20 @@ pub fn execute_expression(
             } else {
                 program_archive.get_template_data(id).get_name_of_params()
             };
-            
+
             for (arg_name, arg_value) in arg_names.iter().zip(args) {
                 // We set arg_name to have arg_value
-                let (res, resb) = execute_expression(ac, runtime, arg_name, arg_value, program_archive);
+                let (_, _) = execute_expression(ac, runtime, arg_name, arg_value, program_archive);
                 // TODO: set res to arg_name
             }
 
             // HERE IS CODE FOR FUNCTIGON
 
-            let function_boby = program_archive.get_function_data(id).get_body_as_vec();
-            traverse_sequence_of_statements(ac, runtime, &function_boby, program_archive, true);
+            let fn_body = program_archive.get_function_data(id).get_body_as_vec();
+            traverse_sequence_of_statements(ac, runtime, fn_body, program_archive, true);
 
             // HERE IS CODE FOR TEMPLATE
-            
+
             // find the template and execute it
             // let template_body = program_archive.get_template_data(id).get_body_as_vec();
 
@@ -244,7 +244,7 @@ pub fn execute_expression(
             //     program_archive,
             //     true,
             // );
-            (id.to_string(),false)
+            (id.to_string(), false)
         }
         Expression::ArrayInLine { .. } => {
             debug!("ArrayInLine found");
