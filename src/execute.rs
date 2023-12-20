@@ -30,6 +30,7 @@ pub fn execute_statement(
                 execute_statement(ac, runtime, stmt, program_archive);
             }
         }
+        // TODO: THIS ACTUALLY WILL NOT HAPPEN IN EXECUTION
         Statement::Declaration {
             xtype,
             name,
@@ -41,8 +42,8 @@ pub fn execute_statement(
             let dim_u32_vec: Vec<u32> = dimensions
                 .iter()
                 .map(|dimension| {
-                    let dim_u32_str =
-                        traverse_expression(ac, runtime, name, dimension, program_archive);
+                    let (dim_u32_str, dim_u32_bool) =
+                        execute_expression(ac, runtime, name, dimension, program_archive);
                     dim_u32_str
                         .parse::<u32>()
                         .expect("Failed to parse dimension as u32")
@@ -78,8 +79,8 @@ pub fn execute_statement(
                 match a {
                     Access::ArrayAccess(expr) => {
                         debug!("Array access found");
-                        let dim_u32_str =
-                            traverse_expression(ac, runtime, var, expr, program_archive);
+                        let (dim_u32_str, dim_u32_bool) =
+                            execute_expression(ac, runtime, var, expr, program_archive);
                         name_access.push('_');
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Change var name to {}", name_access);
@@ -172,8 +173,8 @@ pub fn execute_expression(
                 match a {
                     Access::ArrayAccess(expr) => {
                         debug!("Array access found");
-                        let dim_u32_str =
-                            traverse_expression(ac, runtime, var, expr, program_archive);
+                        let (dim_u32_str, dim_u32_bool) =
+                            execute_expression(ac, runtime, var, expr, program_archive);
                         name_access.push('_');
                         name_access.push_str(dim_u32_str.as_str());
                         debug!("Changed var name to {}", name_access);

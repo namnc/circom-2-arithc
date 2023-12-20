@@ -55,8 +55,8 @@ pub fn traverse_statement(
             let dim_u32_vec: Vec<u32> = dimensions
                 .iter()
                 .map(|dimension| {
-                    let dim_u32_str =
-                        traverse_expression(ac, runtime, name, dimension, program_archive);
+                    let (dim_u32_str, dim_u32_bool) =
+                        execute_expression(ac, runtime, name, dimension, program_archive);
                     dim_u32_str
                         .parse::<u32>()
                         .expect("Failed to parse dimension")
