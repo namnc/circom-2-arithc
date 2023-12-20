@@ -15,7 +15,7 @@ pub enum ContextOrigin {
     Block,
 }
 
-/// Runtime - manages the scope stack and variable tracking.
+/// Runtime - manages the context stack and variable tracking.
 pub struct Runtime {
     ctx_stack: Vec<Context>,
     current_ctx: u32,
@@ -92,6 +92,7 @@ impl Runtime {
 #[derive(Clone)]
 pub struct Context {
     id: u32,
+    #[allow(dead_code)]
     caller_id: u32,
     values: HashMap<String, DataItem>, // Name -> Value
 }
@@ -231,12 +232,12 @@ impl Context {
     pub fn declare_signal_array(
         &mut self,
         name: &str,
-        indice: Vec<u32>,
+        indices: Vec<u32>,
     ) -> Result<(String, u32), RuntimeError> {
         let mut signal_name = name.to_string();
 
-        for i in 0..indice.len() {
-            signal_name.push_str(&format!("_{}", indice[i]));
+        for indice in indices {
+            signal_name.push_str(&format!("_{}", indice));
         }
 
         let signal_id = self.declare_signal(&signal_name)?;
@@ -326,11 +327,7 @@ impl DataItem {
 
     /// Checks if the content of the data item is an array.
     pub fn is_array(&self) -> bool {
-        if let Some(DataContent::Array(_)) = self.content {
-            true
-        } else {
-            false
-        }
+        matches!(self.content, Some(DataContent::Array(_)))
     }
 }
 

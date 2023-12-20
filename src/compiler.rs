@@ -2,20 +2,21 @@
 //!
 //! This module contains code from the circom compiler repository.
 //! See: <https://github.com/iden3/circom>
+//!
+
+#![allow(clippy::result_unit_err)]
 
 use circom_compiler::compiler_interface;
 use circom_compiler::compiler_interface::{Config, VCP};
-use circom_constraint_writers::debug_writer::DebugWriter;
 use circom_program_structure::error_definition::Report;
 use circom_program_structure::program_archive::ProgramArchive;
 use circom_type_analysis::check_types::check_types;
 use clap::{App, Arg, ArgMatches};
-use mpz_circuits::BuilderError;
 use std::env::current_dir;
 use std::path::Path;
 use std::path::PathBuf;
 
-const VERSION: &'static str = "2.0.0";
+const VERSION: &str = "2.0.0";
 
 #[allow(missing_docs)]
 pub struct CompilerConfig {
@@ -43,7 +44,7 @@ pub fn compile(config: CompilerConfig) -> Result<(), ()> {
     // config.wasm_flag = false;
     // config.wat_flag = false;
 
-    let circuit = compiler_interface::run_compiler(
+    compiler_interface::run_compiler(
         config.vcp,
         Config {
             debug_output: config.debug_output,
@@ -52,37 +53,6 @@ pub fn compile(config: CompilerConfig) -> Result<(), ()> {
         },
         VERSION,
     )?;
-
-    // Sample code for calling writer
-
-    // if config.c_flag {
-    //     compiler_interface::write_c(
-    //         &circuit,
-    //         &config.c_folder,
-    //         &config.c_run_name,
-    //         &config.c_file,
-    //         &config.dat_file,
-    //     )?;
-    //     println!(
-    //         "{} {} and {}",
-    //         Colour::Green.paint("Written successfully:"),
-    //         config.c_file,
-    //         config.dat_file
-    //     );
-    //     println!(
-    //         "{} {}/{}, {}, {}, {}, {}, {}, {} and {}",
-    //         Colour::Green.paint("Written successfully:"),
-    //         &config.c_folder,
-    //         "main.cpp".to_string(),
-    //         "circom.hpp".to_string(),
-    //         "calcwit.hpp".to_string(),
-    //         "calcwit.cpp".to_string(),
-    //         "fr.hpp".to_string(),
-    //         "fr.cpp".to_string(),
-    //         "fr.asm".to_string(),
-    //         "Makefile".to_string()
-    //     );
-    // }
 
     Ok(())
 }
@@ -110,7 +80,7 @@ pub fn execute_project(
     config: ExecutionConfig,
 ) -> Result<VCP, ()> {
     use circom_constraint_generation::{build_circuit, BuildConfig};
-    let debug = DebugWriter::new(config.json_constraints).unwrap();
+
     let build_config = BuildConfig {
         no_rounds: config.no_rounds,
         flag_json_sub: config.json_substitution_flag,
@@ -122,74 +92,11 @@ pub fn execute_project(
         flag_old_heuristics: config.flag_old_heuristics,
         prime: config.prime,
     };
-    let custom_gates = program_archive.custom_gates;
-    let (exporter, vcp) = build_circuit(program_archive, build_config)?;
 
-    // Sample code for generate constraints but we don't need it now
-    // Maybe later for generate for Garbler and Evaluator
-
-    // if config.r1cs_flag {
-    //     generate_output_r1cs(&config.r1cs, exporter.as_ref(), custom_gates)?;
-    // }
-    // if config.sym_flag {
-    //     generate_output_sym(&config.sym, exporter.as_ref())?;
-    // }
-    // if config.json_constraint_flag {
-    //     generate_json_constraints(&debug, exporter.as_ref())?;
-    // }
+    let (_, vcp) = build_circuit(program_archive, build_config)?;
 
     Result::Ok(vcp)
 }
-
-// fn generate_output_r1cs(
-//     file: &str,
-//     exporter: &dyn ConstraintExporter,
-//     custom_gates: bool,
-// ) -> Result<(), ()> {
-//     if let Result::Ok(()) = exporter.r1cs(file, custom_gates) {
-//         println!("{} {}", Colour::Green.paint("Written successfully:"), file);
-//         Result::Ok(())
-//     } else {
-//         eprintln!(
-//             "{}",
-//             Colour::Red.paint("Could not write the output in the given path")
-//         );
-//         Result::Err(())
-//     }
-// }
-
-// fn generate_output_sym(file: &str, exporter: &dyn ConstraintExporter) -> Result<(), ()> {
-//     if let Result::Ok(()) = exporter.sym(file) {
-//         println!("{} {}", Colour::Green.paint("Written successfully:"), file);
-//         Result::Ok(())
-//     } else {
-//         eprintln!(
-//             "{}",
-//             Colour::Red.paint("Could not write the output in the given path")
-//         );
-//         Result::Err(())
-//     }
-// }
-
-// fn generate_json_constraints(
-//     debug: &DebugWriter,
-//     exporter: &dyn ConstraintExporter,
-// ) -> Result<(), ()> {
-//     if let Ok(()) = exporter.json_constraints(&debug) {
-//         println!(
-//             "{} {}",
-//             Colour::Green.paint("Constraints written in:"),
-//             debug.json_constraints
-//         );
-//         Result::Ok(())
-//     } else {
-//         eprintln!(
-//             "{}",
-//             Colour::Red.paint("Could not write the output in the given path")
-//         );
-//         Result::Err(())
-//     }
-// }
 
 pub struct Input {
     pub input_program: PathBuf,
@@ -225,23 +132,23 @@ pub struct Input {
     pub link_libraries: Vec<PathBuf>,
 }
 
-const R1CS: &'static str = "r1cs";
-const WAT: &'static str = "wat";
-const WASM: &'static str = "wasm";
-const CPP: &'static str = "cpp";
-const JS: &'static str = "js";
-const DAT: &'static str = "dat";
-const SYM: &'static str = "sym";
-const JSON: &'static str = "json";
+const R1CS: &str = "r1cs";
+const WAT: &str = "wat";
+const WASM: &str = "wasm";
+const CPP: &str = "cpp";
+const JS: &str = "js";
+const DAT: &str = "dat";
+const SYM: &str = "sym";
+const JSON: &str = "json";
 
-impl Input {
-    pub fn default() -> Result<Input, ()> {
+impl Default for Input {
+    fn default() -> Self {
         let input_program = PathBuf::from(format!(
             "{}/src/assets/circuit.circom",
             current_dir().unwrap().display()
         ));
 
-        let input = Input {
+        Input {
             input_program,
             out_r1cs: PathBuf::from("./assets/tmp"),
             out_json_constraints: PathBuf::from("./assets/tmp"),
@@ -272,9 +179,11 @@ impl Input {
             flag_verbose: true,
             prime: String::from("bn128"),
             link_libraries: Vec::new(),
-        };
-        Ok(input)
+        }
     }
+}
+
+impl Input {
     pub fn new() -> Result<Input, ()> {
         // use SimplificationStyle;
         let matches = view();
@@ -328,15 +237,15 @@ impl Input {
         })
     }
 
-    fn build_folder(output_path: &PathBuf, filename: &str, ext: &str) -> PathBuf {
-        let mut file = output_path.clone();
+    fn build_folder(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
+        let mut file = output_path.to_path_buf().clone();
         let folder_name = format!("{}_{}", filename, ext);
         file.push(folder_name);
         file
     }
 
-    fn build_output(output_path: &PathBuf, filename: &str, ext: &str) -> PathBuf {
-        let mut file = output_path.clone();
+    fn build_output(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
+        let mut file = output_path.to_path_buf().clone();
         file.push(format!("{}.{}", filename, ext));
         file
     }
@@ -346,7 +255,7 @@ impl Input {
     }
 
     pub fn input_file(&self) -> &str {
-        &self.input_program.to_str().unwrap()
+        self.input_program.to_str().unwrap()
     }
     pub fn r1cs_file(&self) -> &str {
         self.out_r1cs.to_str().unwrap()
@@ -467,6 +376,7 @@ pub enum SimplificationStyle {
     O1,
     O2(usize),
 }
+
 pub fn get_simplification_style(matches: &ArgMatches) -> Result<SimplificationStyle, ()> {
     let o_0 = matches.is_present("no_simplification");
     let o_1 = matches.is_present("reduced_simplification");
@@ -477,7 +387,7 @@ pub fn get_simplification_style(matches: &ArgMatches) -> Result<SimplificationSt
         (_, true, _, _) => Ok(SimplificationStyle::O1),
         (_, _, true, _) => {
             let o_2_argument = matches.value_of("simplification_rounds").unwrap();
-            let rounds_r = usize::from_str_radix(o_2_argument, 10);
+            let rounds_r = o_2_argument.parse::<usize>();
             if let Result::Ok(no_rounds) = rounds_r {
                 if no_rounds == 0 {
                     Ok(SimplificationStyle::O1)
@@ -776,18 +686,4 @@ pub fn analyse_project(program_archive: &mut ProgramArchive) -> Result<(), ()> {
             Ok(())
         }
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ParseError {
-    #[error(transparent)]
-    IOError(#[from] std::io::Error),
-    #[error(transparent)]
-    ParseIntError(#[from] std::num::ParseIntError),
-    #[error("uninitialized feed: {0}")]
-    UninitializedFeed(usize),
-    #[error("unsupported gate type: {0}")]
-    UnsupportedGateType(String),
-    #[error(transparent)]
-    BuilderError(#[from] BuilderError),
 }
