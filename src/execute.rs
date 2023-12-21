@@ -4,10 +4,7 @@
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::runtime::{DataContent, DataType, Runtime};
-use crate::traverse::{
-    traverse_component_declaration, traverse_sequence_of_statements, traverse_signal_declaration,
-    traverse_variable_declaration,
-};
+use crate::traverse::{traverse_declaration, traverse_sequence_of_statements};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
     Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
@@ -52,11 +49,11 @@ pub fn execute_statement(
 
             match xtype {
                 VariableType::Component => {
-                    traverse_component_declaration(ac, runtime, name, &dim_u32_vec)
+                    todo!("Component declaration not handled")
                 }
-                VariableType::Var => traverse_variable_declaration(ac, runtime, name, &dim_u32_vec),
-                VariableType::Signal(signal_type, _tag_list) => {
-                    traverse_signal_declaration(ac, runtime, name, *signal_type, &dim_u32_vec)
+                VariableType::Var => traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec),
+                VariableType::Signal(_, _) => {
+                    traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec)
                 }
                 _ => unimplemented!(),
             }

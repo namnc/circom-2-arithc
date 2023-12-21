@@ -65,11 +65,11 @@ pub fn traverse_statement(
 
             match xtype {
                 VariableType::Component => {
-                    traverse_component_declaration(ac, runtime, name, &dim_u32_vec)
+                    todo!("Component declaration not handled")
                 }
-                VariableType::Var => traverse_variable_declaration(ac, runtime, name, &dim_u32_vec),
-                VariableType::Signal(signal_type, _tag_list) => {
-                    traverse_signal_declaration(ac, runtime, name, *signal_type, &dim_u32_vec)
+                VariableType::Var => traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec),
+                VariableType::Signal(_, _) => {
+                    traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec)
                 }
                 _ => unimplemented!(),
             }
@@ -297,44 +297,40 @@ pub fn traverse_infix_op(
     (0, false)
 }
 
-/// Processes the declaration of a component.
-pub fn traverse_component_declaration(
-    _ac: &mut ArithmeticCircuit,
-    _runtime: &mut Runtime,
-    _comp_name: &str,
-    _dim_u32_vec: &[u32],
-) {
-    todo!()
-}
-
-/// Processes a signal declaration, integrating it into the circuit's variable management system.
-pub fn traverse_signal_declaration(
-    ac: &mut ArithmeticCircuit,
-    runtime: &mut Runtime,
-    signal_name: &str,
-    _signal_type: SignalType,
-    dim_u32_vec: &Vec<u32>,
-) {
-    traverse_variable_declaration(ac, runtime, signal_name, dim_u32_vec);
-}
-
-/// Handles the declaration of variables, allocating and initializing them within the circuit.
-pub fn traverse_variable_declaration(
+/// Handles declaration of signals and variables
+pub fn traverse_declaration(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     var_name: &str,
+    xtype: &VariableType,
     dim_u32_vec: &Vec<u32>,
 ) {
-    // Assuming this is a signal
     let ctx = runtime.get_current_context().unwrap();
-    if dim_u32_vec.is_empty() {
-        let signal_id = ctx.declare_signal(var_name).unwrap();
-        ac.add_var(signal_id, var_name.to_string().as_str());
-    } else {
-        let dim_u32 = *dim_u32_vec.last().unwrap();
-        for i in 0..dim_u32 {
-            let (name, id) = ctx.declare_signal_array(var_name, vec![i]).unwrap();
-            ac.add_var(id, &name);
+    let is_array = !dim_u32_vec.is_empty();
+
+    match xtype {
+        VariableType::Signal(_, _) => {
+            if is_array {
+                let dim_u32 = *dim_u32_vec.last().unwrap();
+                for i in 0..dim_u32 {
+                    let (name, id) = ctx.declare_signal_array(var_name, vec![i]).unwrap();
+                    ac.add_var(id, &name);
+                }
+            } else {
+                let signal_id = ctx.declare_signal(var_name).unwrap();
+                ac.add_var(signal_id, var_name.to_string().as_str());
+            }
         }
+        VariableType::Var => {
+            if is_array {
+                let dim_u32 = *dim_u32_vec.last().unwrap();
+                for i in 0..dim_u32 {
+                    ctx.declare_var_array(var_name, vec![i]).unwrap();
+                }
+            } else {
+                ctx.declare_variable(var_name).unwrap();
+            }
+        }
+        _ => unimplemented!(),
     }
 }
