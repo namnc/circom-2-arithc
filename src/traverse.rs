@@ -18,12 +18,12 @@ use log::debug;
 pub fn traverse_sequence_of_statements(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    stmts: &[Statement],
+    statements: &[Statement],
     program_archive: &ProgramArchive,
     _is_complete_template: bool,
 ) {
-    for stmt in stmts.iter() {
-        traverse_statement(ac, runtime, stmt, program_archive);
+    for statement in statements {
+        traverse_statement(ac, runtime, statement, program_archive);
     }
     // TODO: handle complete template
 }
@@ -197,14 +197,16 @@ pub fn traverse_expression(
             let ctx = runtime.get_current_context().unwrap();
             if ctx.get_data_item(&name_access).is_ok() {
                 let data_item = ctx.get_data_item(&name_access).unwrap();
-                // We're assuming data item is not an array
-                if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
-                    // TODO: Check if this is a constant
-                    let cloned_val = *val;
-                    debug!("Return var value {} = {}", name_access, cloned_val);
-                    ctx.declare_const(cloned_val).unwrap();
-                    ac.add_const_var(cloned_val, cloned_val);
-                    return cloned_val.to_string();
+                if data_item.get_content().is_some() {
+                    // We're assuming data item is not an array
+                    if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
+                        // TODO: Check if this is a constant
+                        let cloned_val = *val;
+                        debug!("Return var value {} = {}", name_access, val);
+                        ctx.declare_const(cloned_val).unwrap();
+                        ac.add_const_var(cloned_val, cloned_val);
+                        return cloned_val.to_string();
+                    }
                 }
             }
             name_access.to_string()
