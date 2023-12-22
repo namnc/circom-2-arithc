@@ -6,10 +6,10 @@
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::execute::{execute_expression, execute_statement};
-use crate::runtime::{DataContent, Runtime};
+use crate::runtime::{DataContent, DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
-    Access, Expression, ExpressionInfixOpcode, SignalType, Statement, VariableType,
+    Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
 };
 use circom_program_structure::program_archive::ProgramArchive;
 use log::debug;
@@ -103,8 +103,8 @@ pub fn traverse_statement(
         Statement::Substitution {
             var, access, rhe, ..
         } => {
+            debug!("Substitution for {}", var.to_string());
             let mut name_access = String::from(var);
-            debug!("Sub Variable found {}", var.to_string());
             for a in access.iter() {
                 match a {
                     Access::ArrayAccess(expr) => {
@@ -120,9 +120,20 @@ pub fn traverse_statement(
                     }
                 }
             }
-            let rhs = traverse_expression(ac, runtime, &name_access, rhe, program_archive);
-            debug!("Sub Assigning {} to {}", rhs, &name_access);
-            execute_statement(ac, runtime, stmt, program_archive);
+
+            // Check if we're dealing with a signal or a variable
+            let ctx = runtime.get_current_context().unwrap();
+            let data_item = ctx.get_data_item(&name_access);
+            if let Ok(data_value) = data_item {
+                match data_value.get_data_type() {
+                    DataType::Signal => {
+                        traverse_expression(ac, runtime, &name_access, rhe, program_archive);
+                    }
+                    DataType::Variable => {
+                        execute_statement(ac, runtime, stmt, program_archive);
+                    }
+                }
+            }
         }
         Statement::Block { stmts, .. } => {
             traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true);
@@ -287,6 +298,8 @@ pub fn traverse_infix_op(
     // Traverse the infix operation
     let lhsvar_id = lhsvar_res.unwrap().get_u32().unwrap();
     let rhsvar_id = rhsvar_res.unwrap().get_u32().unwrap();
+
+    // TODO: Fix, this will fail if the output is not assigned/declared
     let output_id = ctx.get_data_item(output).unwrap().get_u32().unwrap();
 
     let gate_type = AGateType::from(infixop);

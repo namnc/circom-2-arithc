@@ -3,12 +3,10 @@
 //! This module provides functionality to handle variables execution (not signals).
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::runtime::{DataContent, DataType, Runtime};
-use crate::traverse::{traverse_declaration, traverse_sequence_of_statements};
+use crate::runtime::{DataContent, Runtime};
+use crate::traverse::traverse_sequence_of_statements;
 use circom_circom_algebra::num_traits::ToPrimitive;
-use circom_program_structure::ast::{
-    Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
-};
+use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
 use circom_program_structure::program_archive::ProgramArchive;
 use log::debug;
 
@@ -25,37 +23,6 @@ pub fn execute_statement(
         } => {
             for stmt in initializations {
                 execute_statement(ac, runtime, stmt, program_archive);
-            }
-        }
-        // TODO: THIS ACTUALLY WILL NOT HAPPEN IN EXECUTION
-        Statement::Declaration {
-            xtype,
-            name,
-            dimensions,
-            ..
-        } => {
-            debug!("Declaration of {}", name);
-            // Process index in case of array
-            let dim_u32_vec: Vec<u32> = dimensions
-                .iter()
-                .map(|dimension| {
-                    let (dim_u32_str, _) =
-                        execute_expression(ac, runtime, name, dimension, program_archive);
-                    dim_u32_str
-                        .parse::<u32>()
-                        .expect("Failed to parse dimension as u32")
-                })
-                .collect();
-
-            match xtype {
-                VariableType::Component => {
-                    todo!("Component declaration not handled")
-                }
-                VariableType::Var => traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec),
-                VariableType::Signal(_, _) => {
-                    traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec)
-                }
-                _ => unimplemented!(),
             }
         }
         Statement::While { cond, stmt, .. } => loop {
@@ -88,7 +55,7 @@ pub fn execute_statement(
             var, access, rhe, ..
         } => {
             let mut name_access = String::from(var);
-            debug!("Variable found {}", var.to_string());
+            debug!("Assigning value to variable: {}", var.to_string());
             for a in access.iter() {
                 match a {
                     Access::ArrayAccess(expr) => {
@@ -107,25 +74,16 @@ pub fn execute_statement(
             let (rhs, rhsb) = execute_expression(ac, runtime, &name_access, rhe, program_archive);
             debug!("Assigning {} ? {} to {}", rhs, rhsb, &name_access);
             if rhsb {
-                debug!("Assigning {} to {}", rhs, &name_access);
-                // TODO: revisit this
-                // Check if the var already has this value assigned. If it doesn't, assign it.
                 let ctx = runtime.get_current_context().unwrap();
                 let res = ctx.get_data_item(&name_access);
-                let expected: u32 = rhs.parse().unwrap();
 
-                if res.is_ok() {
-                    if expected == res.unwrap().get_u32().unwrap() {
-                        debug!("Signal {} already has value {}", &name_access, expected);
-                    } else {
-                        ctx.clear_data_item(&name_access).unwrap();
-                    }
-                } else {
-                    ctx.declare_data_item(&name_access, DataType::Variable)
-                        .unwrap();
-                    ctx.set_data_item(&name_access, DataContent::Scalar(expected))
-                        .unwrap();
+                // Declare if it doesn't exist
+                if res.is_err() {
+                    ctx.declare_variable(&name_access).unwrap();
                 }
+
+                ctx.set_data_item(&name_access, DataContent::Scalar(rhs.parse().unwrap()))
+                    .unwrap();
             }
         }
         Statement::Return { value, .. } => {
@@ -136,6 +94,9 @@ pub fn execute_statement(
         }
         Statement::Block { stmts, .. } => {
             traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true);
+        }
+        Statement::Declaration { .. } => {
+            unreachable!("Declarations should be handled in traverse_statement")
         }
         _ => {
             unimplemented!()

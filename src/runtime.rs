@@ -344,8 +344,8 @@ impl DataItem {
     }
 
     /// Gets the data type of the data item.
-    pub fn get_data_type(&self) -> &DataType {
-        &self.data_type
+    pub fn get_data_type(&self) -> DataType {
+        self.data_type.clone()
     }
 
     /// Checks if the content of the data item is an array.
