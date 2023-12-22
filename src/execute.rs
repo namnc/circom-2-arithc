@@ -77,13 +77,26 @@ pub fn execute_statement(
                 let ctx = runtime.get_current_context().unwrap();
                 let res = ctx.get_data_item(&name_access);
 
-                // Declare if it doesn't exist
-                if res.is_err() {
-                    ctx.declare_variable(&name_access).unwrap();
+                match res {
+                    Ok(data_item) => {
+                        if let Some(val) = data_item.get_content() {
+                            ctx.set_data_item(&name_access, val.clone()).unwrap();
+                        } else {
+                            // TODO: Review this, we're assigning a variable another's variable's name
+                            ctx.set_data_item(
+                                &name_access,
+                                DataContent::Scalar(rhs.parse().unwrap()),
+                            )
+                            .unwrap();
+                        }
+                    }
+                    Err(_) => {
+                        ctx.declare_variable(&name_access).unwrap();
+                        // TODO: Review this, we're assigning a variable another's variable's name
+                        ctx.set_data_item(&name_access, DataContent::Scalar(rhs.parse().unwrap()))
+                            .unwrap();
+                    }
                 }
-
-                ctx.set_data_item(&name_access, DataContent::Scalar(rhs.parse().unwrap()))
-                    .unwrap();
             }
         }
         Statement::Return { value, .. } => {
