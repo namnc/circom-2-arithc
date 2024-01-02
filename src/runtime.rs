@@ -171,6 +171,18 @@ impl Context {
         }
     }
 
+    /// Declares a new variable.
+    pub fn declare_variable(&mut self, name: &str) -> Result<(), RuntimeError> {
+        if self.values.contains_key(name) {
+            Err(RuntimeError::DataItemAlreadyDeclared)
+        } else {
+            debug!("Declaring variable '{}'", name);
+            self.values
+                .insert(name.to_string(), DataItem::new(DataType::Variable));
+            Ok(())
+        }
+    }
+
     /// Declares a new signal.
     pub fn declare_signal(&mut self, name: &str) -> Result<u32, RuntimeError> {
         let signal_id = self.generate_id();
@@ -243,6 +255,17 @@ impl Context {
         let signal_id = self.declare_signal(&signal_name)?;
 
         Ok((signal_name, signal_id))
+    }
+
+    /// Creates a unique variable for an array element based on its indices and assigns it a unique identifier.
+    pub fn declare_var_array(&mut self, name: &str, indices: Vec<u32>) -> Result<(), RuntimeError> {
+        let mut var_name = name.to_string();
+
+        for indice in indices {
+            var_name.push_str(&format!("_{}", indice));
+        }
+
+        self.declare_variable(name)
     }
 }
 
@@ -321,8 +344,8 @@ impl DataItem {
     }
 
     /// Gets the data type of the data item.
-    pub fn get_data_type(&self) -> &DataType {
-        &self.data_type
+    pub fn get_data_type(&self) -> DataType {
+        self.data_type.clone()
     }
 
     /// Checks if the content of the data item is an array.
