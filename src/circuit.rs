@@ -74,10 +74,10 @@ pub struct ArithmeticVar {
 }
 
 impl ArithmeticVar {
-    pub fn new(_var_id: u32, _var_name: String) -> ArithmeticVar {
-        ArithmeticVar {
-            var_id: _var_id,
-            var_name: _var_name,
+    pub fn new(var_id: u32, var_name: String) -> Self {
+        Self {
+            var_id,
+            var_name,
             is_const: false,
             const_value: 0,
         }
@@ -100,19 +100,20 @@ pub struct ArithmeticNode {
 }
 
 impl ArithmeticNode {
+    /// Creates a new arithmetic node.
     pub fn new(
-        _gate_id: u32,
-        _gate_type: AGateType,
-        _input_lhs_id: u32,
-        _input_rhs_id: u32,
-        _out_put_id: u32,
-    ) -> ArithmeticNode {
-        ArithmeticNode {
-            gate_id: _gate_id,
-            gate_type: _gate_type,
-            input_lhs_id: _input_lhs_id,
-            input_rhs_id: _input_rhs_id,
-            output_id: _out_put_id,
+        gate_id: u32,
+        gate_type: AGateType,
+        input_lhs_id: u32,
+        input_rhs_id: u32,
+        output_id: u32,
+    ) -> Self {
+        Self {
+            gate_id,
+            gate_type,
+            input_lhs_id,
+            input_rhs_id,
+            output_id,
         }
     }
 }

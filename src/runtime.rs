@@ -355,7 +355,7 @@ impl DataItem {
 }
 
 /// Runtime errors
-#[derive(Error, Debug, PartialEq, Eq)]
+#[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum RuntimeError {
     #[error("Error retrieving context")]
     ContextRetrievalError,

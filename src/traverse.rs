@@ -5,7 +5,7 @@
 //! It's main purpose is to traverse signals.
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::execute::{execute_expression, execute_statement};
+use crate::execute::{execute_expression, execute_infix_op, execute_statement};
 use crate::runtime::{DataContent, DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
@@ -157,8 +157,10 @@ pub fn traverse_expression(
             debug!("Number value {}", val);
 
             let res = runtime.get_current_context().unwrap().declare_const(val);
+            // Add const to circuit only if the declaration was successful
             if res.is_ok() {
-                ac.add_const_var(val, val); // Setting as id the constant value
+                // Setting as id the constant value
+                ac.add_const_var(val, val);
             }
 
             val.to_string()
@@ -175,7 +177,7 @@ pub fn traverse_expression(
             let varlop = traverse_expression(ac, runtime, &varlhs, lhe, _program_archive);
             debug!("lhs {}", varlop);
             let varrop = traverse_expression(ac, runtime, &varrhs, rhe, _program_archive);
-            debug!("rhs {}", varlop);
+            debug!("rhs {}", varrop);
             let (res, ret) = traverse_infix_op(ac, runtime, var, &varlop, &varrop, infix_op);
             if ret {
                 return res.to_string();
@@ -205,21 +207,22 @@ pub fn traverse_expression(
                     }
                 }
             }
-            let ctx = runtime.get_current_context().unwrap();
-            if ctx.get_data_item(&name_access).is_ok() {
-                let data_item = ctx.get_data_item(&name_access).unwrap();
-                if data_item.get_content().is_some() {
-                    // We're assuming data item is not an array
-                    if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
-                        // TODO: Check if this is a constant
-                        let cloned_val = *val;
-                        debug!("Return var value {} = {}", name_access, val);
-                        ctx.declare_const(cloned_val).unwrap();
-                        ac.add_const_var(cloned_val, cloned_val);
-                        return cloned_val.to_string();
-                    }
-                }
-            }
+            // TODO: Check this, it might not be necessary.
+            // let ctx = runtime.get_current_context().unwrap();
+            // if ctx.get_data_item(&name_access).is_ok() {
+            //     let data_item = ctx.get_data_item(&name_access).unwrap();
+            //     if data_item.get_content().is_some() {
+            //         // We're assuming data item is not an array
+            //         if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
+            //             // TODO: Check if this is a constant
+            //             let cloned_val = *val;
+            //             debug!("Return var value {} = {}", name_access, val);
+            //             ctx.declare_const(cloned_val).unwrap();
+            //             ac.add_const_var(cloned_val, cloned_val);
+            //             return cloned_val.to_string();
+            //         }
+            //     }
+            // }
             name_access.to_string()
         }
         Expression::Call { id, args, .. } => {
@@ -287,13 +290,18 @@ pub fn traverse_infix_op(
     let lhsvar_res = ctx.get_data_item(input_lhs);
     let rhsvar_res = ctx.get_data_item(input_rhs);
 
-    // TODO: HERE IS WHERE INFIX OP CREATE GATES BUT BECAUSE WE CAN GET VALUES FROM lhs and rhs IT WILL EXECUTE INSTEAD
-    // Skip traversal if can execute
-    // if lhsvar_res.is_ok() && rhsvar_res.is_ok() {
-    //     return execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop);
-    // }
-    // debug!("Can't get variables: lhs={}, rhs={}", input_lhs, input_rhs);
-    // let _ = ctx.clear_data_item(output).unwrap();
+    // Check if both of these items are scalars. If they are we can store the result in a new var
+    let lhs_type = lhsvar_res.clone().unwrap().get_data_type();
+    let rhs_type = rhsvar_res.clone().unwrap().get_data_type();
+
+    if lhs_type == DataType::Variable && rhs_type == DataType::Variable {
+        return (
+            execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop).unwrap(),
+            false,
+        );
+    }
+
+    // If they're not we construct the gate.
 
     // Traverse the infix operation
     let lhsvar_id = lhsvar_res.unwrap().get_u32().unwrap();

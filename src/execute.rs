@@ -3,7 +3,7 @@
 //! This module provides functionality to handle variables execution (not signals).
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::runtime::{DataContent, Runtime};
+use crate::runtime::{DataContent, Runtime, RuntimeError};
 use crate::traverse::traverse_sequence_of_statements;
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
@@ -152,9 +152,9 @@ pub fn execute_expression(
             debug!("lhs {} {}", varlop, lhsb);
             let (varrop, rhsb) = execute_expression(ac, runtime, &varrhs, rhe, program_archive);
             debug!("rhs {} {}", varrop, rhsb);
-            let (res, rb) = execute_infix_op(ac, runtime, var, &varlop, &varrop, infix_op);
+            let res = execute_infix_op(ac, runtime, var, &varlop, &varrop, infix_op).unwrap();
             debug!("infix out res {}", res);
-            (res.to_string(), rb)
+            (res.to_string(), true)
         }
         Expression::PrefixOp { .. } => {
             debug!("Prefix found ");
@@ -237,7 +237,7 @@ pub fn execute_infix_op(
     input_lhs: &str,
     input_rhs: &str,
     infixop: &ExpressionInfixOpcode,
-) -> (u32, bool) {
+) -> Result<u32, RuntimeError> {
     debug!("Executing infix op");
     let ctx = runtime.get_current_context().unwrap();
 
@@ -246,23 +246,14 @@ pub fn execute_infix_op(
     let rhsvar_res = ctx.get_data_item(input_rhs);
 
     if lhsvar_res.is_err() || rhsvar_res.is_err() {
-        debug!(
-            "Error getting variables: lhs={}, rhs={}",
-            input_lhs, input_rhs
-        );
-        ctx.clear_data_item(output).unwrap();
-        return (0, false);
+        return Err(RuntimeError::DataItemNotDeclared);
     }
 
     // Extract values
-    let lhsvar_val = lhsvar_res.unwrap().get_u32().unwrap();
-    let rhsvar_val = rhsvar_res.unwrap().get_u32().unwrap();
+    let lhsvar_val = lhsvar_res?.get_u32()?;
+    let rhsvar_val = rhsvar_res?.get_u32()?;
 
-    // ctx.declare_signal(output).unwrap();
-    let gate_type = AGateType::from(infixop);
-    debug!("{} = {} {} {}", output, input_lhs, gate_type, input_rhs);
-
-    let res = match gate_type {
+    let res = match AGateType::from(infixop) {
         AGateType::AAdd => lhsvar_val + rhsvar_val,
         AGateType::ADiv => lhsvar_val / rhsvar_val,
         AGateType::AEq => {
@@ -312,7 +303,5 @@ pub fn execute_infix_op(
         AGateType::ASub => lhsvar_val - rhsvar_val,
     };
 
-    debug!("Infix res = {}", res);
-
-    (res, true)
+    Ok(res)
 }
