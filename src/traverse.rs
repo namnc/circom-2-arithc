@@ -6,7 +6,8 @@
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::execute::{execute_expression, execute_infix_op, execute_statement};
-use crate::runtime::{DataContent, DataType, Runtime};
+use crate::program::ProgramError;
+use crate::runtime::{DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
     Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
@@ -55,11 +56,8 @@ pub fn traverse_statement(
             let dim_u32_vec: Vec<u32> = dimensions
                 .iter()
                 .map(|dimension| {
-                    let (dim_u32_str, _) =
-                        execute_expression(ac, runtime, name, dimension, program_archive);
-                    dim_u32_str
-                        .parse::<u32>()
-                        .expect("Failed to parse dimension")
+                    let dim_u32_str =
+                        execute_expression(ac, runtime, name, dimension, program_archive)?;
                 })
                 .collect();
 
@@ -207,22 +205,7 @@ pub fn traverse_expression(
                     }
                 }
             }
-            // TODO: Check this, it might not be necessary.
-            // let ctx = runtime.get_current_context().unwrap();
-            // if ctx.get_data_item(&name_access).is_ok() {
-            //     let data_item = ctx.get_data_item(&name_access).unwrap();
-            //     if data_item.get_content().is_some() {
-            //         // We're assuming data item is not an array
-            //         if let DataContent::Scalar(val) = data_item.get_content().unwrap() {
-            //             // TODO: Check if this is a constant
-            //             let cloned_val = *val;
-            //             debug!("Return var value {} = {}", name_access, val);
-            //             ctx.declare_const(cloned_val).unwrap();
-            //             ac.add_const_var(cloned_val, cloned_val);
-            //             return cloned_val.to_string();
-            //         }
-            //     }
-            // }
+
             name_access.to_string()
         }
         Expression::Call { id, args, .. } => {
@@ -282,7 +265,7 @@ pub fn traverse_infix_op(
     input_lhs: &str,
     input_rhs: &str,
     infixop: &ExpressionInfixOpcode,
-) -> (u32, bool) {
+) -> Result<u32, ProgramError> {
     debug!("Traversing infix op");
     let ctx = runtime.get_current_context().unwrap();
 
@@ -295,10 +278,7 @@ pub fn traverse_infix_op(
     let rhs_type = rhsvar_res.clone().unwrap().get_data_type();
 
     if lhs_type == DataType::Variable && rhs_type == DataType::Variable {
-        return (
-            execute_infix_op(ac, runtime, output, input_lhs, input_rhs, infixop).unwrap(),
-            false,
-        );
+        return execute_infix_op(runtime, input_lhs, input_rhs, infixop);
     }
 
     // If they're not we construct the gate.
@@ -315,7 +295,7 @@ pub fn traverse_infix_op(
 
     ac.add_gate(output, output_id, lhsvar_id, rhsvar_id, gate_type);
 
-    (0, false)
+    Ok(0)
 }
 
 /// Handles declaration of signals and variables

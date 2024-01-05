@@ -4,10 +4,11 @@
 
 use crate::circuit::ArithmeticCircuit;
 use crate::compiler::{analyse_project, parse_project, Input};
-use crate::runtime::Runtime;
+use crate::runtime::{Runtime, RuntimeError};
 use crate::traverse::traverse_sequence_of_statements;
 use circom_program_structure::ast::Expression;
 use circom_program_structure::program_archive::ProgramArchive;
+use thiserror::Error;
 
 /// Parses a Circom file, processes its content, and sets up the necessary structures for circuit analysis.
 pub fn parse_circom() -> Result<(), &'static str> {
@@ -43,4 +44,21 @@ pub fn traverse_program(program_archive: &ProgramArchive) -> ArithmeticCircuit {
     };
 
     ac
+}
+
+/// Program errors
+#[derive(Error, Debug, PartialEq, Eq, Clone)]
+pub enum ProgramError {
+    #[error("Call error")]
+    CallError,
+    #[error("Parsing error")]
+    ParsingError,
+    #[error("Context error: {0}")]
+    RuntimeError(RuntimeError),
+}
+
+impl From<RuntimeError> for ProgramError {
+    fn from(e: RuntimeError) -> Self {
+        ProgramError::RuntimeError(e)
+    }
 }

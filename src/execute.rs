@@ -3,7 +3,8 @@
 //! This module provides functionality to handle variables execution (not signals).
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::runtime::{DataContent, Runtime, RuntimeError};
+use crate::program::ProgramError;
+use crate::runtime::{DataContent, Runtime};
 use crate::traverse::traverse_sequence_of_statements;
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
@@ -16,7 +17,7 @@ pub fn execute_statement(
     runtime: &mut Runtime,
     statement: &Statement,
     program_archive: &ProgramArchive,
-) {
+) -> Result<(), ProgramError> {
     match statement {
         Statement::InitializationBlock {
             initializations, ..
@@ -24,16 +25,20 @@ pub fn execute_statement(
             for stmt in initializations {
                 execute_statement(ac, runtime, stmt, program_archive);
             }
+
+            Ok(())
         }
-        Statement::While { cond, stmt, .. } => loop {
-            let var = String::from("while");
-            let (res, rb) = execute_expression(ac, runtime, &var, cond, program_archive);
-            debug!("res = {} {}", res, rb);
-            execute_statement(ac, runtime, stmt, program_archive);
-            if res.contains('0') {
-                break;
+        Statement::While { cond, stmt, .. } => {
+            loop {
+                let var = String::from("while");
+                let res = execute_expression(ac, runtime, &var, cond, program_archive)?;
+                execute_statement(ac, runtime, stmt, program_archive)?;
+                if res == 0 {
+                    break;
+                }
             }
-        },
+            Ok(())
+        }
         Statement::IfThenElse {
             cond,
             if_case,
@@ -41,11 +46,13 @@ pub fn execute_statement(
             ..
         } => {
             let var = String::from("IFTHENELSE");
-            let (res, _) = execute_expression(ac, runtime, &var, cond, program_archive);
+            let res = execute_expression(ac, runtime, &var, cond, program_archive)?;
             let else_case = else_case.as_ref().map(|e| e.as_ref());
-            if res.contains('0') {
+            if res == 0 {
                 if let Option::Some(else_stmt) = else_case {
-                    execute_statement(ac, runtime, else_stmt, program_archive);
+                    execute_statement(ac, runtime, else_stmt, program_archive)
+                } else {
+                    Ok(())
                 }
             } else {
                 execute_statement(ac, runtime, if_case, program_archive)
@@ -60,10 +67,10 @@ pub fn execute_statement(
                 match a {
                     Access::ArrayAccess(expr) => {
                         debug!("Array access found");
-                        let (dim_u32_str, _) =
-                            execute_expression(ac, runtime, var, expr, program_archive);
+                        let dim_u32_str =
+                            execute_expression(ac, runtime, var, expr, program_archive)?;
                         name_access.push('_');
-                        name_access.push_str(dim_u32_str.as_str());
+                        name_access.push_str(&dim_u32_str.to_string());
                         debug!("Change var name to {}", name_access);
                     }
                     Access::ComponentAccess(_) => {
@@ -71,42 +78,39 @@ pub fn execute_statement(
                     }
                 }
             }
-            let (rhs, rhsb) = execute_expression(ac, runtime, &name_access, rhe, program_archive);
-            debug!("Assigning {} ? {} to {}", rhs, rhsb, &name_access);
-            if rhsb {
-                let ctx = runtime.get_current_context().unwrap();
-                let res = ctx.get_data_item(&name_access);
+            let rhs = execute_expression(ac, runtime, &name_access, rhe, program_archive)?;
+            debug!("Assigning {} to {}", rhs, &name_access);
+            let ctx = runtime.get_current_context().unwrap();
+            let res = ctx.get_data_item(&name_access);
 
-                match res {
-                    Ok(data_item) => {
-                        if let Some(val) = data_item.get_content() {
-                            ctx.set_data_item(&name_access, val.clone()).unwrap();
-                        } else {
-                            // TODO: Review this, we're assigning a variable another's variable's name
-                            ctx.set_data_item(
-                                &name_access,
-                                DataContent::Scalar(rhs.parse().unwrap()),
-                            )
-                            .unwrap();
-                        }
-                    }
-                    Err(_) => {
-                        ctx.declare_variable(&name_access).unwrap();
+            match res {
+                Ok(data_item) => {
+                    if let Some(val) = data_item.get_content() {
+                        ctx.set_data_item(&name_access, val.clone()).unwrap();
+                    } else {
                         // TODO: Review this, we're assigning a variable another's variable's name
-                        ctx.set_data_item(&name_access, DataContent::Scalar(rhs.parse().unwrap()))
-                            .unwrap();
+                        ctx.set_data_item(&name_access, DataContent::Scalar(rhs))?;
                     }
+                    Ok(())
+                }
+                Err(_) => {
+                    ctx.declare_variable(&name_access).unwrap();
+                    // TODO: Review this, we're assigning a variable another's variable's name
+                    ctx.set_data_item(&name_access, DataContent::Scalar(rhs))?;
+                    Ok(())
                 }
             }
         }
         Statement::Return { value, .. } => {
             println!("Return expression found");
             let var = String::from("RETURN");
-            let (res, _) = execute_expression(ac, runtime, &var, value, program_archive);
+            let res = execute_expression(ac, runtime, &var, value, program_archive)?;
             println!("RETURN {}", res);
+            Ok(())
         }
         Statement::Block { stmts, .. } => {
             traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true);
+            Ok(())
         }
         Statement::Declaration { .. } => {
             unreachable!("Declarations should be handled in traverse_statement")
@@ -122,43 +126,39 @@ pub fn execute_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     var: &String,
-    expr: &Expression,
+    expression: &Expression,
     program_archive: &ProgramArchive,
-) -> (String, bool) {
-    match expr {
+) -> Result<u32, ProgramError> {
+    match expression {
         Expression::Number(_, value) => {
             // Declaring a constant.
-            let val = value.to_u32().unwrap();
-            debug!("Number value {}", val);
+            let val = value.to_u32().ok_or(ProgramError::ParsingError)?;
 
-            let res = runtime.get_current_context().unwrap().declare_const(val);
+            let res = runtime.get_current_context()?.declare_const(val);
+
             if res.is_ok() {
-                // Setting as id the constant value
+                // Add constant to circuit.
                 ac.add_const_var(val, val);
             }
 
-            (val.to_string(), true)
+            Ok(val)
         }
         Expression::InfixOp {
             lhe, infix_op, rhe, ..
         } => {
             let ctx = runtime.get_current_context().unwrap();
             //TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
-            let varlhs = ctx.declare_auto_var().unwrap();
+            let varlhs = ctx.declare_auto_var()?;
             debug!("Auto var for lhs {}", varlhs);
             let varrhs = ctx.declare_auto_var().unwrap();
             debug!("Auto var for rhs {}", varrhs);
-            let (varlop, lhsb) = execute_expression(ac, runtime, &varlhs, lhe, program_archive);
-            debug!("lhs {} {}", varlop, lhsb);
-            let (varrop, rhsb) = execute_expression(ac, runtime, &varrhs, rhe, program_archive);
-            debug!("rhs {} {}", varrop, rhsb);
-            let res = execute_infix_op(ac, runtime, var, &varlop, &varrop, infix_op).unwrap();
+            let varlop = execute_expression(ac, runtime, &varlhs, lhe, program_archive)?;
+            debug!("lhs {}", varlop);
+            let varrop = execute_expression(ac, runtime, &varrhs, rhe, program_archive)?;
+            debug!("rhs {}", varrop);
+            let res = execute_infix_op(runtime, &varlop, &varrop, infix_op).unwrap();
             debug!("infix out res {}", res);
-            (res.to_string(), true)
-        }
-        Expression::PrefixOp { .. } => {
-            debug!("Prefix found ");
-            (var.to_string(), false)
+            Ok(res)
         }
         Expression::Variable { name, access, .. } => {
             let mut name_access = String::from(name);
@@ -167,10 +167,10 @@ pub fn execute_expression(
                 match a {
                     Access::ArrayAccess(expr) => {
                         debug!("Array access found");
-                        let (dim_u32_str, _) =
-                            execute_expression(ac, runtime, var, expr, program_archive);
+                        let dim_u32_str =
+                            execute_expression(ac, runtime, var, expr, program_archive)?;
                         name_access.push('_');
-                        name_access.push_str(dim_u32_str.as_str());
+                        name_access.push_str(&dim_u32_str.to_string());
                         debug!("Changed var name to {}", name_access);
                     }
                     Access::ComponentAccess(_) => {
@@ -178,7 +178,9 @@ pub fn execute_expression(
                     }
                 }
             }
-            (name_access.to_string(), false)
+
+            let ctx = runtime.get_current_context().unwrap();
+            Ok(ctx.get_data_item(&name_access)?.get_u32()?)
         }
         Expression::Call { id, args, .. } => {
             println!("Call found {}", id);
@@ -194,7 +196,7 @@ pub fn execute_expression(
 
             for (arg_name, arg_value) in arg_names.iter().zip(args) {
                 // We set arg_name to have arg_value
-                let (_, _) = execute_expression(ac, runtime, arg_name, arg_value, program_archive);
+                let _ = execute_expression(ac, runtime, arg_name, arg_value, program_archive);
                 // TODO: set res to arg_name
             }
 
@@ -215,15 +217,7 @@ pub fn execute_expression(
             //     program_archive,
             //     true,
             // );
-            (id.to_string(), false)
-        }
-        Expression::ArrayInLine { .. } => {
-            debug!("ArrayInLine found");
-            (var.to_string(), false)
-        }
-        Expression::UniformArray { .. } => {
-            debug!("UniformArray found");
-            (var.to_string(), false)
+            Err(ProgramError::CallError)
         }
         _ => unimplemented!(),
     }
@@ -231,76 +225,59 @@ pub fn execute_expression(
 
 /// Executes an infix operation, performing the specified arithmetic or logical computation.
 pub fn execute_infix_op(
-    _ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    output: &str,
-    input_lhs: &str,
-    input_rhs: &str,
-    infixop: &ExpressionInfixOpcode,
-) -> Result<u32, RuntimeError> {
-    debug!("Executing infix op");
-    let ctx = runtime.get_current_context().unwrap();
-
-    // Check availability of lhs and rhs values
-    let lhsvar_res = ctx.get_data_item(input_lhs);
-    let rhsvar_res = ctx.get_data_item(input_rhs);
-
-    if lhsvar_res.is_err() || rhsvar_res.is_err() {
-        return Err(RuntimeError::DataItemNotDeclared);
-    }
-
-    // Extract values
-    let lhsvar_val = lhsvar_res?.get_u32()?;
-    let rhsvar_val = rhsvar_res?.get_u32()?;
-
-    let res = match AGateType::from(infixop) {
-        AGateType::AAdd => lhsvar_val + rhsvar_val,
-        AGateType::ADiv => lhsvar_val / rhsvar_val,
+    lhs: &u32,
+    rhs: &u32,
+    infix_op: &ExpressionInfixOpcode,
+) -> Result<u32, ProgramError> {
+    let res = match AGateType::from(infix_op) {
+        AGateType::AAdd => lhs + rhs,
+        AGateType::ADiv => lhs / rhs,
         AGateType::AEq => {
-            if lhsvar_val == rhsvar_val {
+            if lhs == rhs {
                 1
             } else {
                 0
             }
         }
         AGateType::AGEq => {
-            if lhsvar_val >= rhsvar_val {
+            if lhs >= rhs {
                 1
             } else {
                 0
             }
         }
         AGateType::AGt => {
-            if lhsvar_val > rhsvar_val {
+            if lhs > rhs {
                 1
             } else {
                 0
             }
         }
         AGateType::ALEq => {
-            if lhsvar_val <= rhsvar_val {
+            if lhs <= rhs {
                 1
             } else {
                 0
             }
         }
         AGateType::ALt => {
-            if lhsvar_val < rhsvar_val {
+            if lhs < rhs {
                 1
             } else {
                 0
             }
         }
-        AGateType::AMul => lhsvar_val * rhsvar_val,
+        AGateType::AMul => lhs * rhs,
         AGateType::ANeq => {
-            if lhsvar_val != rhsvar_val {
+            if lhs != rhs {
                 1
             } else {
                 0
             }
         }
         AGateType::ANone => todo!(),
-        AGateType::ASub => lhsvar_val - rhsvar_val,
+        AGateType::ASub => lhs - rhs,
     };
 
     Ok(res)
