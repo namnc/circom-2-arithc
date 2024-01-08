@@ -11,12 +11,12 @@ use circom_program_structure::program_archive::ProgramArchive;
 use thiserror::Error;
 
 /// Parses a Circom file, processes its content, and sets up the necessary structures for circuit analysis.
-pub fn parse_circom() -> Result<(), &'static str> {
+pub fn parse_circom() -> Result<(), ProgramError> {
     let user_input = Input::default();
-    let mut program_archive = parse_project(&user_input).map_err(|_| "Parsing failed")?;
-    analyse_project(&mut program_archive).map_err(|_| "Analysis failed")?;
+    let mut program_archive = parse_project(&user_input).map_err(|_| ProgramError::ParsingError)?;
+    analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
 
-    let mut circuit = traverse_program(&program_archive);
+    let mut circuit = traverse_program(&program_archive)?;
 
     circuit.print_ac();
     circuit.truncate_zero_add_gate();
@@ -27,28 +27,32 @@ pub fn parse_circom() -> Result<(), &'static str> {
 }
 
 /// Traverses the program structure of a parsed Circom file and constructs an arithmetic circuit.
-pub fn traverse_program(program_archive: &ProgramArchive) -> ArithmeticCircuit {
-    let mut ac = ArithmeticCircuit::new();
-    let mut runtime = Runtime::new().unwrap();
+pub fn traverse_program(
+    program_archive: &ProgramArchive,
+) -> Result<ArithmeticCircuit, ProgramError> {
+    let mut circuit = ArithmeticCircuit::new();
+    let mut runtime = Runtime::new()?;
 
     if let Expression::Call { id, .. } = program_archive.get_main_expression() {
         let template_body = program_archive.get_template_data(id).get_body_as_vec();
 
         traverse_sequence_of_statements(
-            &mut ac,
+            &mut circuit,
             &mut runtime,
             template_body,
             program_archive,
             true,
-        );
+        )?;
     };
 
-    ac
+    Ok(circuit)
 }
 
 /// Program errors
 #[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum ProgramError {
+    #[error("Analysis error")]
+    AnalysisError,
     #[error("Call error")]
     CallError,
     #[error("Parsing error")]

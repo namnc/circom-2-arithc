@@ -23,7 +23,7 @@ pub fn execute_statement(
             initializations, ..
         } => {
             for stmt in initializations {
-                execute_statement(ac, runtime, stmt, program_archive);
+                execute_statement(ac, runtime, stmt, program_archive)?;
             }
 
             Ok(())
@@ -80,13 +80,13 @@ pub fn execute_statement(
             }
             let rhs = execute_expression(ac, runtime, &name_access, rhe, program_archive)?;
             debug!("Assigning {} to {}", rhs, &name_access);
-            let ctx = runtime.get_current_context().unwrap();
+            let ctx = runtime.get_current_context()?;
             let res = ctx.get_data_item(&name_access);
 
             match res {
                 Ok(data_item) => {
                     if let Some(val) = data_item.get_content() {
-                        ctx.set_data_item(&name_access, val.clone()).unwrap();
+                        ctx.set_data_item(&name_access, val.clone())?;
                     } else {
                         // TODO: Review this, we're assigning a variable another's variable's name
                         ctx.set_data_item(&name_access, DataContent::Scalar(rhs))?;
@@ -94,7 +94,7 @@ pub fn execute_statement(
                     Ok(())
                 }
                 Err(_) => {
-                    ctx.declare_variable(&name_access).unwrap();
+                    ctx.declare_variable(&name_access)?;
                     // TODO: Review this, we're assigning a variable another's variable's name
                     ctx.set_data_item(&name_access, DataContent::Scalar(rhs))?;
                     Ok(())
@@ -109,8 +109,7 @@ pub fn execute_statement(
             Ok(())
         }
         Statement::Block { stmts, .. } => {
-            traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true);
-            Ok(())
+            traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true)
         }
         Statement::Declaration { .. } => {
             unreachable!("Declarations should be handled in traverse_statement")
@@ -125,7 +124,7 @@ pub fn execute_statement(
 pub fn execute_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    var: &String,
+    _var: &String,
     expression: &Expression,
     program_archive: &ProgramArchive,
 ) -> Result<u32, ProgramError> {
@@ -146,18 +145,18 @@ pub fn execute_expression(
         Expression::InfixOp {
             lhe, infix_op, rhe, ..
         } => {
-            let ctx = runtime.get_current_context().unwrap();
+            let ctx = runtime.get_current_context()?;
+
             //TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
             let varlhs = ctx.declare_auto_var()?;
-            debug!("Auto var for lhs {}", varlhs);
-            let varrhs = ctx.declare_auto_var().unwrap();
-            debug!("Auto var for rhs {}", varrhs);
+            let varrhs = ctx.declare_auto_var()?;
+
             let varlop = execute_expression(ac, runtime, &varlhs, lhe, program_archive)?;
-            debug!("lhs {}", varlop);
             let varrop = execute_expression(ac, runtime, &varrhs, rhe, program_archive)?;
-            debug!("rhs {}", varrop);
-            let res = execute_infix_op(runtime, &varlop, &varrop, infix_op).unwrap();
-            debug!("infix out res {}", res);
+
+            let res = execute_infix_op(&varlop, &varrop, infix_op);
+            debug!("execute_infix_op res {}", res);
+
             Ok(res)
         }
         Expression::Variable { name, access, .. } => {
@@ -168,7 +167,7 @@ pub fn execute_expression(
                     Access::ArrayAccess(expr) => {
                         debug!("Array access found");
                         let dim_u32_str =
-                            execute_expression(ac, runtime, var, expr, program_archive)?;
+                            execute_expression(ac, runtime, _var, expr, program_archive)?;
                         name_access.push('_');
                         name_access.push_str(&dim_u32_str.to_string());
                         debug!("Changed var name to {}", name_access);
@@ -179,7 +178,7 @@ pub fn execute_expression(
                 }
             }
 
-            let ctx = runtime.get_current_context().unwrap();
+            let ctx = runtime.get_current_context()?;
             Ok(ctx.get_data_item(&name_access)?.get_u32()?)
         }
         Expression::Call { id, args, .. } => {
@@ -203,7 +202,7 @@ pub fn execute_expression(
             // HERE IS CODE FOR FUNCTIGON
 
             let fn_body = program_archive.get_function_data(id).get_body_as_vec();
-            traverse_sequence_of_statements(ac, runtime, fn_body, program_archive, true);
+            traverse_sequence_of_statements(ac, runtime, fn_body, program_archive, true)?;
 
             // HERE IS CODE FOR TEMPLATE
 
@@ -224,13 +223,8 @@ pub fn execute_expression(
 }
 
 /// Executes an infix operation, performing the specified arithmetic or logical computation.
-pub fn execute_infix_op(
-    runtime: &mut Runtime,
-    lhs: &u32,
-    rhs: &u32,
-    infix_op: &ExpressionInfixOpcode,
-) -> Result<u32, ProgramError> {
-    let res = match AGateType::from(infix_op) {
+pub fn execute_infix_op(lhs: &u32, rhs: &u32, infix_op: &ExpressionInfixOpcode) -> u32 {
+    match AGateType::from(infix_op) {
         AGateType::AAdd => lhs + rhs,
         AGateType::ADiv => lhs / rhs,
         AGateType::AEq => {
@@ -276,9 +270,7 @@ pub fn execute_infix_op(
                 0
             }
         }
-        AGateType::ANone => todo!(),
+        AGateType::ANone => unimplemented!(),
         AGateType::ASub => lhs - rhs,
-    };
-
-    Ok(res)
+    }
 }
