@@ -45,6 +45,8 @@ pub fn traverse_statement(
             for statement in initializations {
                 traverse_statement(ac, runtime, statement, program_archive)?;
             }
+
+            Ok(())
         }
         Statement::Declaration {
             xtype,
@@ -52,7 +54,7 @@ pub fn traverse_statement(
             dimensions,
             ..
         } => {
-            debug!("Declaration of {}", name);
+            debug!("Declare: {}", name);
 
             // Process index in case of array
             let dim_u32_vec: Vec<u32> = dimensions
@@ -71,7 +73,7 @@ pub fn traverse_statement(
                 _ => unimplemented!(),
             }
         }
-        Statement::While { cond, stmt, .. } => loop {
+        Statement::While { cond, stmt, .. } => Ok(loop {
             let var = String::from("while");
 
             let result = execute_expression(ac, runtime, &var, cond, program_archive)?;
@@ -81,7 +83,7 @@ pub fn traverse_statement(
 
             debug!("While res = {}", result);
             traverse_statement(ac, runtime, stmt, program_archive)?
-        },
+        }),
         Statement::IfThenElse {
             cond,
             if_case,
@@ -93,10 +95,11 @@ pub fn traverse_statement(
             let else_case = else_case.as_ref().map(|e| e.as_ref());
             if result == 0 {
                 if let Option::Some(else_stmt) = else_case {
-                    traverse_statement(ac, runtime, else_stmt, program_archive)?;
+                    return traverse_statement(ac, runtime, else_stmt, program_archive);
                 }
+                Ok(())
             } else {
-                traverse_statement(ac, runtime, if_case, program_archive)?
+                traverse_statement(ac, runtime, if_case, program_archive)
             }
         }
         Statement::Substitution {
@@ -133,14 +136,13 @@ pub fn traverse_statement(
                     }
                 }
             }
+            Ok(())
         }
         Statement::Block { stmts, .. } => {
-            traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true)?;
+            traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true)
         }
         _ => unimplemented!("Statement not implemented"),
     }
-
-    Ok(())
 }
 
 /// Examines an expression to determine its structure and dependencies before execution.
@@ -293,34 +295,34 @@ pub fn traverse_declaration(
     runtime: &mut Runtime,
     var_name: &str,
     xtype: &VariableType,
-    dim_u32_vec: &Vec<u32>,
-) {
-    let ctx = runtime.get_current_context().unwrap();
+    dim_u32_vec: &[u32],
+) -> Result<(), ProgramError> {
+    let ctx = runtime.get_current_context()?;
     let is_array = !dim_u32_vec.is_empty();
 
     match xtype {
         VariableType::Signal(_, _) => {
             if is_array {
-                let dim_u32 = *dim_u32_vec.last().unwrap();
-                for i in 0..dim_u32 {
-                    let (name, id) = ctx.declare_signal_array(var_name, vec![i]).unwrap();
+                for &i in dim_u32_vec {
+                    let (name, id) = ctx.declare_signal_array(var_name, vec![i])?;
                     ac.add_var(id, &name);
                 }
             } else {
-                let signal_id = ctx.declare_signal(var_name).unwrap();
-                ac.add_var(signal_id, var_name.to_string().as_str());
+                let signal_id = ctx.declare_signal(var_name)?;
+                ac.add_var(signal_id, var_name);
             }
         }
         VariableType::Var => {
             if is_array {
-                let dim_u32 = *dim_u32_vec.last().unwrap();
-                for i in 0..dim_u32 {
-                    ctx.declare_var_array(var_name, vec![i]).unwrap();
+                for &i in dim_u32_vec {
+                    ctx.declare_var_array(var_name, vec![i])?;
                 }
             } else {
-                ctx.declare_variable(var_name).unwrap();
+                ctx.declare_variable(var_name)?;
             }
         }
         _ => unimplemented!(),
     }
+
+    Ok(())
 }
