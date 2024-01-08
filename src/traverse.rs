@@ -7,7 +7,7 @@
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::execute::{execute_expression, execute_infix_op, execute_statement};
 use crate::program::ProgramError;
-use crate::runtime::{DataType, Runtime};
+use crate::runtime::{DataContent, DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
     Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
@@ -145,7 +145,7 @@ pub fn traverse_statement(
     }
 }
 
-/// Examines an expression to determine its structure and dependencies before execution.
+/// Process an expression and returns a name of a variable that contains the result.
 pub fn traverse_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
@@ -173,19 +173,15 @@ pub fn traverse_expression(
         } => {
             let ctx = runtime.get_current_context()?;
 
-            //TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
+            // TODO: for generic handling we should generate a name for an intermediate expression, we could ideally use only the values returned
+            // Not possible with the current structure of traverse_expression
             let varlhs = ctx.declare_auto_var()?;
             let varrhs = ctx.declare_auto_var()?;
 
             let varlop = traverse_expression(ac, runtime, &varlhs, lhe, _program_archive)?;
             let varrop = traverse_expression(ac, runtime, &varrhs, rhe, _program_archive)?;
 
-            let res = traverse_infix_op(ac, runtime, var, &varlop, &varrop, infix_op)?;
-
-            match res {
-                Some(value) => Ok(value.to_string()),
-                None => Ok(var.to_string()),
-            }
+            traverse_infix_op(ac, runtime, &varlop, &varrop, infix_op)
         }
         Expression::Variable { name, access, .. } => {
             let mut name_access = String::from(name);
@@ -256,11 +252,10 @@ pub fn traverse_expression(
 pub fn traverse_infix_op(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    output: &str,
     input_lhs: &str,
     input_rhs: &str,
     infixop: &ExpressionInfixOpcode,
-) -> Result<Option<u32>, ProgramError> {
+) -> Result<String, ProgramError> {
     debug!("Traversing infix op");
 
     let ctx = runtime.get_current_context()?;
@@ -275,18 +270,24 @@ pub fn traverse_infix_op(
 
     // If both items are scalars we can directly execute.
     if lhs.get_data_type() == DataType::Variable && rhs.get_data_type() == DataType::Variable {
-        return Ok(Some(execute_infix_op(&lhs_val, &rhs_val, infixop)));
+        let out = ctx.declare_auto_var()?;
+        ctx.set_data_item(
+            &out,
+            DataContent::Scalar(execute_infix_op(&lhs_val, &rhs_val, infixop)),
+        )?;
+
+        return Ok(out);
     }
 
     // If they're not we construct the gate.
-    // TODO: Fix, this will fail if the output is not assigned/declared
-    let output_id = ctx.get_data_item(output)?.get_u32()?;
-
     let gate_type = AGateType::from(infixop);
 
-    ac.add_gate(output, output_id, lhs_val, rhs_val, gate_type);
+    let out = ctx.declare_auto_signal()?;
+    let output_id = ctx.get_data_item(&out)?.get_u32()?;
 
-    Ok(None)
+    ac.add_gate(&out, output_id, lhs_val, rhs_val, gate_type);
+
+    Ok(out)
 }
 
 /// Handles declaration of signals and variables

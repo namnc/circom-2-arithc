@@ -142,6 +142,7 @@ impl Context {
     /// Retrieves a reference to a data item by name.
     /// Returns an error if the data item is not found.
     pub fn get_data_item(&self, name: &str) -> Result<&DataItem, RuntimeError> {
+        debug!("Getting data item '{}'", name);
         self.values
             .get(name)
             .ok_or(RuntimeError::DataItemNotDeclared)
@@ -173,10 +174,10 @@ impl Context {
 
     /// Declares a new variable.
     pub fn declare_variable(&mut self, name: &str) -> Result<(), RuntimeError> {
+        debug!("Declaring variable '{}'", name);
         if self.values.contains_key(name) {
             Err(RuntimeError::DataItemAlreadyDeclared)
         } else {
-            debug!("Declaring variable '{}'", name);
             self.values
                 .insert(name.to_string(), DataItem::new(DataType::Variable));
             Ok(())
@@ -185,11 +186,11 @@ impl Context {
 
     /// Declares a new signal.
     pub fn declare_signal(&mut self, name: &str) -> Result<u32, RuntimeError> {
+        debug!("Declaring signal '{}'", name);
         let signal_id = self.generate_id();
         if self.values.contains_key(name) {
             Err(RuntimeError::DataItemAlreadyDeclared)
         } else {
-            debug!("Declaring signal '{}'", name);
             self.values
                 .insert(name.to_string(), DataItem::new(DataType::Signal));
             self.set_data_item(name, DataContent::Scalar(signal_id))?;
@@ -200,11 +201,11 @@ impl Context {
     /// Declares a new const value as a signal.
     /// Sets the value of the signal to the given value. This being the signal id.
     pub fn declare_const(&mut self, value: u32) -> Result<(), RuntimeError> {
+        debug!("Declaring const '{:?}'", value);
         let const_name = value.to_string();
         if self.values.contains_key(&const_name) {
             Err(RuntimeError::DataItemAlreadyDeclared)
         } else {
-            debug!("Declaring const '{}'", const_name);
             self.values
                 .insert(const_name.clone(), DataItem::new(DataType::Signal));
             self.set_data_item(&const_name, DataContent::Scalar(value))?;
@@ -214,14 +215,29 @@ impl Context {
 
     /// Declares a new auto generated variable.
     pub fn declare_auto_var(&mut self) -> Result<String, RuntimeError> {
-        let auto_var_name = format!("auto_var_{}", self.generate_id());
-        if self.values.contains_key(&auto_var_name) {
+        let auto_name = format!("auto_var_{}", self.generate_id());
+        debug!("Declaring auto generated variable '{}'", auto_name);
+        if self.values.contains_key(&auto_name) {
             Err(RuntimeError::DataItemAlreadyDeclared)
         } else {
-            debug!("Declaring auto generated variable '{}'", auto_var_name);
             self.values
-                .insert(auto_var_name.clone(), DataItem::new(DataType::Variable));
-            Ok(auto_var_name)
+                .insert(auto_name.clone(), DataItem::new(DataType::Variable));
+            Ok(auto_name)
+        }
+    }
+
+    /// Declares a new auto generated signal.
+    pub fn declare_auto_signal(&mut self) -> Result<String, RuntimeError> {
+        let signal_id = self.generate_id();
+        let auto_name = format!("auto_signal_{}", signal_id);
+        debug!("Declaring auto generated signal '{}'", auto_name);
+        if self.values.contains_key(&auto_name) {
+            Err(RuntimeError::DataItemAlreadyDeclared)
+        } else {
+            self.values
+                .insert(auto_name.to_string(), DataItem::new(DataType::Signal));
+            self.set_data_item(&auto_name, DataContent::Scalar(signal_id))?;
+            Ok(auto_name)
         }
     }
 
@@ -301,7 +317,6 @@ impl DataItem {
 
     /// Sets the content of the data item. Returns an error if the item is a signal and is already set.
     pub fn set_content(&mut self, content: DataContent) -> Result<(), RuntimeError> {
-        debug!("Setting content {:?} - {:?}", self.data_type, content);
         match self.data_type {
             DataType::Signal if self.content.is_some() => Err(RuntimeError::SignalAlreadySet),
             _ => {

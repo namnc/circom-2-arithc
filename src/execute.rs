@@ -88,14 +88,12 @@ pub fn execute_statement(
                     if let Some(val) = data_item.get_content() {
                         ctx.set_data_item(&name_access, val.clone())?;
                     } else {
-                        // TODO: Review this, we're assigning a variable another's variable's name
                         ctx.set_data_item(&name_access, DataContent::Scalar(rhs))?;
                     }
                     Ok(())
                 }
                 Err(_) => {
                     ctx.declare_variable(&name_access)?;
-                    // TODO: Review this, we're assigning a variable another's variable's name
                     ctx.set_data_item(&name_access, DataContent::Scalar(rhs))?;
                     Ok(())
                 }
