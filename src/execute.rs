@@ -2,9 +2,11 @@
 //!
 //! This module provides functionality to handle variables execution (not signals).
 
+use std::collections::HashMap;
+
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::program::ProgramError;
-use crate::runtime::{DataContent, Runtime};
+use crate::runtime::{DataContent, Runtime, ContextOrigin};
 use crate::traverse::traverse_sequence_of_statements;
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
@@ -142,10 +144,9 @@ pub fn execute_expression(
             Ok(ctx.get_data_item(&name_access)?.get_u32()?)
         }
         Expression::Call { id, args, .. } => {
-            println!("Call found {}", id);
+            debug!("Call found {}", id);
 
-            // HERE IS CODE FOR ARGUMENTS
-            // TODO: HERE WE SHOULD NOT HAVE TEMPLATE CALL
+            // We always need to distinguish a function call from a template component wiring
             let functions = program_archive.get_function_names();
             let arg_names = if functions.contains(id) {
                 program_archive.get_function_data(id).get_name_of_params()
@@ -153,29 +154,36 @@ pub fn execute_expression(
                 program_archive.get_template_data(id).get_name_of_params()
             };
 
+            let mut args_map = HashMap::new();
+
+            // We start by setting argument values to argument names
             for (_arg_name, arg_value) in arg_names.iter().zip(args) {
                 // We set arg_name to have arg_value
-                let _ = execute_expression(ac, runtime, arg_value, program_archive);
-                // TODO: set res to arg_name
+                // Because arg_value is an expression (constant, variable, or an infix operation or a function call) we need to execute to have the actual value
+                let value = execute_expression(ac, runtime, arg_value, program_archive)?;
+                // We cache this to args hashmap
+                args_map.insert(_arg_name, value);
             }
 
-            // HERE IS CODE FOR FUNCTIGON
+            // Here we need to spawn a new context for calling a function or wiring with a component (template)
+            // Only after setting arguments that we can spawn a new context because the expression evaluation use values from calling context
+            let _ = runtime.add_context(ContextOrigin::Call);
+            let ctx = runtime.get_current_context()?;
 
-            let fn_body = program_archive.get_function_data(id).get_body_as_vec();
-            traverse_sequence_of_statements(ac, runtime, fn_body, program_archive, true)?;
+            // Now we put args to use
+            for (_arg_name, arg_value) in args_map.iter() {
+                ctx.set_data_item(_arg_name, DataContent::Scalar(*(arg_value)));
+            }
 
-            // HERE IS CODE FOR TEMPLATE
+            let _body = if functions.contains(id) {
+                program_archive.get_function_data(id).get_body_as_vec()
+            } else {
+                program_archive.get_template_data(id).get_body_as_vec()
+            };
+            
+            traverse_sequence_of_statements(ac, runtime, _body, program_archive, true)?;
 
-            // find the template and execute it
-            // let template_body = program_archive.get_template_data(id).get_body_as_vec();
-
-            // traverse_sequence_of_statements(
-            //     ac,
-            //     runtime,
-            //     template_body,
-            //     program_archive,
-            //     true,
-            // );
+            // Ok(id.to_string())
             Err(ProgramError::CallError)
         }
         _ => unimplemented!(),

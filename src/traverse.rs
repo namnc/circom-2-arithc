@@ -4,10 +4,12 @@
 //!
 //! It's main purpose is to traverse signals.
 
+use std::collections::HashMap;
+
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::execute::{execute_expression, execute_infix_op, execute_statement};
 use crate::program::ProgramError;
-use crate::runtime::{DataContent, DataType, Runtime};
+use crate::runtime::{DataContent, DataType, Runtime, ContextOrigin};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
     Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
@@ -136,6 +138,12 @@ pub fn traverse_statement(
             }
             Ok(())
         }
+        Statement::Return { value, .. } => {
+            println!("Return expression found");
+            let res = execute_expression(ac, runtime, value, program_archive)?;
+            println!("RETURN {}", res);
+            Ok(())
+        }
         Statement::Block { stmts, .. } => {
             traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true)
         }
@@ -194,10 +202,9 @@ pub fn traverse_expression(
             Ok(name_access)
         }
         Expression::Call { id, args, .. } => {
-            println!("Call found {}", id);
+            debug!("Call found {}", id);
 
-            // HERE IS CODE FOR ARGUMENTS
-
+            // We always need to distinguish a function call from a template component wiring
             let functions = _program_archive.get_function_names();
             let arg_names = if functions.contains(id) {
                 _program_archive.get_function_data(id).get_name_of_params()
@@ -205,29 +212,35 @@ pub fn traverse_expression(
                 _program_archive.get_template_data(id).get_name_of_params()
             };
 
+            let mut args_map = HashMap::new();
+
+            // We start by setting argument values to argument names
             for (_arg_name, arg_value) in arg_names.iter().zip(args) {
                 // We set arg_name to have arg_value
-                execute_expression(ac, runtime, arg_value, _program_archive)?;
-                // TODO: set res to arg_name
+                // Because arg_value is an expression (constant, variable, or an infix operation or a function call) we need to execute to have the actual value
+                let value = execute_expression(ac, runtime, arg_value, _program_archive)?;
+                // We cache this to args hashmap
+                args_map.insert(_arg_name, value);
             }
 
-            // HERE IS CODE FOR FUNCTIGON
+            // Here we need to spawn a new context for calling a function or wiring with a component (template)
+            // Only after setting arguments that we can spawn a new context because the expression evaluation use values from calling context
+            let _ = runtime.add_context(ContextOrigin::Call);
+            let ctx = runtime.get_current_context()?;
 
-            let fn_body = _program_archive.get_function_data(id).get_body_as_vec();
-            traverse_sequence_of_statements(ac, runtime, fn_body, _program_archive, true)?;
+            // Now we put args to use
+            for (_arg_name, arg_value) in args_map.iter() {
+                ctx.set_data_item(_arg_name, DataContent::Scalar(*(arg_value)));
+            }
 
-            // HERE IS CODE FOR TEMPLATE
+            let _body = if functions.contains(id) {
+                _program_archive.get_function_data(id).get_body_as_vec()
+            } else {
+                _program_archive.get_template_data(id).get_body_as_vec()
+            };
+            
+            traverse_sequence_of_statements(ac, runtime, _body, _program_archive, true)?;
 
-            // find the template and execute it
-            // let template_body = program_archive.get_template_data(id).get_body_as_vec();
-
-            // traverse_sequence_of_statements(
-            //     ac,
-            //     runtime,
-            //     template_body,
-            //     program_archive,
-            //     true,
-            // );
             Ok(id.to_string())
         }
         _ => unimplemented!("Expression not implemented"),
