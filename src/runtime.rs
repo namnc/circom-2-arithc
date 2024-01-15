@@ -277,6 +277,24 @@ impl Context {
         self.values.len() as u32 * 2 + 1000
     }
 
+    /// Declares a multidimension data item.
+    pub fn declare_multidimension_data_item(
+        &mut self,
+        name: &str,
+        data_type: DataType,
+        dimensions: Vec<u32>,
+    ) -> Result<(String, u32), RuntimeError> {
+        let mut signal_name = name.to_string();
+
+        // for indice in indices {
+        //     signal_name.push_str(&format!("_{}", indice));
+        // }
+
+        let signal_id = self.declare_signal(&signal_name)?;
+
+        Ok((signal_name, signal_id))
+    }
+
     // TODO: array auto var should support multi-dimension, right now 1
     // TODO: temporary implementation, need to be reviewed
     /// Creates a unique signal for an array element based on its indices and assigns it a unique identifier.

@@ -56,11 +56,14 @@ pub fn traverse_statement(
             dimensions,
             ..
         } => {
-            // Process index in case of array
-            let dim_u32_vec: Vec<u32> = dimensions
+            // Execute the expressions and get the dimensions vec
+            // This vec will indicate the depths of the array (if any)
+            let dim_vec: Vec<u32> = dimensions
                 .iter()
                 .map(|dimension| execute_expression(ac, runtime, dimension, program_archive))
                 .collect::<Result<Vec<u32>, _>>()?;
+
+            debug!("Dim vec {:?}", dim_vec);
 
             match xtype {
                 VariableType::Component => {
@@ -70,9 +73,9 @@ pub fn traverse_statement(
                     // However at the declaration we should have all the arguments
                     traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec)
                 }
-                VariableType::Var => traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec),
+                VariableType::Var => traverse_declaration(ac, runtime, name, xtype, &dim_vec),
                 VariableType::Signal(_, _) => {
-                    traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec)
+                    traverse_declaration(ac, runtime, name, xtype, &dim_vec)
                 }
                 _ => unimplemented!(),
             }
@@ -167,7 +170,7 @@ pub fn traverse_statement(
     }
 }
 
-/// Process an expression and returns a name of a variable that contains the result.
+/// Process an expression and returns a name of a data item that contains the result.
 pub fn traverse_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
@@ -331,10 +334,10 @@ pub fn traverse_declaration(
     runtime: &mut Runtime,
     var_name: &str,
     xtype: &VariableType,
-    dim_u32_vec: &[u32],
+    dim_vec: &[u32],
 ) -> Result<(), ProgramError> {
     let ctx = runtime.get_current_context()?;
-    let is_array = !dim_u32_vec.is_empty();
+    let is_array = !dim_vec.is_empty();
 
     match xtype {
         VariableType::Signal(_, _) => {
