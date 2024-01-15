@@ -112,6 +112,8 @@ pub fn traverse_statement(
         } => {
             debug!("Substitution for {}", var.to_string());
             let mut name_access = String::from(var);
+
+            //TODO: here we can have component and array access at the same time
             for a in access.iter() {
                 match a {
                     Access::ArrayAccess(expr) => {
@@ -121,8 +123,9 @@ pub fn traverse_statement(
                         name_access.push_str(&dim_u32_str);
                         debug!("Sub Change var name to {}", name_access);
                     }
-                    Access::ComponentAccess(_) => {
-                        todo!("Sub Component access not handled");
+                    Access::ComponentAccess(_name) => {
+                        debug!("Sub Component access found {}", _name);
+                        
                     }
                 }
             }
