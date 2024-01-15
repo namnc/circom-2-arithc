@@ -75,6 +75,15 @@ impl Runtime {
             .ok_or(RuntimeError::ContextNotFound)
     }
 
+    /// Pop context and return to the caller
+    pub fn pop_context(&mut self) -> Result<&mut Context, RuntimeError> {
+        let id = self.current_ctx;
+        self.ctx_stack
+            .iter_mut()
+            .find(|ctx| ctx.id == id)
+            .ok_or(RuntimeError::ContextNotFound)
+    }
+
     /// Retrieves the current runtime context.
     pub fn get_current_context(&mut self) -> Result<&mut Context, RuntimeError> {
         self.get_context(self.current_ctx)

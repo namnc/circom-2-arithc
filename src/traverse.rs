@@ -139,9 +139,12 @@ pub fn traverse_statement(
             Ok(())
         }
         Statement::Return { value, .. } => {
-            println!("Return expression found");
+            debug!("Return expression found");
             let res = execute_expression(ac, runtime, value, program_archive)?;
-            println!("RETURN {}", res);
+            debug!("RETURN {}", res);
+            let ctx = runtime.get_current_context()?;
+            ctx.declare_variable("RETURN");
+            ctx.set_data_item("RETURN", DataContent::Scalar(res));
             Ok(())
         }
         Statement::Block { stmts, .. } => {
@@ -230,7 +233,8 @@ pub fn traverse_expression(
 
             // Now we put args to use
             for (_arg_name, arg_value) in args_map.iter() {
-                ctx.set_data_item(_arg_name, DataContent::Scalar(*(arg_value)));
+                let _ = ctx.declare_variable(&_arg_name);
+                let _ = ctx.set_data_item(_arg_name, DataContent::Scalar(*(arg_value)));
             }
 
             let _body = if functions.contains(id) {
@@ -241,7 +245,16 @@ pub fn traverse_expression(
             
             traverse_sequence_of_statements(ac, runtime, _body, _program_archive, true)?;
 
-            Ok(id.to_string())
+            if functions.contains(id) {
+                let ret = ctx.get_data_item("RETURN").unwrap().get_u32().unwrap();
+                runtime.pop_context();
+                Ok(ret.to_string())
+            } else {
+                runtime.pop_context();
+                Ok(id.to_string())
+            }
+
+            
         }
         _ => unimplemented!("Expression not implemented"),
     }
