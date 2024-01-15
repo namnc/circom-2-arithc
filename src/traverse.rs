@@ -64,7 +64,11 @@ pub fn traverse_statement(
 
             match xtype {
                 VariableType::Component => {
-                    todo!("Component declaration not handled")
+                    // Here when a component is declared it will not be instantiated
+                    // Instead we need to keep track of the inputs and outputs signals of the component
+                    // And when the output signals are all wired we instantiated the component, i.e. do the traverse of the template statements
+                    // However at the declaration we should have all the arguments
+                    traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec)
                 }
                 VariableType::Var => traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec),
                 VariableType::Signal(_, _) => {
@@ -133,6 +137,12 @@ pub fn traverse_statement(
                     }
                     DataType::Variable => {
                         execute_statement(ac, runtime, stmt, program_archive)?;
+                    }
+                    DataType::Component => {
+                        //Here we deal with wiring
+                        //lhs is a component wire and rhs is a signal
+
+                        // we also check to complete template if all wiring is done
                     }
                 }
             }
@@ -246,11 +256,11 @@ pub fn traverse_expression(
             traverse_sequence_of_statements(ac, runtime, _body, _program_archive, true)?;
 
             if functions.contains(id) {
-                let ret = ctx.get_data_item("RETURN").unwrap().get_u32().unwrap();
-                runtime.pop_context();
-                Ok(ret.to_string())
+                // let ret = ctx.get_data_item("RETURN").unwrap().get_u32().unwrap();
+                // runtime.pop_context();
+                Ok(id.to_string())
             } else {
-                runtime.pop_context();
+                // runtime.pop_context();
                 Ok(id.to_string())
             }
 
@@ -342,6 +352,18 @@ pub fn traverse_declaration(
                 }
             } else {
                 ctx.declare_variable(var_name)?;
+            }
+        }
+        VariableType::Component => {
+            // Here now we have component with empty wiring
+            if is_array {
+                for &i in dim_u32_vec {
+                    let (name, id) = ctx.declare_component_array(var_name, vec![i])?;
+                    ac.add_var(id, &name);
+                }
+            } else {
+                let signal_id = ctx.declare_component(var_name)?;
+                ac.add_var(signal_id, var_name);
             }
         }
         _ => unimplemented!(),

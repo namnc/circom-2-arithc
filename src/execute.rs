@@ -190,7 +190,7 @@ pub fn execute_expression(
             if functions.contains(id) {
                 // let ret = ctx.get_data_item("RETURN").unwrap().get_u32().unwrap();
                 // runtime.pop_context();
-                Ok(ret)
+                Ok(0)
             } else {
                 // runtime.pop_context();
                 Ok(0)

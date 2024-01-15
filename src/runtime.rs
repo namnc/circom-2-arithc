@@ -207,6 +207,20 @@ impl Context {
         }
     }
 
+    /// Declares a new component.
+    pub fn declare_component(&mut self, name: &str) -> Result<u32, RuntimeError> {
+        debug!("Declaring component {}", name);
+        let component_id = self.generate_id();
+        if self.values.contains_key(name) {
+            Err(RuntimeError::DataItemAlreadyDeclared)
+        } else {
+            self.values
+                .insert(name.to_string(), DataItem::new(DataType::Component));
+            self.set_data_item(name, DataContent::Wiring(HashMap::new()))?;
+            Ok(component_id)
+        }
+    }
+
     /// Declares a new const value as a signal.
     /// Sets the value of the signal to the given value. This being the signal id.
     pub fn declare_const(&mut self, value: u32) -> Result<(), RuntimeError> {
@@ -282,6 +296,25 @@ impl Context {
         Ok((signal_name, signal_id))
     }
 
+    // TODO: array auto var should support multi-dimension, right now 1
+    // TODO: temporary implementation, need to be reviewed
+    /// Creates a unique signal for an array element based on its indices and assigns it a unique identifier.
+    pub fn declare_component_array(
+        &mut self,
+        name: &str,
+        indices: Vec<u32>,
+    ) -> Result<(String, u32), RuntimeError> {
+        let mut component_name = name.to_string();
+
+        for indice in indices {
+            component_name.push_str(&format!("_{}", indice));
+        }
+
+        let component_id = self.declare_component(&component_name)?;
+
+        Ok((component_name, component_id))
+    }
+
     /// Creates a unique variable for an array element based on its indices and assigns it a unique identifier.
     pub fn declare_var_array(&mut self, name: &str, indices: Vec<u32>) -> Result<(), RuntimeError> {
         let mut var_name = name.to_string();
@@ -292,6 +325,8 @@ impl Context {
 
         self.declare_variable(name)
     }
+
+    
 }
 
 /// Data type
@@ -299,12 +334,14 @@ impl Context {
 pub enum DataType {
     Signal,
     Variable,
+    Component
 }
 
 /// Data content
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DataContent {
     Scalar(u32),
+    Wiring(HashMap<String, String>),
     Array(Vec<DataContent>),
 }
 
@@ -351,6 +388,18 @@ impl DataItem {
         match &self.content {
             Some(DataContent::Scalar(value)) => Ok(*value),
             Some(DataContent::Array(_)) => Err(RuntimeError::NotAScalar),
+            Some(DataContent::Wiring(_)) => Err(RuntimeError::NotAScalar),
+            None => Err(RuntimeError::EmptyDataItem),
+        }
+    }
+
+    /// Gets the name value if the content is a wiring.
+    /// Returns an error if the content is not a wiring or not set.
+    pub fn get_wiring(&self) -> Result<HashMap<String, String>, RuntimeError> {
+        match &self.content {
+            Some(DataContent::Scalar(_)) => Err(RuntimeError::NotAWiring),
+            Some(DataContent::Array(_)) => Err(RuntimeError::NotAWiring),
+            Some(DataContent::Wiring(value)) => Ok(value.clone()),
             None => Err(RuntimeError::EmptyDataItem),
         }
     }
@@ -363,6 +412,7 @@ impl DataItem {
                 array.get(index).ok_or(RuntimeError::IndexOutOfBounds)
             }
             Some(DataContent::Scalar(_)) => Err(RuntimeError::NotAnArray),
+            Some(DataContent::Wiring(_)) => Err(RuntimeError::NotAnArray),
             None => Err(RuntimeError::EmptyDataItem),
         }
     }
@@ -399,6 +449,8 @@ pub enum RuntimeError {
     NotAnArray,
     #[error("Data Item content is not a scalar")]
     NotAScalar,
+    #[error("Data Item content is not a component wiring")]
+    NotAWiring,
     #[error("Cannot modify an already set signal")]
     SignalAlreadySet,
 }
