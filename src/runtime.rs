@@ -2,8 +2,10 @@
 //!
 //! This module manages the main runtime, keeping track of the multiple contexts and data items in the program.
 
+use circom_program_structure::ast::VariableType;
 use log::debug;
-use std::collections::HashMap;
+use rand::{thread_rng, Rng};
+use std::collections::{hash_map::Entry, HashMap};
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -27,7 +29,7 @@ impl Runtime {
     pub fn new() -> Result<Self, RuntimeError> {
         debug!("New runtime");
         Ok(Self {
-            ctx_stack: vec![Context::new(0, 0, HashMap::new())?],
+            ctx_stack: vec![Context::new(0, 0, HashMap::new())],
             current_ctx: 0,
             last_ctx: 0,
         })
@@ -46,7 +48,7 @@ impl Runtime {
             ContextOrigin::Loop => self.get_current_context()?.values.clone(),
             ContextOrigin::Block => self.get_current_context()?.values.clone(),
         };
-        let new_context = Context::new(new_id, self.current_ctx, values)?;
+        let new_context = Context::new(new_id, self.current_ctx, values);
 
         // NOTE: above could be the simplest way to do what I wrote below. We just let Call be with an empty map and there will be declaration and initialization coming in from operations code.
         // TODO: we might want to distiguish the context creation reason here
@@ -108,48 +110,44 @@ pub struct Context {
 
 impl Context {
     /// Constructs a new Context.
-    pub fn new(
-        id: u32,
-        caller_id: u32,
-        values: HashMap<String, DataItem>,
-    ) -> Result<Self, RuntimeError> {
+    pub fn new(id: u32, caller_id: u32, values: HashMap<String, DataItem>) -> Self {
         debug!("New context - id: {}", id);
-        Ok(Self {
+        Self {
             id,
             caller_id,
             values,
-        })
+        }
     }
 
-    /// Declares a new data item in the context with the given name and data type.
-    /// Returns an error if the data item is already declared.
+    /// Declares a new data item.
     pub fn declare_data_item(
         &mut self,
         name: &str,
         data_type: DataType,
     ) -> Result<(), RuntimeError> {
-        debug!("Declaring data item {} - {:?}", name, data_type);
-        if self.values.contains_key(name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(name.to_string(), DataItem::new(data_type));
-            Ok(())
-        }
+        self.declare_item(name, DataItem::new(data_type))
     }
 
-    /// Assigns a value to a data item in the context.
-    /// Returns an error if the data item is not found.
+    /// Sets the content of a data item.    
     pub fn set_data_item(&mut self, name: &str, content: DataContent) -> Result<(), RuntimeError> {
-        debug!("Setting data item {} - {:?} ", name, content);
-        match self.values.get_mut(name) {
-            Some(data_item) => data_item.set_content(content),
-            None => Err(RuntimeError::DataItemNotDeclared),
-        }
+        debug!("Setting data item {} - {:?}", name, content);
+        self.values
+            .get_mut(name)
+            .ok_or(RuntimeError::DataItemNotDeclared)?
+            .set_content(content)
     }
 
-    /// Retrieves a reference to a data item by name.
-    /// Returns an error if the data item is not found.
+    /// Clears the content of a data item.
+    pub fn clear_data_item(&mut self, name: &str) -> Result<(), RuntimeError> {
+        debug!("Clearing data item {}", name);
+        self.values
+            .get_mut(name)
+            .ok_or(RuntimeError::DataItemNotDeclared)?
+            .clear_content();
+        Ok(())
+    }
+
+    /// Gets the content of a data item.
     pub fn get_data_item(&self, name: &str) -> Result<&DataItem, RuntimeError> {
         debug!("Getting data item {}", name);
         self.values
@@ -158,193 +156,109 @@ impl Context {
     }
 
     /// Removes a data item from the context.
-    /// Returns an error if the data item is not found.
     pub fn remove_data_item(&mut self, name: &str) -> Result<(), RuntimeError> {
         debug!("Removing data item {}", name);
-        if self.values.remove(name).is_some() {
-            Ok(())
-        } else {
-            Err(RuntimeError::DataItemNotDeclared)
-        }
-    }
-
-    /// Clears the content of a data item in the context.
-    /// Returns an error if the data item is not found.
-    pub fn clear_data_item(&mut self, name: &str) -> Result<(), RuntimeError> {
-        debug!("Clearing data item {}", name);
-        match self.values.get_mut(name) {
-            Some(data_item) => {
-                data_item.clear_content();
-                Ok(())
-            }
-            None => Err(RuntimeError::DataItemNotDeclared),
-        }
+        self.values
+            .remove(name)
+            .map(|_| ())
+            .ok_or(RuntimeError::DataItemNotDeclared)
     }
 
     /// Declares a new variable.
     pub fn declare_variable(&mut self, name: &str) -> Result<(), RuntimeError> {
-        debug!("Declaring variable {}", name);
-        if self.values.contains_key(name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(name.to_string(), DataItem::new(DataType::Variable));
-            Ok(())
-        }
+        self.declare_item(name, DataItem::new(DataType::Variable))
     }
 
     /// Declares a new signal.
     pub fn declare_signal(&mut self, name: &str) -> Result<u32, RuntimeError> {
         debug!("Declaring signal {}", name);
         let signal_id = self.generate_id();
-        if self.values.contains_key(name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(name.to_string(), DataItem::new(DataType::Signal));
-            self.set_data_item(name, DataContent::Scalar(signal_id))?;
-            Ok(signal_id)
-        }
+        self.declare_item(name, DataItem::new(DataType::Signal))?;
+        self.set_data_item(name, DataContent::Scalar(signal_id))?;
+        Ok(signal_id)
     }
 
     /// Declares a new component.
     pub fn declare_component(&mut self, name: &str) -> Result<u32, RuntimeError> {
         debug!("Declaring component {}", name);
         let component_id = self.generate_id();
-        if self.values.contains_key(name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(name.to_string(), DataItem::new(DataType::Component));
-            self.set_data_item(name, DataContent::Wiring(HashMap::new()))?;
-            Ok(component_id)
-        }
+        self.declare_item(name, DataItem::new(DataType::Component))?;
+        self.set_data_item(name, DataContent::Wiring(HashMap::new()))?;
+        Ok(component_id)
     }
 
-    /// Declares a new const value as a signal.
-    /// Sets the value of the signal to the given value. This being the signal id.
+    /// Declares a new constant.
     pub fn declare_const(&mut self, value: u32) -> Result<(), RuntimeError> {
         debug!("Declaring const {:?}", value);
         let const_name = value.to_string();
-        if self.values.contains_key(&const_name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(const_name.clone(), DataItem::new(DataType::Signal));
-            self.set_data_item(&const_name, DataContent::Scalar(value))?;
-            Ok(())
-        }
+        self.declare_item(&const_name, DataItem::new(DataType::Signal))?;
+        self.set_data_item(&const_name, DataContent::Scalar(value))
     }
 
-    /// Declares a new auto generated variable.
+    /// Declares an auto generated variable.
     pub fn declare_auto_var(&mut self) -> Result<String, RuntimeError> {
         let auto_name = format!("auto_var_{}", self.generate_id());
         debug!("Declaring auto generated variable {}", auto_name);
-        if self.values.contains_key(&auto_name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(auto_name.clone(), DataItem::new(DataType::Variable));
-            Ok(auto_name)
-        }
+        self.declare_item(&auto_name, DataItem::new(DataType::Variable))?;
+        Ok(auto_name)
     }
 
-    /// Declares a new auto generated signal.
+    /// Declares an auto generated signal.
     pub fn declare_auto_signal(&mut self) -> Result<String, RuntimeError> {
         let signal_id = self.generate_id();
         let auto_name = format!("auto_signal_{}", signal_id);
         debug!("Declaring auto generated signal {}", auto_name);
-        if self.values.contains_key(&auto_name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(auto_name.to_string(), DataItem::new(DataType::Signal));
-            self.set_data_item(&auto_name, DataContent::Scalar(signal_id))?;
-            Ok(auto_name)
-        }
+        self.declare_item(&auto_name, DataItem::new(DataType::Signal))?;
+        self.set_data_item(&auto_name, DataContent::Scalar(signal_id))?;
+        Ok(auto_name)
     }
 
-    /// Gets the value of a const signal.
+    /// Declares an array of signals, variables or components.
+    pub fn declare_array(
+        &mut self,
+        name: &str,
+        data_type: DataType,
+        dimensions: Vec<u32>,
+    ) -> Result<(), RuntimeError> {
+        debug!("Declaring array: {} - {:?}", name, data_type);
+        self.declare_item(name, DataItem::new(data_type.clone()))?;
+
+        if dimensions.is_empty() {
+            return Err(RuntimeError::NotAnArray);
+        }
+
+        let mut array: Vec<DataContent> = Vec::new();
+
+        for dimension in dimensions {
+            if dimension == 0 {
+                return Err(RuntimeError::IndexOutOfBounds);
+            }
+        }
+
+        self.set_data_item(name, DataContent::Array(array))
+    }
+
+    /// Gets the value of a constant.
     pub fn get_const(&self, value: u32) -> Result<&DataItem, RuntimeError> {
         let const_name = value.to_string();
         self.get_data_item(&const_name)
     }
 
-    // DataItem id generation needs to be reviewed. There could be collisions between
-    // different contexts due to constant signals haivng arbitrary values.
-    /// Generates a unique ID for a DataItem based on the context. (Temporary implementation)
-    pub fn generate_id(&mut self) -> u32 {
-        self.values.len() as u32 * 2 + 1000
+    /// Generates a random u32 ID.
+    fn generate_id(&self) -> u32 {
+        thread_rng().gen()
     }
 
-    /// Declares a multidimension data item.
-    pub fn declare_multidimension_data_item(
-        &mut self,
-        name: &str,
-        data_type: DataType,
-        dimensions: Vec<u32>,
-    ) -> Result<(String, u32), RuntimeError> {
-        let mut signal_name = name.to_string();
-
-        // for indice in indices {
-        //     signal_name.push_str(&format!("_{}", indice));
-        // }
-
-        let signal_id = self.declare_signal(&signal_name)?;
-
-        Ok((signal_name, signal_id))
-    }
-
-    // TODO: array auto var should support multi-dimension, right now 1
-    // TODO: temporary implementation, need to be reviewed
-    /// Creates a unique signal for an array element based on its indices and assigns it a unique identifier.
-    pub fn declare_signal_array(
-        &mut self,
-        name: &str,
-        indices: Vec<u32>,
-    ) -> Result<(String, u32), RuntimeError> {
-        let mut signal_name = name.to_string();
-
-        for indice in indices {
-            signal_name.push_str(&format!("_{}", indice));
+    /// Declares a new item.
+    pub fn declare_item(&mut self, name: &str, data_item: DataItem) -> Result<(), RuntimeError> {
+        match self.values.entry(name.to_string()) {
+            Entry::Occupied(_) => Err(RuntimeError::DataItemAlreadyDeclared),
+            Entry::Vacant(entry) => {
+                entry.insert(data_item);
+                Ok(())
+            }
         }
-
-        let signal_id = self.declare_signal(&signal_name)?;
-
-        Ok((signal_name, signal_id))
     }
-
-    // TODO: array auto var should support multi-dimension, right now 1
-    // TODO: temporary implementation, need to be reviewed
-    /// Creates a unique signal for an array element based on its indices and assigns it a unique identifier.
-    pub fn declare_component_array(
-        &mut self,
-        name: &str,
-        indices: Vec<u32>,
-    ) -> Result<(String, u32), RuntimeError> {
-        let mut component_name = name.to_string();
-
-        for indice in indices {
-            component_name.push_str(&format!("_{}", indice));
-        }
-
-        let component_id = self.declare_component(&component_name)?;
-
-        Ok((component_name, component_id))
-    }
-
-    /// Creates a unique variable for an array element based on its indices and assigns it a unique identifier.
-    pub fn declare_var_array(&mut self, name: &str, indices: Vec<u32>) -> Result<(), RuntimeError> {
-        let mut var_name = name.to_string();
-
-        for indice in indices {
-            var_name.push_str(&format!("_{}", indice));
-        }
-
-        self.declare_variable(name)
-    }
-
-    
 }
 
 /// Data type
@@ -352,7 +266,19 @@ impl Context {
 pub enum DataType {
     Signal,
     Variable,
-    Component
+    Component,
+}
+
+impl TryFrom<&VariableType> for DataType {
+    type Error = RuntimeError;
+    fn try_from(t: &VariableType) -> Result<Self, Self::Error> {
+        match t {
+            VariableType::Signal(..) => Ok(DataType::Signal),
+            VariableType::Var => Ok(DataType::Variable),
+            VariableType::Component => Ok(DataType::Component),
+            _ => Err(RuntimeError::UnsupportedVariableType),
+        }
+    }
 }
 
 /// Data content
@@ -471,4 +397,6 @@ pub enum RuntimeError {
     NotAWiring,
     #[error("Cannot modify an already set signal")]
     SignalAlreadySet,
+    #[error("Unsuported variable type")]
+    UnsupportedVariableType,
 }

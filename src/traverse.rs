@@ -9,10 +9,10 @@ use std::collections::HashMap;
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::execute::{execute_expression, execute_infix_op, execute_statement};
 use crate::program::ProgramError;
-use crate::runtime::{DataContent, DataType, Runtime, ContextOrigin};
+use crate::runtime::{ContextOrigin, DataContent, DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
-    Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
+    Access, Expression, ExpressionInfixOpcode, Meta, Statement, VariableType,
 };
 use circom_program_structure::program_archive::ProgramArchive;
 use log::debug;
@@ -51,35 +51,21 @@ pub fn traverse_statement(
             Ok(())
         }
         Statement::Declaration {
+            meta,
             xtype,
             name,
             dimensions,
-            ..
-        } => {
-            // Execute the expressions and get the dimensions vec
-            // This vec will indicate the depths of the array (if any)
-            let dim_vec: Vec<u32> = dimensions
-                .iter()
-                .map(|dimension| execute_expression(ac, runtime, dimension, program_archive))
-                .collect::<Result<Vec<u32>, _>>()?;
-
-            debug!("Dim vec {:?}", dim_vec);
-
-            match xtype {
-                VariableType::Component => {
-                    // Here when a component is declared it will not be instantiated
-                    // Instead we need to keep track of the inputs and outputs signals of the component
-                    // And when the output signals are all wired we instantiated the component, i.e. do the traverse of the template statements
-                    // However at the declaration we should have all the arguments
-                    traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec)
-                }
-                VariableType::Var => traverse_declaration(ac, runtime, name, xtype, &dim_vec),
-                VariableType::Signal(_, _) => {
-                    traverse_declaration(ac, runtime, name, xtype, &dim_vec)
-                }
-                _ => unimplemented!(),
-            }
-        }
+            is_constant,
+        } => handle_declaration(
+            runtime,
+            ac,
+            program_archive,
+            meta,
+            xtype,
+            name,
+            dimensions,
+            is_constant,
+        ),
         Statement::While { cond, stmt, .. } => {
             loop {
                 let result = execute_expression(ac, runtime, cond, program_archive)?;
@@ -128,7 +114,6 @@ pub fn traverse_statement(
                     }
                     Access::ComponentAccess(_name) => {
                         debug!("Sub Component access found {}", _name);
-                        
                     }
                 }
             }
@@ -159,8 +144,8 @@ pub fn traverse_statement(
             let res = execute_expression(ac, runtime, value, program_archive)?;
             debug!("RETURN {}", res);
             let ctx = runtime.get_current_context()?;
-            ctx.declare_variable("RETURN");
-            ctx.set_data_item("RETURN", DataContent::Scalar(res));
+            ctx.declare_variable("RETURN")?;
+            ctx.set_data_item("RETURN", DataContent::Scalar(res))?;
             Ok(())
         }
         Statement::Block { stmts, .. } => {
@@ -258,7 +243,7 @@ pub fn traverse_expression(
             } else {
                 _program_archive.get_template_data(id).get_body_as_vec()
             };
-            
+
             traverse_sequence_of_statements(ac, runtime, _body, _program_archive, true)?;
 
             if functions.contains(id) {
@@ -269,8 +254,6 @@ pub fn traverse_expression(
                 // runtime.pop_context();
                 Ok(id.to_string())
             }
-
-            
         }
         _ => unimplemented!("Expression not implemented"),
     }
@@ -329,50 +312,32 @@ pub fn traverse_infix_op(
 }
 
 /// Handles declaration of signals and variables
-pub fn traverse_declaration(
-    ac: &mut ArithmeticCircuit,
+pub fn handle_declaration(
     runtime: &mut Runtime,
-    var_name: &str,
+    ac: &mut ArithmeticCircuit,
+    program_archive: &ProgramArchive,
+    meta: &Meta,
     xtype: &VariableType,
-    dim_vec: &[u32],
+    name: &str,
+    dimensions: &[Expression],
+    is_constant: &bool,
 ) -> Result<(), ProgramError> {
+    let dim_vec = dimensions
+        .iter()
+        .map(|exp| execute_expression(ac, runtime, exp, program_archive))
+        .collect::<Result<Vec<u32>, _>>()?;
     let ctx = runtime.get_current_context()?;
-    let is_array = !dim_vec.is_empty();
+    let is_array = !dimensions.is_empty();
 
-    match xtype {
-        VariableType::Signal(_, _) => {
-            if is_array {
-                for &i in dim_u32_vec {
-                    let (name, id) = ctx.declare_signal_array(var_name, vec![i])?;
-                    ac.add_var(id, &name);
-                }
-            } else {
-                let signal_id = ctx.declare_signal(var_name)?;
-                ac.add_var(signal_id, var_name);
-            }
-        }
-        VariableType::Var => {
-            if is_array {
-                for &i in dim_u32_vec {
-                    ctx.declare_var_array(var_name, vec![i])?;
-                }
-            } else {
-                ctx.declare_variable(var_name)?;
-            }
-        }
-        VariableType::Component => {
-            // Here now we have component with empty wiring
-            if is_array {
-                for &i in dim_u32_vec {
-                    let (name, id) = ctx.declare_component_array(var_name, vec![i])?;
-                    ac.add_var(id, &name);
-                }
-            } else {
-                let signal_id = ctx.declare_component(var_name)?;
-                ac.add_var(signal_id, var_name);
-            }
-        }
-        _ => unimplemented!(),
+    println!("meta: {:?}", meta.elem_id);
+    println!("is_constant: {:?}", is_constant);
+
+    if is_array {
+        ctx.declare_array(name, DataType::try_from(xtype)?, dim_vec)?;
+        // TODO: Add signals and wires to the AC
+    } else {
+        ctx.declare_data_item(name, DataType::try_from(xtype)?)?;
+        // TODO: Add signals and wires to the AC
     }
 
     Ok(())

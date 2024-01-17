@@ -29,6 +29,7 @@ circom-type_analysis =  { git = "https://github.com/iden3/circom", package = "ty
 
 # MPZ
 mpz-circuits =  { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits"}
+rand = "0.8.5"
 
 [[bin]]
 name="circom"
