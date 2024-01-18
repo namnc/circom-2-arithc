@@ -5,7 +5,7 @@
 use circom_program_structure::ast::VariableType;
 use log::debug;
 use rand::{thread_rng, Rng};
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -15,6 +15,33 @@ pub enum ContextOrigin {
     Branch,
     Loop,
     Block,
+}
+
+/// Data type
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DataType {
+    Signal,
+    Variable,
+    Component,
+}
+
+impl TryFrom<&VariableType> for DataType {
+    type Error = RuntimeError;
+    fn try_from(t: &VariableType) -> Result<Self, Self::Error> {
+        match t {
+            VariableType::Signal(..) => Ok(DataType::Signal),
+            VariableType::Var => Ok(DataType::Variable),
+            VariableType::Component => Ok(DataType::Component),
+            _ => Err(RuntimeError::UnsupportedVariableType),
+        }
+    }
+}
+
+/// Data content
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DataContent {
+    Scalar(u32),
+    Array(Vec<DataContent>),
 }
 
 /// Runtime - manages the context stack and variable tracking.
@@ -29,7 +56,7 @@ impl Runtime {
     pub fn new() -> Result<Self, RuntimeError> {
         debug!("New runtime");
         Ok(Self {
-            ctx_stack: vec![Context::new(0, 0, HashMap::new())],
+            ctx_stack: vec![Context::new(0, 0)],
             current_ctx: 0,
             last_ctx: 0,
         })
@@ -40,15 +67,15 @@ impl Runtime {
         debug!("New context - origin: {:?}", origin);
         // Generate a unique ID for the new context
         let new_id = self.generate_context_id();
+        let current_context = self.get_current_context()?;
 
         // Create the new context using data from the caller context
-        let values = match origin {
-            ContextOrigin::Call => HashMap::new(),
-            ContextOrigin::Branch => self.get_current_context()?.values.clone(),
-            ContextOrigin::Loop => self.get_current_context()?.values.clone(),
-            ContextOrigin::Block => self.get_current_context()?.values.clone(),
+        let new_context = match origin {
+            ContextOrigin::Call => Context::new(new_id, self.current_ctx),
+            ContextOrigin::Branch => current_context.new_child(new_id),
+            ContextOrigin::Loop => current_context.new_child(new_id),
+            ContextOrigin::Block => current_context.new_child(new_id),
         };
-        let new_context = Context::new(new_id, self.current_ctx, values);
 
         // NOTE: above could be the simplest way to do what I wrote below. We just let Call be with an empty map and there will be declaration and initialization coming in from operations code.
         // TODO: we might want to distiguish the context creation reason here
@@ -93,8 +120,7 @@ impl Runtime {
 
     /// Generates a unique context ID.
     fn generate_context_id(&mut self) -> u32 {
-        self.last_ctx += 1;
-        self.last_ctx
+        thread_rng().gen()
     }
 }
 
@@ -103,125 +129,117 @@ impl Runtime {
 #[derive(Clone)]
 pub struct Context {
     id: u32,
-    #[allow(dead_code)]
     caller_id: u32,
-    values: HashMap<String, DataItem>, // Name -> Value
+    names: HashSet<String>,
+    variables: HashMap<String, Variable>,
+    signals: HashMap<String, Signal>,
+    components: HashMap<String, Component>,
 }
 
 impl Context {
     /// Constructs a new Context.
-    pub fn new(id: u32, caller_id: u32, values: HashMap<String, DataItem>) -> Self {
-        debug!("New context - id: {}", id);
+    pub fn new(id: u32, caller_id: u32) -> Self {
         Self {
             id,
             caller_id,
-            values,
+            names: HashSet::new(),
+            variables: HashMap::new(),
+            signals: HashMap::new(),
+            components: HashMap::new(),
         }
     }
 
-    /// Declares a new data item.
-    pub fn declare_data_item(
-        &mut self,
-        name: &str,
-        data_type: DataType,
-    ) -> Result<(), RuntimeError> {
-        self.declare_item(name, DataItem::new(data_type))
+    /// Returns a contexts that inherits from the current context.
+    pub fn new_child(&self, id: u32) -> Self {
+        Self {
+            id,
+            caller_id: self.id,
+            names: self.names,
+            variables: self.variables,
+            signals: self.signals,
+            components: self.components,
+        }
     }
 
-    /// Sets the content of a data item.    
-    pub fn set_data_item(&mut self, name: &str, content: DataContent) -> Result<(), RuntimeError> {
-        debug!("Setting data item {} - {:?}", name, content);
-        self.values
-            .get_mut(name)
-            .ok_or(RuntimeError::DataItemNotDeclared)?
-            .set_content(content)
+    /// Declares a new item of the specified type with the given name.
+    pub fn declare_item(&mut self, name: &str, data_type: DataType) -> Result<(), RuntimeError> {
+        match data_type {
+            DataType::Variable => self.declare_variable(name),
+            DataType::Signal => self.declare_signal(name),
+            DataType::Component => self.declare_component(name),
+        }
     }
 
-    /// Clears the content of a data item.
-    pub fn clear_data_item(&mut self, name: &str) -> Result<(), RuntimeError> {
-        debug!("Clearing data item {}", name);
-        self.values
-            .get_mut(name)
-            .ok_or(RuntimeError::DataItemNotDeclared)?
-            .clear_content();
-        Ok(())
-    }
-
-    /// Gets the content of a data item.
-    pub fn get_data_item(&self, name: &str) -> Result<&DataItem, RuntimeError> {
-        debug!("Getting data item {}", name);
-        self.values
-            .get(name)
-            .ok_or(RuntimeError::DataItemNotDeclared)
-    }
-
-    /// Removes a data item from the context.
-    pub fn remove_data_item(&mut self, name: &str) -> Result<(), RuntimeError> {
-        debug!("Removing data item {}", name);
-        self.values
-            .remove(name)
-            .map(|_| ())
-            .ok_or(RuntimeError::DataItemNotDeclared)
+    /// Declares a new item with a random name.
+    pub fn declare_random_item(&mut self, data_type: DataType) -> Result<String, RuntimeError> {
+        let name = format!("item_{}", self.generate_id());
+        self.declare_item(&name, data_type)?;
+        Ok(name)
     }
 
     /// Declares a new variable.
     pub fn declare_variable(&mut self, name: &str) -> Result<(), RuntimeError> {
-        self.declare_item(name, DataItem::new(DataType::Variable))
+        self.add_name(name)?;
+        self.variables
+            .insert(name.to_string(), Variable::new(None, false));
+        Ok(())
+    }
+
+    /// Sets the content of a variable.
+    pub fn set_variable(&mut self, name: &str, content: DataContent) -> Result<(), RuntimeError> {
+        let variable = self
+            .variables
+            .get_mut(name)
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+        variable.set(content)?;
+        Ok(())
+    }
+
+    /// Gets the content of a variable.
+    pub fn get_variable(&self, name: &str) -> Result<&Variable, RuntimeError> {
+        self.variables
+            .get(name)
+            .ok_or(RuntimeError::ItemNotDeclared)
     }
 
     /// Declares a new signal.
-    pub fn declare_signal(&mut self, name: &str) -> Result<u32, RuntimeError> {
-        debug!("Declaring signal {}", name);
+    pub fn declare_signal(&mut self, name: &str) -> Result<(), RuntimeError> {
+        self.add_name(name)?;
         let signal_id = self.generate_id();
-        self.declare_item(name, DataItem::new(DataType::Signal))?;
-        self.set_data_item(name, DataContent::Scalar(signal_id))?;
-        Ok(signal_id)
+        self.signals.insert(
+            name.to_string(),
+            Signal::new(DataContent::Scalar(signal_id)),
+        );
+        Ok(())
+    }
+
+    /// Gets a signal.
+    pub fn get_signal(&self, name: &str) -> Result<&Signal, RuntimeError> {
+        self.signals.get(name).ok_or(RuntimeError::ItemNotDeclared)
     }
 
     /// Declares a new component.
-    pub fn declare_component(&mut self, name: &str) -> Result<u32, RuntimeError> {
-        debug!("Declaring component {}", name);
-        let component_id = self.generate_id();
-        self.declare_item(name, DataItem::new(DataType::Component))?;
-        self.set_data_item(name, DataContent::Wiring(HashMap::new()))?;
-        Ok(component_id)
+    pub fn declare_component(&mut self, name: &str) -> Result<(), RuntimeError> {
+        self.add_name(name)?;
+        self.components.insert(name.to_string(), Component::new());
+        Ok(())
     }
 
-    /// Declares a new constant.
-    pub fn declare_const(&mut self, value: u32) -> Result<(), RuntimeError> {
-        debug!("Declaring const {:?}", value);
-        let const_name = value.to_string();
-        self.declare_item(&const_name, DataItem::new(DataType::Signal))?;
-        self.set_data_item(&const_name, DataContent::Scalar(value))
+    /// Gets a component.
+    pub fn get_component(&self, name: &str) -> Result<&Component, RuntimeError> {
+        self.components
+            .get(name)
+            .ok_or(RuntimeError::ItemNotDeclared)
     }
 
-    /// Declares an auto generated variable.
-    pub fn declare_auto_var(&mut self) -> Result<String, RuntimeError> {
-        let auto_name = format!("auto_var_{}", self.generate_id());
-        debug!("Declaring auto generated variable {}", auto_name);
-        self.declare_item(&auto_name, DataItem::new(DataType::Variable))?;
-        Ok(auto_name)
-    }
-
-    /// Declares an auto generated signal.
-    pub fn declare_auto_signal(&mut self) -> Result<String, RuntimeError> {
-        let signal_id = self.generate_id();
-        let auto_name = format!("auto_signal_{}", signal_id);
-        debug!("Declaring auto generated signal {}", auto_name);
-        self.declare_item(&auto_name, DataItem::new(DataType::Signal))?;
-        self.set_data_item(&auto_name, DataContent::Scalar(signal_id))?;
-        Ok(auto_name)
-    }
-
-    /// Declares an array of signals, variables or components.
+    /// Declares an array of variables or signals.
     pub fn declare_array(
         &mut self,
         name: &str,
         data_type: DataType,
         dimensions: Vec<u32>,
     ) -> Result<(), RuntimeError> {
-        debug!("Declaring array: {} - {:?}", name, data_type);
-        self.declare_item(name, DataItem::new(data_type.clone()))?;
+        self.add_name(name)?;
 
         if dimensions.is_empty() {
             return Err(RuntimeError::NotAnArray);
@@ -235,140 +253,140 @@ impl Context {
             }
         }
 
-        self.set_data_item(name, DataContent::Array(array))
+        // TODO
+        Ok(())
     }
 
-    /// Gets the value of a constant.
-    pub fn get_const(&self, value: u32) -> Result<&DataItem, RuntimeError> {
-        let const_name = value.to_string();
-        self.get_data_item(&const_name)
+    /// Returns the caller context id.
+    pub fn caller_id(&self) -> u32 {
+        self.caller_id
+    }
+
+    /// Checks if the name is already used and adds it to the names set.
+    fn add_name(&mut self, name: &str) -> Result<(), RuntimeError> {
+        if !self.names.insert(name.to_string()) {
+            Err(RuntimeError::ItemAlreadyDeclared)
+        } else {
+            Ok(())
+        }
     }
 
     /// Generates a random u32 ID.
     fn generate_id(&self) -> u32 {
         thread_rng().gen()
     }
-
-    /// Declares a new item.
-    pub fn declare_item(&mut self, name: &str, data_item: DataItem) -> Result<(), RuntimeError> {
-        match self.values.entry(name.to_string()) {
-            Entry::Occupied(_) => Err(RuntimeError::DataItemAlreadyDeclared),
-            Entry::Vacant(entry) => {
-                entry.insert(data_item);
-                Ok(())
-            }
-        }
-    }
 }
 
-/// Data type
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DataType {
-    Signal,
-    Variable,
-    Component,
+/// Signal
+#[derive(Clone, Debug)]
+struct Signal {
+    id: DataContent,
 }
 
-impl TryFrom<&VariableType> for DataType {
-    type Error = RuntimeError;
-    fn try_from(t: &VariableType) -> Result<Self, Self::Error> {
-        match t {
-            VariableType::Signal(..) => Ok(DataType::Signal),
-            VariableType::Var => Ok(DataType::Variable),
-            VariableType::Component => Ok(DataType::Component),
-            _ => Err(RuntimeError::UnsupportedVariableType),
-        }
-    }
-}
-
-/// Data content
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DataContent {
-    Scalar(u32),
-    Wiring(HashMap<String, String>),
-    Array(Vec<DataContent>),
-}
-
-/// Data item
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DataItem {
-    data_type: DataType,
-    content: Option<DataContent>,
-}
-
-impl DataItem {
-    /// Constructs a new DataItem.
-    pub fn new(data_type: DataType) -> Self {
-        Self {
-            data_type,
-            content: None,
-        }
-    }
-
-    /// Sets the content of the data item. Returns an error if the item is a signal and is already set.
-    pub fn set_content(&mut self, content: DataContent) -> Result<(), RuntimeError> {
-        match self.data_type {
-            DataType::Signal if self.content.is_some() => Err(RuntimeError::SignalAlreadySet),
-            _ => {
-                self.content = Some(content);
-                Ok(())
-            }
-        }
-    }
-
-    /// Clears the content of the data item.
-    pub fn clear_content(&mut self) {
-        self.content = None;
+impl Signal {
+    /// Constructs a new Signal.
+    pub fn new(id: DataContent) -> Self {
+        Self { id }
     }
 
     /// Gets the content of the data item.
-    pub fn get_content(&self) -> Option<&DataContent> {
-        self.content.as_ref()
-    }
-
-    /// Gets the u32 value if the content is a scalar.
-    /// Returns an error if the content is an array or not set.
-    pub fn get_u32(&self) -> Result<u32, RuntimeError> {
-        match &self.content {
-            Some(DataContent::Scalar(value)) => Ok(*value),
-            Some(DataContent::Array(_)) => Err(RuntimeError::NotAScalar),
-            Some(DataContent::Wiring(_)) => Err(RuntimeError::NotAScalar),
-            None => Err(RuntimeError::EmptyDataItem),
-        }
-    }
-
-    /// Gets the name value if the content is a wiring.
-    /// Returns an error if the content is not a wiring or not set.
-    pub fn get_wiring(&self) -> Result<HashMap<String, String>, RuntimeError> {
-        match &self.content {
-            Some(DataContent::Scalar(_)) => Err(RuntimeError::NotAWiring),
-            Some(DataContent::Array(_)) => Err(RuntimeError::NotAWiring),
-            Some(DataContent::Wiring(value)) => Ok(value.clone()),
-            None => Err(RuntimeError::EmptyDataItem),
-        }
+    pub fn get_id(&self) -> DataContent {
+        self.id.clone()
     }
 
     /// Retrieves an item from the array content at the specified index.
     /// Returns an error if the content is not an array or the index is out of bounds.
-    pub fn get_array_item(&self, index: usize) -> Result<&DataContent, RuntimeError> {
-        match &self.content {
-            Some(DataContent::Array(array)) => {
-                array.get(index).ok_or(RuntimeError::IndexOutOfBounds)
-            }
-            Some(DataContent::Scalar(_)) => Err(RuntimeError::NotAnArray),
-            Some(DataContent::Wiring(_)) => Err(RuntimeError::NotAnArray),
-            None => Err(RuntimeError::EmptyDataItem),
-        }
+    pub fn get_array_item(&self, access: &[u32]) -> Result<DataContent, RuntimeError> {
+        // TODO
+        Ok(self.id.clone())
     }
 
     /// Gets the data type of the data item.
     pub fn get_data_type(&self) -> DataType {
-        self.data_type.clone()
+        DataType::Signal
     }
 
-    /// Checks if the content of the data item is an array.
+    /// Checks if the id is an array.
     pub fn is_array(&self) -> bool {
-        matches!(self.content, Some(DataContent::Array(_)))
+        matches!(self.id, DataContent::Array(_))
+    }
+}
+
+/// Variable
+#[derive(Clone, Debug)]
+struct Variable {
+    value: Option<DataContent>,
+    is_constant: bool,
+}
+
+impl Variable {
+    /// Constructs a new Signal.
+    pub fn new(value: Option<DataContent>, is_constant: bool) -> Self {
+        Self { value, is_constant }
+    }
+
+    /// Sets the variable content.
+    pub fn set(&self, value: DataContent) -> Result<(), RuntimeError> {
+        if self.is_constant {
+            return Err(RuntimeError::VariableAlreadySet);
+        }
+
+        self.value = Some(value);
+
+        Ok(())
+    }
+
+    /// Gets the content of the data item.
+    pub fn get(&self) -> Result<DataContent, RuntimeError> {
+        self.value.clone().ok_or(RuntimeError::EmptyDataItem)
+    }
+
+    /// Retrieves an item from the array content at the specified index.
+    /// Returns an error if the content is not an array or the index is out of bounds.
+    pub fn get_array_item(&self, access: &[u32]) -> Result<DataContent, RuntimeError> {
+        // TODO
+        self.value.clone().ok_or(RuntimeError::EmptyDataItem)
+    }
+
+    /// Gets the data type of the data item.
+    pub fn get_data_type(&self) -> DataType {
+        DataType::Variable
+    }
+
+    /// Checks if the id is an array.
+    pub fn is_array(&self) -> bool {
+        matches!(self.value, Some(DataContent::Array(_)))
+    }
+}
+
+/// Component
+#[derive(Clone, Debug)]
+struct Component {
+    wiring: HashMap<u32, u32>,
+}
+
+impl Component {
+    /// Constructs a new Signal.
+    pub fn new() -> Self {
+        Self {
+            wiring: HashMap::new(),
+        }
+    }
+
+    /// Adds a connection to the component wiring.
+    pub fn add_connection(&self, from: u32, to: u32) -> Result<(), RuntimeError> {
+        self.wiring.insert(from, to);
+        Ok(())
+    }
+
+    /// Gets the wiring map.
+    pub fn get_wiring(&self) -> HashMap<u32, u32> {
+        self.wiring.clone()
+    }
+
+    /// Gets the data type of the data item.
+    pub fn get_data_type(&self) -> DataType {
+        DataType::Component
     }
 }
 
@@ -379,24 +397,24 @@ pub enum RuntimeError {
     ContextRetrievalError,
     #[error("Context not found")]
     ContextNotFound,
-    #[error("Data Item already declared")]
-    DataItemAlreadyDeclared,
-    #[error("Data Item not declared")]
-    DataItemNotDeclared,
     #[error("Empty context stack")]
     EmptyContextStack,
     #[error("Empty data item")]
     EmptyDataItem,
     #[error("Index out of bounds")]
     IndexOutOfBounds,
+    #[error("Item already declared")]
+    ItemAlreadyDeclared,
+    #[error("Item not declared")]
+    ItemNotDeclared,
     #[error("Data Item content is not an array")]
     NotAnArray,
     #[error("Data Item content is not a scalar")]
     NotAScalar,
     #[error("Data Item content is not a component wiring")]
     NotAWiring,
-    #[error("Cannot modify an already set signal")]
-    SignalAlreadySet,
     #[error("Unsuported variable type")]
     UnsupportedVariableType,
+    #[error("Constant variable already set")]
+    VariableAlreadySet,
 }

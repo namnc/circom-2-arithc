@@ -12,7 +12,7 @@ use crate::program::ProgramError;
 use crate::runtime::{ContextOrigin, DataContent, DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
-    Access, Expression, ExpressionInfixOpcode, Meta, Statement, VariableType,
+    Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
 };
 use circom_program_structure::program_archive::ProgramArchive;
 use log::debug;
@@ -51,16 +51,15 @@ pub fn traverse_statement(
             Ok(())
         }
         Statement::Declaration {
-            meta,
             xtype,
             name,
             dimensions,
             is_constant,
+            ..
         } => handle_declaration(
             runtime,
             ac,
             program_archive,
-            meta,
             xtype,
             name,
             dimensions,
@@ -303,8 +302,8 @@ pub fn traverse_infix_op(
 
     // Create and add a new gate for non-scalar operations
     let gate_type = AGateType::from(infixop);
-    let output_signal = ctx.declare_auto_signal()?;
-    let output_id = ctx.get_data_item(&output_signal)?.get_u32()?;
+    let output_signal = ctx.declare_random_item(DataType::Signal)?;
+    let output_id = ctx.get_signal(&output_signal)?.get_u32()?;
 
     ac.add_gate(&output_signal, output_id, lhs_value, rhs_value, gate_type);
 
@@ -316,11 +315,10 @@ pub fn handle_declaration(
     runtime: &mut Runtime,
     ac: &mut ArithmeticCircuit,
     program_archive: &ProgramArchive,
-    meta: &Meta,
     xtype: &VariableType,
     name: &str,
     dimensions: &[Expression],
-    is_constant: &bool,
+    _is_constant: &bool,
 ) -> Result<(), ProgramError> {
     let dim_vec = dimensions
         .iter()
@@ -329,14 +327,11 @@ pub fn handle_declaration(
     let ctx = runtime.get_current_context()?;
     let is_array = !dimensions.is_empty();
 
-    println!("meta: {:?}", meta.elem_id);
-    println!("is_constant: {:?}", is_constant);
-
     if is_array {
         ctx.declare_array(name, DataType::try_from(xtype)?, dim_vec)?;
         // TODO: Add signals and wires to the AC
     } else {
-        ctx.declare_data_item(name, DataType::try_from(xtype)?)?;
+        ctx.declare_item(name, DataType::try_from(xtype)?)?;
         // TODO: Add signals and wires to the AC
     }
 
