@@ -177,6 +177,23 @@ impl Context {
         Ok(name)
     }
 
+    /// Returns the data type of an item.
+    pub fn get_item_data_type(&self, name: &str) -> Result<DataType, RuntimeError> {
+        let variable = self.variables.get(name);
+        let signal = self.signals.get(name);
+        let component = self.components.get(name);
+
+        if let Some(variable) = variable {
+            Ok(variable.get_data_type())
+        } else if let Some(signal) = signal {
+            Ok(signal.get_data_type())
+        } else if let Some(component) = component {
+            Ok(component.get_data_type())
+        } else {
+            Err(RuntimeError::ItemNotDeclared)
+        }
+    }
+
     /// Declares a new variable.
     pub fn declare_variable(&mut self, name: &str) -> Result<(), RuntimeError> {
         self.add_name(name)?;
@@ -387,6 +404,20 @@ impl Component {
     /// Gets the data type of the data item.
     pub fn get_data_type(&self) -> DataType {
         DataType::Component
+    }
+}
+
+/// Data access
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DataAccess {
+    component: Option<String>,
+    array: Vec<u32>,
+}
+
+impl DataAccess {
+    /// Constructs a new DataAccess.
+    pub fn new(component: Option<String>, array: Vec<u32>) -> Self {
+        Self { component, array }
     }
 }
 

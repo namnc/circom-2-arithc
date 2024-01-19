@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::execute::{execute_expression, execute_infix_op, execute_statement};
 use crate::program::ProgramError;
-use crate::runtime::{ContextOrigin, DataContent, DataType, Runtime};
+use crate::runtime::{ContextOrigin, DataAccess, DataContent, DataType, Runtime};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
     Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
@@ -99,43 +99,44 @@ pub fn traverse_statement(
             var, access, rhe, ..
         } => {
             debug!("Substitution for {}", var.to_string());
-            let mut name_access = String::from(var);
 
-            //TODO: here we can have component and array access at the same time
-            for a in access.iter() {
-                match a {
-                    Access::ArrayAccess(expr) => {
-                        debug!("Sub Array access found");
-                        let dim_u32_str = traverse_expression(ac, runtime, expr, program_archive)?;
-                        name_access.push('_');
-                        name_access.push_str(&dim_u32_str);
-                        debug!("Sub Change var name to {}", name_access);
-                    }
-                    Access::ComponentAccess(_name) => {
-                        debug!("Sub Component access found {}", _name);
-                    }
+            // Evaluate the data type of the given variable
+            let ctx = runtime.get_current_context()?;
+            let data_type = ctx.get_item_data_type(var)?;
+
+            // Build access
+            let access = build_access(runtime, ac, program_archive, access)?;
+
+            match data_type {
+                DataType::Signal => todo!(),
+                DataType::Variable => todo!(),
+                DataType::Component => {
+                    // Process right hand expression
+                    let rhs = traverse_expression(ac, runtime, rhe, program_archive)?;
+
+                    // Create wire
                 }
             }
 
             // Check if we're dealing with a signal or a variable
-            let ctx = runtime.get_current_context()?;
-            let data_item = ctx.get_data_item(&name_access);
-            if let Ok(data_value) = data_item {
-                match data_value.get_data_type() {
-                    DataType::Signal => {
-                        traverse_expression(ac, runtime, rhe, program_archive)?;
-                    }
-                    DataType::Variable => {
-                        execute_statement(ac, runtime, stmt, program_archive)?;
-                    }
-                    DataType::Component => {
-                        //Here we deal with wiring
-                        //lhs is a component wire and rhs is a signal
+            // let ctx = runtime.get_current_context()?;
+            // let data_item = ctx.get_data_item(&name_access);
+            // if let Ok(data_value) = data_item {
+            //     match data_value.get_data_type() {
+            //         DataType::Signal => {
+            //             traverse_expression(ac, runtime, rhe, program_archive)?;
+            //         }
+            //         DataType::Variable => {
+            //             execute_statement(ac, runtime, stmt, program_archive)?;
+            //         }
+            //         DataType::Component => {
+            //             //Here we deal with wiring
+            //             //lhs is a component wire and rhs is a signal
 
-                        // we also check to complete template if all wiring is done
-                    }
-                }
-            }
+            //             // we also check to complete template if all wiring is done
+            //         }
+            //     }
+            // }
             Ok(())
         }
         Statement::Return { value, .. } => {
@@ -336,4 +337,27 @@ pub fn handle_declaration(
     }
 
     Ok(())
+}
+
+/// Builds a DataAccess from an Access array
+pub fn build_access(
+    runtime: &mut Runtime,
+    ac: &mut ArithmeticCircuit,
+    program_archive: &ProgramArchive,
+    access: &[Access],
+) -> Result<DataAccess, ProgramError> {
+    let mut component: Option<String> = None;
+    let mut array = Vec::new();
+
+    for a in access.iter() {
+        match a {
+            Access::ArrayAccess(expr) => {
+                let dim = execute_expression(ac, runtime, expr, program_archive)?;
+                array.push(dim);
+            }
+            Access::ComponentAccess(name) => component = Some(name.to_string()),
+        }
+    }
+
+    Ok(DataAccess::new(component, array))
 }
