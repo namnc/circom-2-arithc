@@ -41,7 +41,7 @@ impl TryFrom<&VariableType> for DataType {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DataContent {
     Scalar(u32),
-    Array(Vec<DataContent>),
+    Array(Vec<Option<DataContent>>),
 }
 
 /// Runtime - manages the context stack and variable tracking.
@@ -213,10 +213,12 @@ impl Context {
     }
 
     /// Gets the content of a variable.
-    pub fn get_variable(&self, name: &str) -> Result<&Variable, RuntimeError> {
-        self.variables
-            .get(name)
-            .ok_or(RuntimeError::ItemNotDeclared)
+    pub fn get_variable(&self, data_access: &DataAccess) -> Result<Option<u32>, RuntimeError> {
+        let variable = self
+            .variables
+            .get(&data_access.name)
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+        variable.get(data_access.sub_access.clone())
     }
 
     /// Declares a new signal.
@@ -230,9 +232,13 @@ impl Context {
         Ok(())
     }
 
-    /// Gets a signal.
-    pub fn get_signal(&self, name: &str) -> Result<&Signal, RuntimeError> {
-        self.signals.get(name).ok_or(RuntimeError::ItemNotDeclared)
+    /// Gets the content of a signal.
+    pub fn get_signal(&self, data_access: &DataAccess) -> Result<u32, RuntimeError> {
+        let signal = self
+            .signals
+            .get(&data_access.name)
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+        signal.get(data_access.sub_access.clone())
     }
 
     /// Declares a new component.
@@ -306,16 +312,19 @@ impl Signal {
         Self { id }
     }
 
-    /// Gets the content of the data item.
-    pub fn get_id(&self) -> DataContent {
-        self.id.clone()
-    }
-
-    /// Retrieves an item from the array content at the specified index.
-    /// Returns an error if the content is not an array or the index is out of bounds.
-    pub fn get_array_item(&self, access: &[u32]) -> Result<DataContent, RuntimeError> {
-        // TODO
-        Ok(self.id.clone())
+    /// Gets the id of the specified signal.
+    pub fn get(&self, access: Option<SubAccess>) -> Result<u32, RuntimeError> {
+        match access {
+            None => match self.id {
+                DataContent::Scalar(value) => Ok(value),
+                _ => Err(RuntimeError::AccessError), // Access is None but the content is an array.
+            },
+            Some(_) => match access_content(access, self.id.clone()) {
+                Ok(Some(value)) => Ok(value),
+                Ok(None) => Err(RuntimeError::EmptyDataItem), // This shoulnd't happen. Signals should always have an id.
+                Err(e) => Err(e),
+            },
+        }
     }
 
     /// Gets the data type of the data item.
@@ -354,15 +363,13 @@ impl Variable {
     }
 
     /// Gets the content of the data item.
-    pub fn get(&self) -> Result<DataContent, RuntimeError> {
-        self.value.clone().ok_or(RuntimeError::EmptyDataItem)
-    }
-
-    /// Retrieves an item from the array content at the specified index.
-    /// Returns an error if the content is not an array or the index is out of bounds.
-    pub fn get_array_item(&self, access: &[u32]) -> Result<DataContent, RuntimeError> {
-        // TODO
-        self.value.clone().ok_or(RuntimeError::EmptyDataItem)
+    pub fn get(&self, access: Option<SubAccess>) -> Result<Option<u32>, RuntimeError> {
+        match (&access, &self.value) {
+            (None, Some(DataContent::Scalar(value))) => Ok(Some(*value)),
+            (Some(_), Some(content)) => access_content(access, content.clone()),
+            (Some(_), None) => Err(RuntimeError::AccessError),
+            (None, _) => Ok(None),
+        }
     }
 
     /// Gets the data type of the data item.
@@ -379,7 +386,7 @@ impl Variable {
 /// Component
 #[derive(Clone, Debug)]
 struct Component {
-    wiring: HashMap<u32, u32>,
+    wiring: HashMap<DataAccess, DataAccess>,
 }
 
 impl Component {
@@ -391,13 +398,13 @@ impl Component {
     }
 
     /// Adds a connection to the component wiring.
-    pub fn add_connection(&self, from: u32, to: u32) -> Result<(), RuntimeError> {
+    pub fn add_connection(&self, from: DataAccess, to: DataAccess) -> Result<(), RuntimeError> {
         self.wiring.insert(from, to);
         Ok(())
     }
 
     /// Gets the wiring map.
-    pub fn get_wiring(&self) -> HashMap<u32, u32> {
+    pub fn get_wiring(&self) -> HashMap<DataAccess, DataAccess> {
         self.wiring.clone()
     }
 
@@ -407,23 +414,95 @@ impl Component {
     }
 }
 
-/// Data access
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DataAccess {
+    name: String,
+    sub_access: Option<SubAccess>,
+}
+
+impl DataAccess {
+    /// Constructs a new DataAccess.
+    pub fn new(name: String, sub_access: Option<SubAccess>) -> Self {
+        Self { name, sub_access }
+    }
+
+    /// Gets the name of the data item.
+    pub fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    /// Gets the sub access of the data item.
+    pub fn get_sub_access(&self) -> Option<SubAccess> {
+        self.sub_access.clone()
+    }
+}
+
+/// Sub data access
+/// If the item is a component, the component property will be Some, and it will contain the name of the signal.
+/// If the item is also an array, the array vec contains the length of the array in each dimension.
+/// e.g. [2,2] for a 2x2 array.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SubAccess {
     component: Option<String>,
     array: Vec<u32>,
 }
 
-impl DataAccess {
+impl SubAccess {
     /// Constructs a new DataAccess.
     pub fn new(component: Option<String>, array: Vec<u32>) -> Self {
         Self { component, array }
     }
 }
 
+/// Gets the inner content of a given item data content with the specified access.
+pub fn access_content(
+    access: Option<SubAccess>,
+    content: DataContent,
+) -> Result<Option<u32>, RuntimeError> {
+    match access {
+        Some(sub_access) => {
+            let mut current_content = Some(content);
+            for (i, index) in sub_access.array.iter().enumerate() {
+                match current_content {
+                    Some(DataContent::Array(array_content)) => {
+                        // Check if the index is within the bounds of the current array content
+                        if let Some(inner_content_option) = array_content.get(*index as usize) {
+                            // If we've processed all indices, check if the current content is a scalar
+                            if i == sub_access.array.len() - 1 {
+                                match inner_content_option {
+                                    Some(DataContent::Scalar(value)) => return Ok(Some(*value)),
+                                    None => return Ok(None),
+                                    _ => return Err(RuntimeError::NotAScalar), // Item is not a scalar
+                                }
+                            }
+
+                            // Update current_content to continue navigation
+                            current_content = inner_content_option.clone();
+                        } else {
+                            return Err(RuntimeError::IndexOutOfBounds);
+                        }
+                    }
+
+                    // Invalid access: Non-array item before processing all indices
+                    Some(_) => return Err(RuntimeError::AccessError),
+                    None => return Ok(None),
+                }
+            }
+
+            Err(RuntimeError::NotAScalar)
+        }
+        None => match content {
+            DataContent::Scalar(value) => Ok(Some(value)),
+            DataContent::Array(_) => Err(RuntimeError::NotAScalar),
+        },
+    }
+}
+
 /// Runtime errors
 #[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum RuntimeError {
+    #[error("Access Error")]
+    AccessError,
     #[error("Error retrieving context")]
     ContextRetrievalError,
     #[error("Context not found")]
