@@ -170,21 +170,48 @@ impl Context {
         }
     }
 
-    // /// Declares a new item of the specified type with the given name.
-    // pub fn declare_item(&mut self, name: &str, data_type: DataType) -> Result<(), RuntimeError> {
-    //     match data_type {
-    //         DataType::Component => self.declare_component(name),
-    //         DataType::Signal => self.declare_signal(name),
-    //         DataType::Variable => self.declare_variable(name),
-    //     }
-    // }
+    /// Declares a new item of the specified type with the given name and dimensions.
+    pub fn declare_item(
+        &mut self,
+        name: &str,
+        data_type: DataType,
+        dimensions: &[SubAccess],
+    ) -> Result<(), RuntimeError> {
+        // Ensure array access
+        let dim_vec = match process_subaccess(dimensions)? {
+            ProcessedAccess::Array(vec) => vec,
+            _ => return Err(RuntimeError::AccessError),
+        };
+
+        // Check name availability
+        self.add_name(name)?;
+        let name_string = name.to_string();
+
+        match data_type {
+            DataType::Signal => {
+                let signal = Signal::new(&dim_vec);
+                self.signals.insert(name_string, signal);
+            }
+            DataType::Variable => {
+                let variable = Variable::new(&dim_vec);
+                self.variables.insert(name_string, variable);
+            }
+            DataType::Component => {
+                let component = Component::new(&dim_vec);
+                self.components.insert(name_string, component);
+            }
+        };
+
+        Ok(())
+    }
 
     /// Declares a new item with a random name.
-    // pub fn declare_random_item(&mut self, data_type: DataType) -> Result<String, RuntimeError> {
-    //     let name = format!("random_{}", self.generate_id());
-    //     self.declare_item(&name, data_type)?;
-    //     Ok(name)
-    // }
+    /// This might be dropped.
+    pub fn declare_random_item(&mut self, data_type: DataType) -> Result<String, RuntimeError> {
+        let name = format!("random_{}", self.generate_id());
+        self.declare_item(&name, data_type, &[])?;
+        Ok(name)
+    }
 
     /// Returns the data type of an item.
     pub fn get_item_data_type(&self, name: &str) -> Result<DataType, RuntimeError> {
@@ -199,14 +226,6 @@ impl Context {
         }
     }
 
-    /// Declares a new variable.
-    pub fn declare_variable(&mut self, name: &str, dimensions: &[u32]) -> Result<(), RuntimeError> {
-        self.add_name(name)?;
-        self.variables
-            .insert(name.to_string(), Variable::new(dimensions));
-        Ok(())
-    }
-
     /// Sets the content of a variable.
     pub fn set_variable(
         &mut self,
@@ -215,53 +234,37 @@ impl Context {
     ) -> Result<(), RuntimeError> {
         let variable = self
             .variables
-            .get_mut(name)
+            .get_mut(&access.name)
             .ok_or(RuntimeError::ItemNotDeclared)?;
-        variable.set(content)?;
-        Ok(())
+
+        variable.set(&access_to_u32(&access.get_access())?, value)
     }
 
     /// Gets the content of a variable.
-    pub fn get_variable(&self, data_access: &DataAccess) -> Result<Option<u32>, RuntimeError> {
+    pub fn get_variable(&self, access: &DataAccess) -> Result<Option<u32>, RuntimeError> {
         let variable = self
             .variables
-            .get(&data_access.name)
-            .ok_or(RuntimeError::ItemNotDeclared)?;
-        variable.get(data_access.sub_access.clone())
-    }
+            .get(&access.name)
+            .ok_or_else(|| RuntimeError::ItemNotDeclared)?;
 
-    /// Declares a new signal.
-    pub fn declare_signal(&mut self, name: &str) -> Result<(), RuntimeError> {
-        self.add_name(name)?;
-        let signal_id = self.generate_id();
-        self.signals.insert(
-            name.to_string(),
-            Signal::new(DataContent::Scalar(signal_id)),
-        );
-        Ok(())
+        variable.get(&access_to_u32(access.get_access())?)
     }
 
     /// Gets the content of a signal.
-    pub fn get_signal(&self, data_access: &DataAccess) -> Result<u32, RuntimeError> {
+    pub fn get_signal(&self, access: &DataAccess) -> Result<u32, RuntimeError> {
         let signal = self
             .signals
-            .get(&data_access.name)
-            .ok_or(RuntimeError::ItemNotDeclared)?;
-        signal.get(data_access.sub_access.clone())
-    }
+            .get(&access.name)
+            .ok_or_else(|| RuntimeError::ItemNotDeclared)?;
 
-    /// Declares a new component.
-    pub fn declare_component(&mut self, name: &str) -> Result<(), RuntimeError> {
-        self.add_name(name)?;
-        self.components.insert(name.to_string(), Component::new());
-        Ok(())
+        signal.get(&access_to_u32(access.get_access())?)
     }
 
     /// Gets a component.
     pub fn get_component(&self, name: &str) -> Result<&Component, RuntimeError> {
         self.components
             .get(name)
-            .ok_or(RuntimeError::ItemNotDeclared)
+            .ok_or_else(|| RuntimeError::ItemNotDeclared)
     }
 
     /// Returns the caller context id.
@@ -406,7 +409,7 @@ impl Component {
     // We're not doing anything to the to path since this could be another component etc, has to be handled later.
     /// Adds a connection from one DataAccess to another DataAccess.
     pub fn add_connection(&mut self, from: DataAccess, to: DataAccess) -> Result<(), RuntimeError> {
-        let from_processed = process_subaccess(from.get_access().as_deref().unwrap_or(&[]))?;
+        let from_processed = process_subaccess(from.get_access())?;
 
         match from_processed {
             ProcessedAccess::Component(from_initial_path, from_signal_name, from_final_path) => {
@@ -424,8 +427,8 @@ impl Component {
                 }
 
                 if let NestedValue::Value(connections) = current_level {
-                    let signal_access = indices_to_sub_access(&from_final_path);
-                    connections.insert(DataAccess::new(from_signal_name, Some(signal_access)), to);
+                    let signal_access = u32_to_access(&from_final_path);
+                    connections.insert(DataAccess::new(from_signal_name, signal_access), to);
                 } else {
                     return Err(RuntimeError::NotAValue);
                 }
@@ -443,12 +446,12 @@ impl Component {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DataAccess {
     name: String,
-    access: Option<Vec<SubAccess>>,
+    access: Vec<SubAccess>,
 }
 
 impl DataAccess {
     /// Constructs a new DataAccess.
-    pub fn new(name: String, access: Option<Vec<SubAccess>>) -> Self {
+    pub fn new(name: String, access: Vec<SubAccess>) -> Self {
         Self { name, access }
     }
 
@@ -458,8 +461,8 @@ impl DataAccess {
     }
 
     /// Gets the sub access of the data item.
-    pub fn get_access(&self) -> Option<Vec<SubAccess>> {
-        self.access.clone()
+    pub fn get_access(&self) -> &Vec<SubAccess> {
+        &self.access
     }
 }
 
@@ -532,10 +535,22 @@ fn get_nested_value<T: Clone>(
     }
 }
 
-fn indices_to_sub_access(indices: &[u32]) -> Vec<SubAccess> {
+/// Converts a vector of u32 to a vector of SubAccess.
+pub fn u32_to_access(indices: &[u32]) -> Vec<SubAccess> {
     indices
         .iter()
         .map(|&index| SubAccess::Array(index))
+        .collect()
+}
+
+/// Converts a vector of SubAccess to a vector of u32.
+pub fn access_to_u32(sub_accesses: &[SubAccess]) -> Result<Vec<u32>, RuntimeError> {
+    sub_accesses
+        .iter()
+        .map(|sub_access| match sub_access {
+            SubAccess::Array(index) => Ok(*index),
+            _ => Err(RuntimeError::AccessError),
+        })
         .collect()
 }
 
