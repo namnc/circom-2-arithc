@@ -51,7 +51,6 @@ pub fn traverse_statement(
             xtype,
             name,
             dimensions,
-            is_constant,
             ..
         } => {
             let dim: Vec<u32> = dimensions
@@ -107,14 +106,14 @@ pub fn traverse_statement(
             let data_type = ctx.get_item_data_type(var)?;
 
             // Build access
-            let access = build_access(runtime, ac, program_archive, var, access)?;
+            let _access = build_access(runtime, ac, program_archive, var, access)?;
 
             match data_type {
                 DataType::Signal => todo!(),
                 DataType::Variable => todo!(),
                 DataType::Component => {
                     // Process right hand expression
-                    let rhs = traverse_expression(ac, runtime, rhe, program_archive)?;
+                    let _rhs = traverse_expression(ac, runtime, rhe, program_archive)?;
 
                     // Add connection
                 }
@@ -149,7 +148,7 @@ pub fn traverse_statement(
 
             let ctx = runtime.get_current_context()?;
             let declare = ctx.declare_item(DataType::Variable, &access.get_name(), &[]);
-            
+
             // Added check to avoid panic when the return is already declared
             if declare.is_ok() {
                 declare?;
@@ -214,13 +213,13 @@ pub fn traverse_expression(
             let mut args_map: HashMap<String, u32> = HashMap::new();
 
             // We start by setting argument values to argument names
-            for (&arg_name, arg_value) in arg_names.iter().zip(args) {
+            for (arg_name, arg_value) in arg_names.iter().zip(args) {
                 // We set arg_name to have arg_value
                 // Because arg_value is an expression (constant, variable, or an infix operation or a function call) we need to execute to have the actual value
                 let value = execute_expression(ac, runtime, arg_value, _program_archive)?
                     .ok_or(ProgramError::EmptyDataItem)?;
                 // We cache this to args hashmap
-                args_map.insert(arg_name, value);
+                args_map.insert(arg_name.to_string(), value);
             }
 
             // Here we need to spawn a new context for calling a function or wiring with a component (template)
@@ -229,10 +228,13 @@ pub fn traverse_expression(
             let ctx = runtime.get_current_context()?;
 
             // Now we put args to use
-            for (&arg_name, &arg_value) in args_map.iter() {
+            for (arg_name, &arg_value) in args_map.iter() {
                 // TODO: Review, all items are unidimensional
                 ctx.declare_item(DataType::Variable, &arg_name, &[])?;
-                ctx.set_variable(DataAccess::new(arg_name, vec![]), Some(arg_value))?;
+                ctx.set_variable(
+                    DataAccess::new(arg_name.to_string(), vec![]),
+                    Some(arg_value),
+                )?;
             }
 
             let _body = if functions.contains(id) {
@@ -284,7 +286,7 @@ pub fn traverse_infix_op(
 
         let op_res = execute_infix_op(&lhs_value, &rhs_value, infixop);
         let item_access = ctx.declare_random_item(DataType::Variable)?;
-        ctx.set_variable(item_access, Some(op_res))?;
+        ctx.set_variable(item_access.clone(), Some(op_res))?;
 
         return Ok(item_access);
     }

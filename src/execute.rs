@@ -62,14 +62,13 @@ pub fn execute_statement(
             var, access, rhe, ..
         } => {
             // This corresponds to a variable assignment.
-
             let access = build_access(runtime, ac, program_archive, var, access)?;
-            let ctx = runtime.get_current_context()?;
 
             // Get the value of the right hand expression
             let rhe_val = execute_expression(ac, runtime, rhe, program_archive)?;
 
             // Declare the variable if it is not declared yet
+            let ctx = runtime.get_current_context()?;
             let declare = ctx.declare_item(DataType::Variable, &access.get_name(), &[]);
             if declare.is_ok() {
                 declare?;
@@ -147,13 +146,13 @@ pub fn execute_expression(
             let mut args_map: HashMap<String, u32> = HashMap::new();
 
             // We start by setting argument values to argument names
-            for (&arg_name, arg_value) in arg_names.iter().zip(args) {
+            for (arg_name, arg_value) in arg_names.iter().zip(args) {
                 // We set arg_name to have arg_value
                 // Because arg_value is an expression (constant, variable, or an infix operation or a function call) we need to execute to have the actual value
                 let value = execute_expression(ac, runtime, arg_value, program_archive)?
                     .ok_or(ProgramError::EmptyDataItem)?;
                 // We cache this to args hashmap
-                args_map.insert(arg_name, value);
+                args_map.insert(arg_name.to_string(), value);
             }
 
             // Here we need to spawn a new context for calling a function or wiring with a component (template)
@@ -162,10 +161,13 @@ pub fn execute_expression(
             let ctx = runtime.get_current_context()?;
 
             // Now we put args to use
-            for (&arg_name, &arg_value) in args_map.iter() {
+            for (arg_name, &arg_value) in args_map.iter() {
                 // TODO: Review, all items are unidimensional
-                ctx.declare_item(DataType::Variable, &arg_name, &[])?;
-                ctx.set_variable(DataAccess::new(arg_name, vec![]), Some(arg_value))?;
+                ctx.declare_item(DataType::Variable, arg_name, &[])?;
+                ctx.set_variable(
+                    DataAccess::new(arg_name.to_string(), vec![]),
+                    Some(arg_value),
+                )?;
             }
 
             let _body = if functions.contains(id) {
