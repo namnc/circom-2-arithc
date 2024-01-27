@@ -163,10 +163,10 @@ impl Context {
         Self {
             id,
             caller_id: self.id,
-            names: self.names,
-            variables: self.variables,
-            signals: self.signals,
-            components: self.components,
+            names: self.names.clone(),
+            variables: self.variables.clone(),
+            signals: self.signals.clone(),
+            components: self.components.clone(),
         }
     }
 
