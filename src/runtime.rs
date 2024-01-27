@@ -32,7 +32,7 @@ impl TryFrom<&VariableType> for DataType {
             VariableType::Component => Ok(DataType::Component),
             VariableType::Signal(..) => Ok(DataType::Signal),
             VariableType::Var => Ok(DataType::Variable),
-            _ => Err(RuntimeError::UnsupportedVariableType),
+            _ => Err(RuntimeError::UnsupportedDataType),
         }
     }
 }
@@ -173,31 +173,25 @@ impl Context {
     /// Declares a new item of the specified type with the given name and dimensions.
     pub fn declare_item(
         &mut self,
-        name: &str,
         data_type: DataType,
-        dimensions: &[SubAccess],
+        name: &str,
+        dimensions: &[u32],
     ) -> Result<(), RuntimeError> {
-        // Ensure array access
-        let dim_vec = match process_subaccess(dimensions)? {
-            ProcessedAccess::Array(vec) => vec,
-            _ => return Err(RuntimeError::AccessError),
-        };
-
         // Check name availability
         self.add_name(name)?;
         let name_string = name.to_string();
 
         match data_type {
             DataType::Signal => {
-                let signal = Signal::new(&dim_vec);
+                let signal = Signal::new(&dimensions);
                 self.signals.insert(name_string, signal);
             }
             DataType::Variable => {
-                let variable = Variable::new(&dim_vec);
+                let variable = Variable::new(&dimensions);
                 self.variables.insert(name_string, variable);
             }
             DataType::Component => {
-                let component = Component::new(&dim_vec);
+                let component = Component::new(&dimensions);
                 self.components.insert(name_string, component);
             }
         };
@@ -207,19 +201,19 @@ impl Context {
 
     /// Declares a new item with a random name.
     /// This might be dropped.
-    pub fn declare_random_item(&mut self, data_type: DataType) -> Result<String, RuntimeError> {
+    pub fn declare_random_item(&mut self, data_type: DataType) -> Result<DataAccess, RuntimeError> {
         let name = format!("random_{}", self.generate_id());
-        self.declare_item(&name, data_type, &[])?;
-        Ok(name)
+        self.declare_item(data_type, &name, &[])?;
+        Ok(DataAccess::new(name, vec![]))
     }
 
     /// Returns the data type of an item.
     pub fn get_item_data_type(&self, name: &str) -> Result<DataType, RuntimeError> {
-        if let Some(variable) = self.variables.get(name) {
+        if let Some(_) = self.variables.get(name) {
             Ok(DataType::Variable)
-        } else if let Some(signal) = self.signals.get(name) {
+        } else if let Some(_) = self.signals.get(name) {
             Ok(DataType::Signal)
-        } else if let Some(component) = self.components.get(name) {
+        } else if let Some(_) = self.components.get(name) {
             Ok(DataType::Component)
         } else {
             Err(RuntimeError::ItemNotDeclared)
@@ -265,6 +259,21 @@ impl Context {
         self.components
             .get(name)
             .ok_or_else(|| RuntimeError::ItemNotDeclared)
+    }
+
+    /// Adds a connection in a component.
+    pub fn add_connection(
+        &mut self,
+        component_name: &str,
+        from: DataAccess,
+        to: DataAccess,
+    ) -> Result<(), RuntimeError> {
+        let component = self
+            .components
+            .get_mut(component_name)
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+
+        component.add_connection(from, to)
     }
 
     /// Returns the caller context id.
@@ -472,7 +481,8 @@ enum ProcessedAccess {
     Component(Vec<u32>, String, Vec<u32>), // (initial_path, signal_name, final_path)
 }
 
-fn process_subaccess(sub_accesses: &[SubAccess]) -> Result<ProcessedAccess, RuntimeError> {
+/// Processes a vector of SubAccess.
+pub fn process_subaccess(sub_accesses: &[SubAccess]) -> Result<ProcessedAccess, RuntimeError> {
     let mut initial_path = Vec::new();
     let mut final_path = Vec::new();
     let mut signal_name = String::new();
@@ -511,7 +521,7 @@ fn process_subaccess(sub_accesses: &[SubAccess]) -> Result<ProcessedAccess, Runt
 
 /// Generic function to navigate through NestedValue and return the inner value.
 /// The clone could be removed but then the type would need to implement Copy. Leaving it for now.
-fn get_nested_value<T: Clone>(
+pub fn get_nested_value<T: Clone>(
     nested_value: &NestedValue<T>,
     index_path: &[u32],
 ) -> Result<T, RuntimeError> {
@@ -523,12 +533,10 @@ fn get_nested_value<T: Clone>(
                     .get(index as usize)
                     .ok_or(RuntimeError::IndexOutOfBounds)?;
             }
-            // If not an array at this level, return an error.
             _ => return Err(RuntimeError::AccessError),
         }
     }
 
-    // Return the value if it's found, otherwise return an error.
     match current_level {
         NestedValue::Value(inner_value) => Ok(inner_value.clone()),
         _ => Err(RuntimeError::NotAValue),
@@ -575,6 +583,6 @@ pub enum RuntimeError {
     NotAnArray,
     #[error("Data Item content is not a single value")]
     NotAValue,
-    #[error("Unsuported variable type")]
-    UnsupportedVariableType,
+    #[error("Unsuported data type")]
+    UnsupportedDataType,
 }
