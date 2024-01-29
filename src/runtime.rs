@@ -183,15 +183,15 @@ impl Context {
 
         match data_type {
             DataType::Signal => {
-                let signal = Signal::new(&dimensions);
+                let signal = Signal::new(dimensions);
                 self.signals.insert(name_string, signal);
             }
             DataType::Variable => {
-                let variable = Variable::new(&dimensions);
+                let variable = Variable::new(dimensions);
                 self.variables.insert(name_string, variable);
             }
             DataType::Component => {
-                let component = Component::new(&dimensions);
+                let component = Component::new(dimensions);
                 self.components.insert(name_string, component);
             }
         };
@@ -209,11 +209,11 @@ impl Context {
 
     /// Returns the data type of an item.
     pub fn get_item_data_type(&self, name: &str) -> Result<DataType, RuntimeError> {
-        if let Some(_) = self.variables.get(name) {
+        if self.variables.get(name).is_some() {
             Ok(DataType::Variable)
-        } else if let Some(_) = self.signals.get(name) {
+        } else if self.signals.get(name).is_some() {
             Ok(DataType::Signal)
-        } else if let Some(_) = self.components.get(name) {
+        } else if self.components.get(name).is_some() {
             Ok(DataType::Component)
         } else {
             Err(RuntimeError::ItemNotDeclared)
@@ -231,7 +231,7 @@ impl Context {
             .get_mut(&access.name)
             .ok_or(RuntimeError::ItemNotDeclared)?;
 
-        variable.set(&access_to_u32(&access.get_access())?, value)
+        variable.set(&access_to_u32(access.get_access())?, value)
     }
 
     /// Gets the content of a variable.
@@ -239,7 +239,7 @@ impl Context {
         let variable = self
             .variables
             .get(&access.name)
-            .ok_or_else(|| RuntimeError::ItemNotDeclared)?;
+            .ok_or(RuntimeError::ItemNotDeclared)?;
 
         variable.get(&access_to_u32(access.get_access())?)
     }
@@ -249,7 +249,7 @@ impl Context {
         let signal = self
             .signals
             .get(&access.name)
-            .ok_or_else(|| RuntimeError::ItemNotDeclared)?;
+            .ok_or(RuntimeError::ItemNotDeclared)?;
 
         signal.get(&access_to_u32(access.get_access())?)
     }
@@ -258,7 +258,7 @@ impl Context {
     pub fn get_component(&self, name: &str) -> Result<&Component, RuntimeError> {
         self.components
             .get(name)
-            .ok_or_else(|| RuntimeError::ItemNotDeclared)
+            .ok_or(RuntimeError::ItemNotDeclared)
     }
 
     /// Adds a connection in a component.

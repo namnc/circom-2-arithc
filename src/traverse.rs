@@ -230,7 +230,7 @@ pub fn traverse_expression(
             // Now we put args to use
             for (arg_name, &arg_value) in args_map.iter() {
                 // TODO: Review, all items are unidimensional
-                ctx.declare_item(DataType::Variable, &arg_name, &[])?;
+                ctx.declare_item(DataType::Variable, arg_name, &[])?;
                 ctx.set_variable(
                     DataAccess::new(arg_name.to_string(), vec![]),
                     Some(arg_value),
