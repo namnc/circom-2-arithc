@@ -353,7 +353,7 @@ impl Variable {
 
     /// Sets the content of the variable at the specified index path.
     fn set(&mut self, index_path: &[u32], val: Option<u32>) -> Result<(), RuntimeError> {
-        let inner_value = get_nested_value_mut(&mut self.value, index_path)?;
+        let inner_value = get_mut_nested_value(&mut self.value, index_path)?;
         *inner_value = val;
         Ok(())
     }
@@ -384,38 +384,20 @@ impl Component {
         Self { connections }
     }
 
-    // We can't use the get nested item fn due to this cloning the item and not returning a reference, might update.
-    // We're not doing anything to the to path since this could be another component etc, has to be handled later.
+    // We're not processing the `to` path since this could be another component, etc. It has to be handled later.
     /// Adds a connection from one DataAccess to another DataAccess.
     pub fn add_connection(&mut self, from: DataAccess, to: DataAccess) -> Result<(), RuntimeError> {
-        let from_processed = process_subaccess(from.get_access())?;
+        if let ProcessedAccess::Component(component_path, signal_name, signal_path) =
+            process_subaccess(from.get_access())?
+        {
+            let connections = get_mut_nested_value(&mut self.connections, &component_path)?;
 
-        match from_processed {
-            ProcessedAccess::Component(from_initial_path, from_signal_name, from_final_path) => {
-                let mut current_level = &mut self.connections;
-
-                for &index in &from_initial_path {
-                    match current_level {
-                        NestedValue::Array(values) => {
-                            current_level = values
-                                .get_mut(index as usize)
-                                .ok_or(RuntimeError::IndexOutOfBounds)?;
-                        }
-                        _ => return Err(RuntimeError::AccessError),
-                    }
-                }
-
-                if let NestedValue::Value(connections) = current_level {
-                    let signal_access = u32_to_access(&from_final_path);
-                    connections.insert(DataAccess::new(from_signal_name, signal_access), to);
-                } else {
-                    return Err(RuntimeError::NotAValue);
-                }
-            }
-            _ => return Err(RuntimeError::AccessError),
+            let signal_access = u32_to_access(&signal_path);
+            connections.insert(DataAccess::new(signal_name, signal_access), to);
+            Ok(())
+        } else {
+            Err(RuntimeError::AccessError)
         }
-
-        Ok(())
     }
 }
 
@@ -514,7 +496,7 @@ pub fn get_nested_value<T: Clone>(
 }
 
 /// Generic function to navigate through NestedValue and return a mutable reference to the inner value.
-pub fn get_nested_value_mut<'a, T>(
+pub fn get_mut_nested_value<'a, T>(
     nested_value: &'a mut NestedValue<T>,
     index_path: &[u32],
 ) -> Result<&'a mut T, RuntimeError> {
