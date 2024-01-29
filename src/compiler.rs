@@ -347,7 +347,7 @@ impl Input {
 }
 
 pub fn get_input(matches: &ArgMatches) -> Result<PathBuf, ()> {
-    println!("{:?}", matches.value_of("input"));
+    // println!("{:?}", matches.value_of("input"));
     let route = Path::new(matches.value_of("input").unwrap()).to_path_buf();
     if route.is_file() {
         Result::Ok(route)

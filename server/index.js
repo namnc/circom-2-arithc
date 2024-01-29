@@ -8,7 +8,7 @@ const path = require("node:path");
 
 app.use(bodyParser.json());
 
-const circomPath = path.join(__dirname, '../target/debug/circom');
+const circomPath = path.join(__dirname, '../target/release/circom');
 
 app.get("/", (req, res) => {
   let { file } = req.body;
@@ -20,12 +20,11 @@ app.get("/", (req, res) => {
     exec(`${circomPath} ${filePath}`, (error, stdout, stderr) => {
         if (error) {
           console.error(`exec error: ${error}`);
-          return;
+          return res.send({err});
         }
-        console.log(`stdout: ${stdout}`);
-        console.error(`stderr: ${stderr}`);
+        res.send({result: stdout})    
       });
-    res.send({"ok": 1})
+    
   });
  
 

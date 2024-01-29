@@ -20,9 +20,7 @@ pub fn parse_circom(user_input: &Input) -> Result<(), ProgramError> {
 
     let mut circuit = traverse_program(&program_archive)?;
 
-    circuit.print_ac();
-    circuit.truncate_zero_add_gate();
-    circuit.print_ac();
+
     circuit.serde();
 
     Ok(())
