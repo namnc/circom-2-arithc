@@ -57,7 +57,7 @@ pub enum SubAccess {
 pub struct Runtime {
     ctx_stack: Vec<Context>,
     current_ctx: u32,
-    last_ctx: u32,
+    _last_ctx: u32,
 }
 
 impl Runtime {
@@ -67,7 +67,7 @@ impl Runtime {
         Ok(Self {
             ctx_stack: vec![Context::new(0, 0)],
             current_ctx: 0,
-            last_ctx: 0,
+            _last_ctx: 0,
         })
     }
 
@@ -353,39 +353,9 @@ impl Variable {
 
     /// Sets the content of the variable at the specified index path.
     fn set(&mut self, index_path: &[u32], val: Option<u32>) -> Result<(), RuntimeError> {
-        if index_path.is_empty() {
-            return match &mut self.value {
-                NestedValue::Value(inner_value) => {
-                    *inner_value = val;
-                    Ok(())
-                }
-                _ => Err(RuntimeError::AccessError),
-            };
-        }
-
-        let (&last_index, indexes) = index_path.split_last().ok_or(RuntimeError::AccessError)?;
-
-        let mut current_level = &mut self.value;
-        for &index in indexes {
-            current_level = match current_level {
-                NestedValue::Array(values) => values
-                    .get_mut(index as usize)
-                    .ok_or(RuntimeError::IndexOutOfBounds)?,
-                _ => return Err(RuntimeError::AccessError),
-            };
-        }
-
-        match current_level {
-            NestedValue::Array(values) => {
-                if let Some(NestedValue::Value(inner_value)) = values.get(last_index as usize) {
-                    *inner_value = val;
-                    Ok(())
-                } else {
-                    Err(RuntimeError::IndexOutOfBounds)
-                }
-            }
-            _ => Err(RuntimeError::AccessError),
-        }
+        let inner_value = get_nested_value_mut(&mut self.value, index_path)?;
+        *inner_value = val;
+        Ok(())
     }
 
     /// Retrieves the content of the variable at the specified index path.
@@ -396,7 +366,7 @@ impl Variable {
 
 /// Component
 #[derive(Clone, Debug)]
-struct Component {
+pub struct Component {
     connections: NestedValue<HashMap<DataAccess, DataAccess>>,
 }
 
@@ -476,7 +446,7 @@ impl DataAccess {
 }
 
 #[derive(Debug)]
-enum ProcessedAccess {
+pub enum ProcessedAccess {
     Array(Vec<u32>),
     Component(Vec<u32>, String, Vec<u32>), // (initial_path, signal_name, final_path)
 }
@@ -539,6 +509,27 @@ pub fn get_nested_value<T: Clone>(
 
     match current_level {
         NestedValue::Value(inner_value) => Ok(inner_value.clone()),
+        _ => Err(RuntimeError::NotAValue),
+    }
+}
+
+/// Generic function to navigate through NestedValue and return a mutable reference to the inner value.
+pub fn get_nested_value_mut<'a, T>(
+    nested_value: &'a mut NestedValue<T>,
+    index_path: &[u32],
+) -> Result<&'a mut T, RuntimeError> {
+    let mut current_level = nested_value;
+    for &index in index_path {
+        current_level = match current_level {
+            NestedValue::Array(values) => values
+                .get_mut(index as usize)
+                .ok_or(RuntimeError::IndexOutOfBounds)?,
+            _ => return Err(RuntimeError::AccessError),
+        };
+    }
+
+    match current_level {
+        NestedValue::Value(inner_value) => Ok(inner_value),
         _ => Err(RuntimeError::NotAValue),
     }
 }
