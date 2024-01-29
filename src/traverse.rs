@@ -110,9 +110,10 @@ pub fn traverse_statement(
 
             match data_type {
                 DataType::Signal => {
-                    let _output_signal_access = traverse_expression(ac, runtime, rhe, program_archive)?;
+                    let _output_signal_access =
+                        traverse_expression(ac, runtime, rhe, program_archive)?;
                     // TODO: handle signal substitution. This output signal is the output of the created gate.
-                    // It should be added to the circuit. 
+                    // It should be added to the circuit.
                 }
                 DataType::Variable => {
                     // The substitution is performed in the `execute_statement` fn
@@ -237,6 +238,7 @@ pub fn traverse_expression(
             if functions.contains(id) {
                 // let ret = ctx.get_data_item("RETURN").unwrap().get_u32().unwrap();
                 // runtime.pop_context();
+                debug!("temp return");
                 Ok(DataAccess::new(id.to_string(), vec![]))
             } else {
                 // runtime.pop_context();
