@@ -5,7 +5,7 @@
 //! It's main purpose is to traverse signals.
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::execute::{execute_expression, execute_infix_op};
+use crate::execute::{execute_expression, execute_infix_op, execute_statement};
 use crate::program::ProgramError;
 use crate::runtime::{ContextOrigin, DataAccess, DataType, Runtime, SubAccess};
 use circom_circom_algebra::num_traits::ToPrimitive;
@@ -101,43 +101,32 @@ pub fn traverse_statement(
         } => {
             debug!("Substitution for {}", var.to_string());
 
-            // Evaluate the data type of the given variable
-            let ctx = runtime.get_current_context()?;
-            let data_type = ctx.get_item_data_type(var)?;
+            let data_type = {
+                let ctx = runtime.get_current_context()?;
+                ctx.get_item_data_type(var)?
+            };
 
-            // Build access
-            let _access = build_access(runtime, ac, program_archive, var, access)?;
+            let access = build_access(runtime, ac, program_archive, var, access)?;
 
             match data_type {
-                DataType::Signal => todo!(),
-                DataType::Variable => todo!(),
+                DataType::Signal => {
+                    let _output_signal_access = traverse_expression(ac, runtime, rhe, program_archive)?;
+                    // TODO: handle signal substitution. This output signal is the output of the created gate.
+                    // It should be added to the circuit. 
+                }
+                DataType::Variable => {
+                    // The substitution is performed in the `execute_statement` fn
+                    execute_statement(ac, runtime, stmt, program_archive)?;
+                }
                 DataType::Component => {
                     // Process right hand expression
-                    let _rhs = traverse_expression(ac, runtime, rhe, program_archive)?;
+                    let rhs = traverse_expression(ac, runtime, rhe, program_archive)?;
 
                     // Add connection
+                    let ctx = runtime.get_current_context()?;
+                    ctx.add_connection(var, access, rhs)?;
                 }
             }
-
-            // Check if we're dealing with a signal or a variable
-            // let ctx = runtime.get_current_context()?;
-            // let data_item = ctx.get_data_item(&name_access);
-            // if let Ok(data_value) = data_item {
-            //     match data_value.get_data_type() {
-            //         DataType::Signal => {
-            //             traverse_expression(ac, runtime, rhe, program_archive)?;
-            //         }
-            //         DataType::Variable => {
-            //             execute_statement(ac, runtime, stmt, program_archive)?;
-            //         }
-            //         DataType::Component => {
-            //             //Here we deal with wiring
-            //             //lhs is a component wire and rhs is a signal
-
-            //             // we also check to complete template if all wiring is done
-            //         }
-            //     }
-            // }
 
             Ok(())
         }

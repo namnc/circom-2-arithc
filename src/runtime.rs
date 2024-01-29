@@ -254,13 +254,6 @@ impl Context {
         signal.get(&access_to_u32(access.get_access())?)
     }
 
-    /// Gets a component.
-    pub fn get_component(&self, name: &str) -> Result<&Component, RuntimeError> {
-        self.components
-            .get(name)
-            .ok_or(RuntimeError::ItemNotDeclared)
-    }
-
     /// Adds a connection in a component.
     pub fn add_connection(
         &mut self,
