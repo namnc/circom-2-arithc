@@ -8,7 +8,7 @@ const path = require("node:path");
 
 app.use(bodyParser.json());
 
-const circomPath = path.join(__dirname, '../target/release/circom');
+const circomPath = path.join(__dirname, '../target/debug/circom');
 
 app.get("/", (req, res) => {
   let { file } = req.body;
