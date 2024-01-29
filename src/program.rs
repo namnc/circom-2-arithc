@@ -18,8 +18,7 @@ pub fn parse_circom(user_input: &Input) -> Result<(), ProgramError> {
     let mut program_archive = parse_project(&user_input).map_err(|_| ProgramError::ParsingError)?;
     analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
 
-    let mut circuit = traverse_program(&program_archive)?;
-
+    let circuit = traverse_program(&program_archive)?;
 
     circuit.serde();
 

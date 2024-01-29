@@ -5,8 +5,8 @@ use dotenv::dotenv;
 use env_logger::{init_from_env, Env};
 
 fn main() -> Result<(), ()>{
-    // dotenv().ok();
-    // init_from_env(Env::default().filter_or("LOG_LEVEL", "info"));
+    dotenv().ok();
+    init_from_env(Env::default().filter_or("LOG_LEVEL", "info"));
     let input = Input::new()?;
     match  parse_circom(&input) {
         Err(_) => Err(()),
