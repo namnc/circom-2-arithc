@@ -55,6 +55,10 @@ pub enum ProgramError {
     AnalysisError,
     #[error("Call error")]
     CallError,
+    #[error("Empty data item")]
+    EmptyDataItem,
+    #[error("Invalid data type")]
+    InvalidDataType,
     #[error("Parsing error")]
     ParsingError,
     #[error("Context error: {0}")]
