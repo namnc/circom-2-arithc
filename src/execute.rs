@@ -75,12 +75,12 @@ pub fn execute_statement(
             }
 
             // Set the variable value
-            ctx.set_variable(access, rhe_val)?;
+            ctx.set_variable(&access, rhe_val)?;
 
             Ok(())
         }
         Statement::Return { value, .. } => {
-            let access = DataAccess::new("return".to_string(), vec![]);
+            let access = DataAccess::new("return", vec![]);
             let res = execute_expression(ac, runtime, value, program_archive)?;
             debug!("RETURN {:?}", res);
 
@@ -92,7 +92,7 @@ pub fn execute_statement(
                 declare?;
             }
 
-            ctx.set_variable(access, res)?;
+            ctx.set_variable(&access, res)?;
 
             Ok(())
         }
@@ -164,10 +164,7 @@ pub fn execute_expression(
             for (arg_name, &arg_value) in args_map.iter() {
                 // TODO: Review, all items are unidimensional
                 ctx.declare_item(DataType::Variable, arg_name, &[])?;
-                ctx.set_variable(
-                    DataAccess::new(arg_name.to_string(), vec![]),
-                    Some(arg_value),
-                )?;
+                ctx.set_variable(&DataAccess::new(arg_name, vec![]), Some(arg_value))?;
             }
 
             let _body = if functions.contains(id) {
