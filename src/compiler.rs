@@ -102,6 +102,7 @@ pub fn execute_project(
 pub struct Input {
     pub input_program: PathBuf,
     pub out_r1cs: PathBuf,
+    pub out_mpc: PathBuf,
     pub out_json_constraints: PathBuf,
     pub out_wat_code: PathBuf,
     pub out_wasm_code: PathBuf,
@@ -153,6 +154,7 @@ impl Default for Input {
             input_program,
             out_r1cs: PathBuf::from("./assets/tmp"),
             out_json_constraints: PathBuf::from("./assets/tmp"),
+            out_mpc: PathBuf::from("./assets/tmp"),
             out_wat_code: PathBuf::from("./assets/tmp"),
             out_wasm_code: PathBuf::from("./assets/tmp"),
             out_wasm_name: String::from("./assets/tmp"),
@@ -198,6 +200,7 @@ impl Input {
         Result::Ok(Input {
             //field: P_BN128,
             input_program: input,
+            out_mpc: Input::build_output(&output_path, &file_name, ".json"),
             out_r1cs: Input::build_output(&output_path, &file_name, R1CS),
             out_wat_code: Input::build_output(&output_js_path, &file_name, WAT),
             out_wasm_code: Input::build_output(&output_js_path, &file_name, WASM),

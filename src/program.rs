@@ -8,21 +8,20 @@ use crate::circuit::ArithmeticCircuit;
 use crate::compiler::{analyse_project, parse_project, Input};
 use crate::runtime::{Runtime, RuntimeError};
 use crate::traverse::traverse_sequence_of_statements;
+use circom_compiler::compiler_interface::Circuit;
 use circom_program_structure::ast::Expression;
 use circom_program_structure::program_archive::ProgramArchive;
 use thiserror::Error;
 
 /// Parses a Circom file, processes its content, and sets up the necessary structures for circuit analysis.
-pub fn parse_circom(user_input: &Input) -> Result<(), ProgramError> {
+pub fn parse_circom(user_input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
    
     let mut program_archive = parse_project(&user_input).map_err(|_| ProgramError::ParsingError)?;
     analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
 
     let circuit = traverse_program(&program_archive)?;
 
-    circuit.serde();
-
-    Ok(())
+    Ok(circuit)
 }
 
 /// Traverses the program structure of a parsed Circom file and constructs an arithmetic circuit.
