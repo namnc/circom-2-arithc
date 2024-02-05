@@ -204,7 +204,7 @@ impl Context {
     pub fn declare_random_item(&mut self, data_type: DataType) -> Result<DataAccess, RuntimeError> {
         let name = format!("random_{}", self.generate_id());
         self.declare_item(data_type, &name, &[])?;
-        Ok(DataAccess::new(name, vec![]))
+        Ok(DataAccess::new(&name, vec![]))
     }
 
     /// Returns the data type of an item.
@@ -223,7 +223,7 @@ impl Context {
     /// Sets the content of a variable.
     pub fn set_variable(
         &mut self,
-        access: DataAccess,
+        access: &DataAccess,
         value: Option<u32>,
     ) -> Result<(), RuntimeError> {
         let variable = self
@@ -386,7 +386,7 @@ impl Component {
             let connections = get_mut_nested_value(&mut self.connections, &component_path)?;
 
             let signal_access = u32_to_access(&signal_path);
-            connections.insert(DataAccess::new(signal_name, signal_access), to);
+            connections.insert(DataAccess::new(&signal_name, signal_access), to);
             Ok(())
         } else {
             Err(RuntimeError::AccessError)
@@ -405,13 +405,26 @@ pub struct DataAccess {
 
 impl DataAccess {
     /// Constructs a new DataAccess.
-    pub fn new(name: String, access: Vec<SubAccess>) -> Self {
-        Self { name, access }
+    pub fn new(name: &str, access: Vec<SubAccess>) -> Self {
+        Self {
+            name: name.to_string(),
+            access,
+        }
+    }
+
+    /// Sets the name of the data item.
+    pub fn set_name(&mut self, name: &str) {
+        self.name = name.to_string();
     }
 
     /// Gets the name of the data item.
     pub fn get_name(&self) -> String {
         self.name.clone()
+    }
+
+    /// Sets the sub access of the data item.
+    pub fn set_access(&mut self, access: Vec<SubAccess>) {
+        self.access = access;
     }
 
     /// Gets the sub access of the data item.
@@ -526,6 +539,31 @@ pub fn access_to_u32(sub_accesses: &[SubAccess]) -> Result<Vec<u32>, RuntimeErro
             _ => Err(RuntimeError::AccessError),
         })
         .collect()
+}
+
+/// Increments a multi-dimensional array index.
+/// Returns a boolean that indicates if there are more elements to traverse.
+///
+/// * `indices` - A vector representing the current position in a multi-dimensional array.
+/// * `limits` - A vector representing the limits of each dimension of the array.
+pub fn increment_indices(indices: &mut Vec<u32>, limits: &[u32]) -> Result<bool, RuntimeError> {
+    if indices.len() != limits.len() {
+        return Err(RuntimeError::AccessError);
+    }
+
+    let mut carry = true;
+    for (index, &limit) in indices.iter_mut().zip(limits.iter()).rev() {
+        if carry {
+            if *index < limit - 1 {
+                *index += 1;
+                carry = false;
+            } else {
+                *index = 0;
+            }
+        }
+    }
+
+    Ok(!carry)
 }
 
 /// Runtime errors
