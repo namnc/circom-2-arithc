@@ -3,8 +3,8 @@
 //! This module processes the circom input program to build the arithmetic circuit.
 
 use crate::{
+    circom::{input::Input, parser::parse_project, type_analysis::analyse_project},
     circuit::ArithmeticCircuit,
-    compiler::{analyse_project, parse_project, Input},
     process::process_statements,
     runtime::{Runtime, RuntimeError},
 };
@@ -56,6 +56,8 @@ pub enum ProgramError {
     ParsingError,
     #[error("Runtime error: {0}")]
     RuntimeError(RuntimeError),
+    #[error("Output directory creation error")]
+    OutputDirectoryCreationError,
 }
 
 impl From<RuntimeError> for ProgramError {

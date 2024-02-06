@@ -1,25 +1,22 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug executable 'circom'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=circom",
-                ],
-                "filter": {
-                    "name": "circom",
-                    "kind": "bin"
-                }
-            },
-            "args": ["${workspaceFolder}/src/assets/circuit.circom"],
-            "cwd": "${workspaceFolder}"
-        },
-    ]
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'circom'",
+      "cargo": {
+        "args": ["build", "--bin=circom"],
+        "filter": {
+          "name": "circom",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
 }
