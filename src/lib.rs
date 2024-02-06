@@ -4,7 +4,6 @@
 
 pub mod circuit;
 pub mod compiler;
-pub mod execute;
+pub mod process;
 pub mod program;
 pub mod runtime;
-pub mod traverse;
