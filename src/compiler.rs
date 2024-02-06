@@ -8,6 +8,7 @@
 
 use circom_compiler::compiler_interface;
 use circom_compiler::compiler_interface::{Config, VCP};
+use circom_constraint_generation::{build_circuit, BuildConfig};
 use circom_program_structure::error_definition::Report;
 use circom_program_structure::program_archive::ProgramArchive;
 use circom_type_analysis::check_types::check_types;
@@ -61,6 +62,7 @@ pub struct ExecutionConfig {
     pub r1cs: String,
     pub sym: String,
     pub json_constraints: String,
+    pub json_substitutions: String,
     pub no_rounds: usize,
     pub flag_s: bool,
     pub flag_f: bool,
@@ -79,11 +81,10 @@ pub fn execute_project(
     program_archive: ProgramArchive,
     config: ExecutionConfig,
 ) -> Result<VCP, ()> {
-    use circom_constraint_generation::{build_circuit, BuildConfig};
-
     let build_config = BuildConfig {
         no_rounds: config.no_rounds,
         flag_json_sub: config.json_substitution_flag,
+        json_substitutions: config.json_substitutions,
         flag_s: config.flag_s,
         flag_f: config.flag_f,
         flag_p: config.flag_p,

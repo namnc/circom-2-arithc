@@ -231,6 +231,16 @@ impl ArithmeticCircuit {
         }
     }
 
+    pub fn replace_output_var_in_gate(&mut self, var_id: u32, new_var_id: u32) {
+        for node in self
+            .gates
+            .values_mut()
+            .filter(|node| node.output_id == var_id)
+        {
+            node.output_id = new_var_id;
+        }
+    }
+
     pub fn truncate_zero_add_gate(&mut self) {
         let mut zero_add_gate_indice = vec![];
         for i in 1..(self.gate_count + 1) {
@@ -313,7 +323,7 @@ impl ArithmeticCircuit {
 
 #[allow(dead_code)]
 /// Represents a gate in its raw, unchecked form, used during parsing.
-struct UncheckedGate {
+pub struct UncheckedGate {
     xref: usize,
     yref: Option<usize>,
     zref: usize,

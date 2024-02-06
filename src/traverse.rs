@@ -4,18 +4,17 @@
 //!
 //! It's main purpose is to traverse signals.
 
-use std::collections::HashMap;
-
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::execute::{execute_expression, execute_infix_op, execute_statement};
 use crate::program::ProgramError;
-use crate::runtime::{DataContent, DataType, Runtime, ContextOrigin};
-use circom_circom_algebra::num_traits::ToPrimitive;
-use circom_program_structure::ast::{
-    Access, Expression, ExpressionInfixOpcode, Statement, VariableType,
+use crate::runtime::{
+    increment_indices, u32_to_access, ContextOrigin, DataAccess, DataType, Runtime, SubAccess,
 };
+use circom_circom_algebra::num_traits::ToPrimitive;
+use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
 use circom_program_structure::program_archive::ProgramArchive;
 use log::debug;
+use std::collections::HashMap;
 
 /// Processes a sequence of statements, handling each based on its specific type and context.
 pub fn traverse_sequence_of_statements(
@@ -56,35 +55,52 @@ pub fn traverse_statement(
             dimensions,
             ..
         } => {
-            // Process index in case of array
-            let dim_u32_vec: Vec<u32> = dimensions
+            let dimensions: Vec<u32> = dimensions
                 .iter()
-                .map(|dimension| execute_expression(ac, runtime, dimension, program_archive))
+                .map(|exp| {
+                    execute_expression(ac, runtime, exp, program_archive)?
+                        .ok_or(ProgramError::EmptyDataItem)
+                })
                 .collect::<Result<Vec<u32>, _>>()?;
+            let data_type = DataType::try_from(xtype)?;
 
-            match xtype {
-                VariableType::Component => {
-                    // Here when a component is declared it will not be instantiated
-                    // Instead we need to keep track of the inputs and outputs signals of the component
-                    // And when the output signals are all wired we instantiated the component, i.e. do the traverse of the template statements
-                    // However at the declaration we should have all the arguments
-                    traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec)
+            let ctx = runtime.get_current_context()?;
+            ctx.declare_item(data_type.clone(), name, &dimensions)?;
+
+            // If the declared item is a signal we should add it to the arithmetic circuit
+            if data_type == DataType::Signal {
+                let mut signal_access = DataAccess::new(name, Vec::new());
+
+                if dimensions.is_empty() {
+                    let signal_id = ctx.get_signal(&signal_access)?;
+                    ac.add_var(signal_id, &signal_id.to_string());
+                } else {
+                    let mut indices: Vec<u32> = vec![0; dimensions.len()];
+
+                    loop {
+                        // Set access and get signal id for the current indices
+                        signal_access.set_access(u32_to_access(&indices));
+                        let signal_id = ctx.get_signal(&signal_access)?;
+                        ac.add_var(signal_id, &signal_id.to_string());
+
+                        // Increment indices
+                        if !increment_indices(&mut indices, &dimensions)? {
+                            break;
+                        }
+                    }
                 }
-                VariableType::Var => traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec),
-                VariableType::Signal(_, _) => {
-                    traverse_declaration(ac, runtime, name, xtype, &dim_u32_vec)
-                }
-                _ => unimplemented!(),
             }
+
+            Ok(())
         }
         Statement::While { cond, stmt, .. } => {
             loop {
                 let result = execute_expression(ac, runtime, cond, program_archive)?;
-                if result == 0 {
+                if result == Some(0) {
                     break;
                 }
 
-                debug!("While res = {}", result);
+                debug!("While res = {:?}", result);
                 traverse_statement(ac, runtime, stmt, program_archive)?
             }
 
@@ -98,7 +114,7 @@ pub fn traverse_statement(
         } => {
             let result = execute_expression(ac, runtime, cond, program_archive)?;
             let else_case = else_case.as_ref().map(|e| e.as_ref());
-            if result == 0 {
+            if result == Some(0) {
                 if let Option::Some(else_stmt) = else_case {
                     return traverse_statement(ac, runtime, else_stmt, program_archive);
                 }
@@ -111,53 +127,57 @@ pub fn traverse_statement(
             var, access, rhe, ..
         } => {
             debug!("Substitution for {}", var.to_string());
-            let mut name_access = String::from(var);
 
-            //TODO: here we can have component and array access at the same time
-            for a in access.iter() {
-                match a {
-                    Access::ArrayAccess(expr) => {
-                        debug!("Sub Array access found");
-                        let dim_u32_str = traverse_expression(ac, runtime, expr, program_archive)?;
-                        name_access.push('_');
-                        name_access.push_str(&dim_u32_str);
-                        debug!("Sub Change var name to {}", name_access);
-                    }
-                    Access::ComponentAccess(_name) => {
-                        debug!("Sub Component access found {}", _name);
-                        
-                    }
+            let data_type = {
+                let ctx = runtime.get_current_context()?;
+                ctx.get_item_data_type(var)?
+            };
+
+            let access = build_access(runtime, ac, program_archive, var, access)?;
+
+            match data_type {
+                DataType::Signal => {
+                    // This corresponds to a gate generation
+                    let temp_output = traverse_expression(ac, runtime, rhe, program_archive)?;
+
+                    // Replace the temporary output signal with the given one.
+                    let ctx = runtime.get_current_context()?;
+                    let temp_output_id = ctx.get_signal(&temp_output)?;
+                    let given_output_id = ctx.get_signal(&access)?;
+
+                    ac.replace_output_var_in_gate(temp_output_id, given_output_id);
+                }
+                DataType::Variable => {
+                    // The substitution (variable assignment) is performed in the `execute_statement` fn
+                    execute_statement(ac, runtime, stmt, program_archive)?;
+                }
+                DataType::Component => {
+                    // This corresponds to a component wiring
+                    let rhs = traverse_expression(ac, runtime, rhe, program_archive)?;
+
+                    // Add connection
+                    let ctx = runtime.get_current_context()?;
+                    ctx.add_connection(var, access, rhs)?;
                 }
             }
 
-            // Check if we're dealing with a signal or a variable
-            let ctx = runtime.get_current_context()?;
-            let data_item = ctx.get_data_item(&name_access);
-            if let Ok(data_value) = data_item {
-                match data_value.get_data_type() {
-                    DataType::Signal => {
-                        traverse_expression(ac, runtime, rhe, program_archive)?;
-                    }
-                    DataType::Variable => {
-                        execute_statement(ac, runtime, stmt, program_archive)?;
-                    }
-                    DataType::Component => {
-                        //Here we deal with wiring
-                        //lhs is a component wire and rhs is a signal
-
-                        // we also check to complete template if all wiring is done
-                    }
-                }
-            }
             Ok(())
         }
         Statement::Return { value, .. } => {
-            debug!("Return expression found");
+            let access = DataAccess::new("return", vec![]);
             let res = execute_expression(ac, runtime, value, program_archive)?;
-            debug!("RETURN {}", res);
+            debug!("RETURN {:?}", res);
+
             let ctx = runtime.get_current_context()?;
-            ctx.declare_variable("RETURN");
-            ctx.set_data_item("RETURN", DataContent::Scalar(res));
+            let declare = ctx.declare_item(DataType::Variable, &access.get_name(), &[]);
+
+            // Added check to avoid panic when the return is already declared
+            if declare.is_ok() {
+                declare?;
+            }
+
+            ctx.set_variable(&access, res)?;
+
             Ok(())
         }
         Statement::Block { stmts, .. } => {
@@ -167,26 +187,24 @@ pub fn traverse_statement(
     }
 }
 
-/// Process an expression and returns a name of a variable that contains the result.
+/// Process an expression and returns a name of a data item that contains the result.
 pub fn traverse_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     expression: &Expression,
     _program_archive: &ProgramArchive,
-) -> Result<String, ProgramError> {
+) -> Result<DataAccess, ProgramError> {
     match expression {
         Expression::Number(_, value) => {
-            let num_val = value.to_u32().ok_or(ProgramError::ParsingError)?;
+            let ctx = runtime.get_current_context()?;
+            let access = ctx.declare_random_item(DataType::Variable)?;
 
-            let res = runtime.get_current_context()?.declare_const(num_val);
-            // Add const to circuit only if the declaration was successful
-            if res.is_ok() {
-                // Setting as id the constant value
-                res?;
-                ac.add_const_var(num_val, num_val);
-            }
+            ctx.set_variable(
+                &access,
+                Some(value.to_u32().ok_or(ProgramError::ParsingError)?),
+            )?;
 
-            Ok(num_val.to_string())
+            Ok(access)
         }
         Expression::InfixOp {
             lhe, infix_op, rhe, ..
@@ -197,25 +215,7 @@ pub fn traverse_expression(
             traverse_infix_op(ac, runtime, &varlop, &varrop, infix_op)
         }
         Expression::Variable { name, access, .. } => {
-            let mut name_access = String::from(name);
-            debug!("Variable found {}", name.to_string());
-            for a in access.iter() {
-                match a {
-                    Access::ArrayAccess(expr) => {
-                        debug!("Array access found");
-                        let dim_u32_str = traverse_expression(ac, runtime, expr, _program_archive)?;
-                        name_access.push('_');
-                        name_access.push_str(&dim_u32_str);
-                        debug!("Changed var name to {}", name_access);
-                    }
-                    Access::ComponentAccess(_) => {
-                        debug!("Component access found");
-                        todo!()
-                    }
-                }
-            }
-
-            Ok(name_access)
+            build_access(runtime, ac, _program_archive, name, access)
         }
         Expression::Call { id, args, .. } => {
             debug!("Call found {}", id);
@@ -228,15 +228,16 @@ pub fn traverse_expression(
                 _program_archive.get_template_data(id).get_name_of_params()
             };
 
-            let mut args_map = HashMap::new();
+            let mut args_map: HashMap<String, u32> = HashMap::new();
 
             // We start by setting argument values to argument names
-            for (_arg_name, arg_value) in arg_names.iter().zip(args) {
+            for (arg_name, arg_value) in arg_names.iter().zip(args) {
                 // We set arg_name to have arg_value
                 // Because arg_value is an expression (constant, variable, or an infix operation or a function call) we need to execute to have the actual value
-                let value = execute_expression(ac, runtime, arg_value, _program_archive)?;
+                let value = execute_expression(ac, runtime, arg_value, _program_archive)?
+                    .ok_or(ProgramError::EmptyDataItem)?;
                 // We cache this to args hashmap
-                args_map.insert(_arg_name, value);
+                args_map.insert(arg_name.to_string(), value);
             }
 
             // Here we need to spawn a new context for calling a function or wiring with a component (template)
@@ -245,9 +246,10 @@ pub fn traverse_expression(
             let ctx = runtime.get_current_context()?;
 
             // Now we put args to use
-            for (_arg_name, arg_value) in args_map.iter() {
-                let _ = ctx.declare_variable(&_arg_name);
-                let _ = ctx.set_data_item(_arg_name, DataContent::Scalar(*(arg_value)));
+            for (arg_name, &arg_value) in args_map.iter() {
+                // TODO: Review, all items are unidimensional
+                ctx.declare_item(DataType::Variable, arg_name, &[])?;
+                ctx.set_variable(&DataAccess::new(arg_name, vec![]), Some(arg_value))?;
             }
 
             let _body = if functions.contains(id) {
@@ -255,122 +257,118 @@ pub fn traverse_expression(
             } else {
                 _program_archive.get_template_data(id).get_body_as_vec()
             };
-            
+
             traverse_sequence_of_statements(ac, runtime, _body, _program_archive, true)?;
 
             if functions.contains(id) {
                 // let ret = ctx.get_data_item("RETURN").unwrap().get_u32().unwrap();
                 // runtime.pop_context();
-                Ok(id.to_string())
+                debug!("temp return");
+                Ok(DataAccess::new(id, vec![]))
             } else {
                 // runtime.pop_context();
-                Ok(id.to_string())
+                Ok(DataAccess::new(id, vec![]))
             }
-
-            
         }
         _ => unimplemented!("Expression not implemented"),
     }
 }
 
 /// Traverses an infix operation and processes it based on the data types of the inputs.
-/// - If both inputs are scalar variables, it directly computes the operation.
-/// - If one or both inputs are not scalar variables, it constructs the corresponding circuit gate.
-/// Returns a variable containing the result of the operation or the signal of the output gate.
+/// - If both inputs are variables, it directly computes the operation.
+/// - If one or both inputs are signals, it constructs the corresponding circuit gate.
+/// Returns the access to a variable containing the result of the operation or the signal of the output gate.
 pub fn traverse_infix_op(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    input_lhs: &str,
-    input_rhs: &str,
+    input_lhs: &DataAccess,
+    input_rhs: &DataAccess,
     infixop: &ExpressionInfixOpcode,
-) -> Result<String, ProgramError> {
+) -> Result<DataAccess, ProgramError> {
     let ctx = runtime.get_current_context()?;
 
-    // Retrieve left and right hand side data items
-    let lhs_data = ctx.get_data_item(input_lhs)?;
-    let rhs_data = ctx.get_data_item(input_rhs)?;
+    // Determine the data types of the left and right operands
+    let lhs_data_type = ctx.get_item_data_type(&input_lhs.get_name())?;
+    let rhs_data_type = ctx.get_item_data_type(&input_rhs.get_name())?;
 
-    // Get numerical values of lhs and rhs
-    let lhs_value = lhs_data.get_u32()?;
-    let rhs_value = rhs_data.get_u32()?;
-
-    let lhs_data_type = lhs_data.get_data_type();
-    let rhs_data_type = rhs_data.get_data_type();
-
-    // Execute directly for scalar values
+    // Handle the case where both inputs are variables
     if lhs_data_type == DataType::Variable && rhs_data_type == DataType::Variable {
-        let result_var = ctx.declare_auto_var()?;
-        ctx.set_data_item(
-            &result_var,
-            DataContent::Scalar(execute_infix_op(&lhs_value, &rhs_value, infixop)),
-        )?;
-        return Ok(result_var);
+        let lhs_value = ctx
+            .get_variable(input_lhs)?
+            .ok_or(ProgramError::EmptyDataItem)?;
+        let rhs_value = ctx
+            .get_variable(input_rhs)?
+            .ok_or(ProgramError::EmptyDataItem)?;
+
+        let op_res = execute_infix_op(&lhs_value, &rhs_value, infixop);
+        let item_access = ctx.declare_random_item(DataType::Variable)?;
+        ctx.set_variable(&item_access, Some(op_res))?;
+
+        return Ok(item_access);
     }
 
-    // Add constants to the circuit if needed
-    if lhs_data_type == DataType::Variable {
-        ac.add_const_var(lhs_value, lhs_value);
-    }
-    if rhs_data_type == DataType::Variable {
-        ac.add_const_var(rhs_value, rhs_value);
-    }
+    // Handle cases where one or both inputs are signals
+    let lhs_signal = match lhs_data_type {
+        DataType::Signal => ctx.get_signal(input_lhs)?,
+        DataType::Variable => {
+            let value = ctx
+                .get_variable(input_lhs)?
+                .ok_or(ProgramError::EmptyDataItem)?;
+            ac.add_const_var(value, value);
+            value
+        }
+        _ => return Err(ProgramError::InvalidDataType),
+    };
 
-    // Create and add a new gate for non-scalar operations
+    let rhs_signal = match rhs_data_type {
+        DataType::Signal => ctx.get_signal(input_rhs)?,
+        DataType::Variable => {
+            let value = ctx
+                .get_variable(input_rhs)?
+                .ok_or(ProgramError::EmptyDataItem)?;
+            ac.add_const_var(value, value);
+            value
+        }
+        _ => return Err(ProgramError::InvalidDataType),
+    };
+
+    // Construct the corresponding circuit gate
     let gate_type = AGateType::from(infixop);
-    let output_signal = ctx.declare_auto_signal()?;
-    let output_id = ctx.get_data_item(&output_signal)?.get_u32()?;
-
-    ac.add_gate(&output_signal, output_id, lhs_value, rhs_value, gate_type);
+    let output_signal = ctx.declare_random_item(DataType::Signal)?;
+    let output_id = ctx.get_signal(&output_signal)?;
+    ac.add_gate(
+        &output_signal.get_name(),
+        output_id,
+        lhs_signal,
+        rhs_signal,
+        gate_type,
+    );
 
     Ok(output_signal)
 }
 
-/// Handles declaration of signals and variables
-pub fn traverse_declaration(
-    ac: &mut ArithmeticCircuit,
+/// Builds a DataAccess from an Access array
+pub fn build_access(
     runtime: &mut Runtime,
-    var_name: &str,
-    xtype: &VariableType,
-    dim_u32_vec: &[u32],
-) -> Result<(), ProgramError> {
-    let ctx = runtime.get_current_context()?;
-    let is_array = !dim_u32_vec.is_empty();
+    ac: &mut ArithmeticCircuit,
+    program_archive: &ProgramArchive,
+    name: &str,
+    access: &[Access],
+) -> Result<DataAccess, ProgramError> {
+    let mut access_vec = Vec::new();
 
-    match xtype {
-        VariableType::Signal(_, _) => {
-            if is_array {
-                for &i in dim_u32_vec {
-                    let (name, id) = ctx.declare_signal_array(var_name, vec![i])?;
-                    ac.add_var(id, &name);
-                }
-            } else {
-                let signal_id = ctx.declare_signal(var_name)?;
-                ac.add_var(signal_id, var_name);
+    for a in access.iter() {
+        match a {
+            Access::ArrayAccess(expr) => {
+                let index = execute_expression(ac, runtime, expr, program_archive)?
+                    .ok_or(ProgramError::EmptyDataItem)?;
+                access_vec.push(SubAccess::Array(index));
+            }
+            Access::ComponentAccess(signal) => {
+                access_vec.push(SubAccess::Component(signal.to_string()));
             }
         }
-        VariableType::Var => {
-            if is_array {
-                for &i in dim_u32_vec {
-                    ctx.declare_var_array(var_name, vec![i])?;
-                }
-            } else {
-                ctx.declare_variable(var_name)?;
-            }
-        }
-        VariableType::Component => {
-            // Here now we have component with empty wiring
-            if is_array {
-                for &i in dim_u32_vec {
-                    let (name, id) = ctx.declare_component_array(var_name, vec![i])?;
-                    ac.add_var(id, &name);
-                }
-            } else {
-                let signal_id = ctx.declare_component(var_name)?;
-                ac.add_var(signal_id, var_name);
-            }
-        }
-        _ => unimplemented!(),
     }
 
-    Ok(())
+    Ok(DataAccess::new(name, access_vec))
 }

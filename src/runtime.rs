@@ -2,8 +2,10 @@
 //!
 //! This module manages the main runtime, keeping track of the multiple contexts and data items in the program.
 
+use circom_program_structure::ast::VariableType;
 use log::debug;
-use std::collections::HashMap;
+use rand::{thread_rng, Rng};
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -15,11 +17,47 @@ pub enum ContextOrigin {
     Block,
 }
 
+/// Data type
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DataType {
+    Component,
+    Signal,
+    Variable,
+}
+
+impl TryFrom<&VariableType> for DataType {
+    type Error = RuntimeError;
+    fn try_from(t: &VariableType) -> Result<Self, Self::Error> {
+        match t {
+            VariableType::Component => Ok(DataType::Component),
+            VariableType::Signal(..) => Ok(DataType::Signal),
+            VariableType::Var => Ok(DataType::Variable),
+            _ => Err(RuntimeError::UnsupportedDataType),
+        }
+    }
+}
+
+/// Structure to hold either a single or a nested array of values.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NestedValue<T> {
+    Array(Vec<NestedValue<T>>),
+    Value(T),
+}
+
+/// Data item sub access.
+/// - The component property is used to access component signals (by name).
+/// - The array property is used to access an array index.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SubAccess {
+    Array(u32),
+    Component(String),
+}
+
 /// Runtime - manages the context stack and variable tracking.
 pub struct Runtime {
     ctx_stack: Vec<Context>,
     current_ctx: u32,
-    last_ctx: u32,
+    _last_ctx: u32,
 }
 
 impl Runtime {
@@ -27,9 +65,9 @@ impl Runtime {
     pub fn new() -> Result<Self, RuntimeError> {
         debug!("New runtime");
         Ok(Self {
-            ctx_stack: vec![Context::new(0, 0, HashMap::new())?],
+            ctx_stack: vec![Context::new(0, 0)],
             current_ctx: 0,
-            last_ctx: 0,
+            _last_ctx: 0,
         })
     }
 
@@ -38,15 +76,15 @@ impl Runtime {
         debug!("New context - origin: {:?}", origin);
         // Generate a unique ID for the new context
         let new_id = self.generate_context_id();
+        let current_context = self.get_current_context()?;
 
         // Create the new context using data from the caller context
-        let values = match origin {
-            ContextOrigin::Call => HashMap::new(),
-            ContextOrigin::Branch => self.get_current_context()?.values.clone(),
-            ContextOrigin::Loop => self.get_current_context()?.values.clone(),
-            ContextOrigin::Block => self.get_current_context()?.values.clone(),
+        let new_context = match origin {
+            ContextOrigin::Call => Context::new(new_id, self.current_ctx),
+            ContextOrigin::Branch => current_context.new_child(new_id),
+            ContextOrigin::Loop => current_context.new_child(new_id),
+            ContextOrigin::Block => current_context.new_child(new_id),
         };
-        let new_context = Context::new(new_id, self.current_ctx, values)?;
 
         // NOTE: above could be the simplest way to do what I wrote below. We just let Call be with an empty map and there will be declaration and initialization coming in from operations code.
         // TODO: we might want to distiguish the context creation reason here
@@ -91,8 +129,7 @@ impl Runtime {
 
     /// Generates a unique context ID.
     fn generate_context_id(&mut self) -> u32 {
-        self.last_ctx += 1;
-        self.last_ctx
+        thread_rng().gen()
     }
 }
 
@@ -101,356 +138,455 @@ impl Runtime {
 #[derive(Clone)]
 pub struct Context {
     id: u32,
-    #[allow(dead_code)]
     caller_id: u32,
-    values: HashMap<String, DataItem>, // Name -> Value
+    names: HashSet<String>,
+    variables: HashMap<String, Variable>,
+    signals: HashMap<String, Signal>,
+    components: HashMap<String, Component>,
 }
 
 impl Context {
     /// Constructs a new Context.
-    pub fn new(
-        id: u32,
-        caller_id: u32,
-        values: HashMap<String, DataItem>,
-    ) -> Result<Self, RuntimeError> {
-        debug!("New context - id: {}", id);
-        Ok(Self {
+    pub fn new(id: u32, caller_id: u32) -> Self {
+        Self {
             id,
             caller_id,
-            values,
-        })
-    }
-
-    /// Declares a new data item in the context with the given name and data type.
-    /// Returns an error if the data item is already declared.
-    pub fn declare_data_item(
-        &mut self,
-        name: &str,
-        data_type: DataType,
-    ) -> Result<(), RuntimeError> {
-        debug!("Declaring data item {} - {:?}", name, data_type);
-        if self.values.contains_key(name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(name.to_string(), DataItem::new(data_type));
-            Ok(())
+            names: HashSet::new(),
+            variables: HashMap::new(),
+            signals: HashMap::new(),
+            components: HashMap::new(),
         }
     }
 
-    /// Assigns a value to a data item in the context.
-    /// Returns an error if the data item is not found.
-    pub fn set_data_item(&mut self, name: &str, content: DataContent) -> Result<(), RuntimeError> {
-        debug!("Setting data item {} - {:?} ", name, content);
-        match self.values.get_mut(name) {
-            Some(data_item) => data_item.set_content(content),
-            None => Err(RuntimeError::DataItemNotDeclared),
-        }
-    }
-
-    /// Retrieves a reference to a data item by name.
-    /// Returns an error if the data item is not found.
-    pub fn get_data_item(&self, name: &str) -> Result<&DataItem, RuntimeError> {
-        debug!("Getting data item {}", name);
-        self.values
-            .get(name)
-            .ok_or(RuntimeError::DataItemNotDeclared)
-    }
-
-    /// Removes a data item from the context.
-    /// Returns an error if the data item is not found.
-    pub fn remove_data_item(&mut self, name: &str) -> Result<(), RuntimeError> {
-        debug!("Removing data item {}", name);
-        if self.values.remove(name).is_some() {
-            Ok(())
-        } else {
-            Err(RuntimeError::DataItemNotDeclared)
-        }
-    }
-
-    /// Clears the content of a data item in the context.
-    /// Returns an error if the data item is not found.
-    pub fn clear_data_item(&mut self, name: &str) -> Result<(), RuntimeError> {
-        debug!("Clearing data item {}", name);
-        match self.values.get_mut(name) {
-            Some(data_item) => {
-                data_item.clear_content();
-                Ok(())
-            }
-            None => Err(RuntimeError::DataItemNotDeclared),
-        }
-    }
-
-    /// Declares a new variable.
-    pub fn declare_variable(&mut self, name: &str) -> Result<(), RuntimeError> {
-        debug!("Declaring variable {}", name);
-        if self.values.contains_key(name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(name.to_string(), DataItem::new(DataType::Variable));
-            Ok(())
-        }
-    }
-
-    /// Declares a new signal.
-    pub fn declare_signal(&mut self, name: &str) -> Result<u32, RuntimeError> {
-        debug!("Declaring signal {}", name);
-        let signal_id = self.generate_id();
-        if self.values.contains_key(name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(name.to_string(), DataItem::new(DataType::Signal));
-            self.set_data_item(name, DataContent::Scalar(signal_id))?;
-            Ok(signal_id)
-        }
-    }
-
-    /// Declares a new component.
-    pub fn declare_component(&mut self, name: &str) -> Result<u32, RuntimeError> {
-        debug!("Declaring component {}", name);
-        let component_id = self.generate_id();
-        if self.values.contains_key(name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(name.to_string(), DataItem::new(DataType::Component));
-            self.set_data_item(name, DataContent::Wiring(HashMap::new()))?;
-            Ok(component_id)
-        }
-    }
-
-    /// Declares a new const value as a signal.
-    /// Sets the value of the signal to the given value. This being the signal id.
-    pub fn declare_const(&mut self, value: u32) -> Result<(), RuntimeError> {
-        debug!("Declaring const {:?}", value);
-        let const_name = value.to_string();
-        if self.values.contains_key(&const_name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(const_name.clone(), DataItem::new(DataType::Signal));
-            self.set_data_item(&const_name, DataContent::Scalar(value))?;
-            Ok(())
-        }
-    }
-
-    /// Declares a new auto generated variable.
-    pub fn declare_auto_var(&mut self) -> Result<String, RuntimeError> {
-        let auto_name = format!("auto_var_{}", self.generate_id());
-        debug!("Declaring auto generated variable {}", auto_name);
-        if self.values.contains_key(&auto_name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(auto_name.clone(), DataItem::new(DataType::Variable));
-            Ok(auto_name)
-        }
-    }
-
-    /// Declares a new auto generated signal.
-    pub fn declare_auto_signal(&mut self) -> Result<String, RuntimeError> {
-        let signal_id = self.generate_id();
-        let auto_name = format!("auto_signal_{}", signal_id);
-        debug!("Declaring auto generated signal {}", auto_name);
-        if self.values.contains_key(&auto_name) {
-            Err(RuntimeError::DataItemAlreadyDeclared)
-        } else {
-            self.values
-                .insert(auto_name.to_string(), DataItem::new(DataType::Signal));
-            self.set_data_item(&auto_name, DataContent::Scalar(signal_id))?;
-            Ok(auto_name)
-        }
-    }
-
-    /// Gets the value of a const signal.
-    pub fn get_const(&self, value: u32) -> Result<&DataItem, RuntimeError> {
-        let const_name = value.to_string();
-        self.get_data_item(&const_name)
-    }
-
-    // DataItem id generation needs to be reviewed. There could be collisions between
-    // different contexts due to constant signals haivng arbitrary values.
-    /// Generates a unique ID for a DataItem based on the context. (Temporary implementation)
-    pub fn generate_id(&mut self) -> u32 {
-        self.values.len() as u32 * 2 + 1000
-    }
-
-    // TODO: array auto var should support multi-dimension, right now 1
-    // TODO: temporary implementation, need to be reviewed
-    /// Creates a unique signal for an array element based on its indices and assigns it a unique identifier.
-    pub fn declare_signal_array(
-        &mut self,
-        name: &str,
-        indices: Vec<u32>,
-    ) -> Result<(String, u32), RuntimeError> {
-        let mut signal_name = name.to_string();
-
-        for indice in indices {
-            signal_name.push_str(&format!("_{}", indice));
-        }
-
-        let signal_id = self.declare_signal(&signal_name)?;
-
-        Ok((signal_name, signal_id))
-    }
-
-    // TODO: array auto var should support multi-dimension, right now 1
-    // TODO: temporary implementation, need to be reviewed
-    /// Creates a unique signal for an array element based on its indices and assigns it a unique identifier.
-    pub fn declare_component_array(
-        &mut self,
-        name: &str,
-        indices: Vec<u32>,
-    ) -> Result<(String, u32), RuntimeError> {
-        let mut component_name = name.to_string();
-
-        for indice in indices {
-            component_name.push_str(&format!("_{}", indice));
-        }
-
-        let component_id = self.declare_component(&component_name)?;
-
-        Ok((component_name, component_id))
-    }
-
-    /// Creates a unique variable for an array element based on its indices and assigns it a unique identifier.
-    pub fn declare_var_array(&mut self, name: &str, indices: Vec<u32>) -> Result<(), RuntimeError> {
-        let mut var_name = name.to_string();
-
-        for indice in indices {
-            var_name.push_str(&format!("_{}", indice));
-        }
-
-        self.declare_variable(name)
-    }
-
-    
-}
-
-/// Data type
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DataType {
-    Signal,
-    Variable,
-    Component
-}
-
-/// Data content
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DataContent {
-    Scalar(u32),
-    Wiring(HashMap<String, String>),
-    Array(Vec<DataContent>),
-}
-
-/// Data item
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DataItem {
-    data_type: DataType,
-    content: Option<DataContent>,
-}
-
-impl DataItem {
-    /// Constructs a new DataItem.
-    pub fn new(data_type: DataType) -> Self {
+    /// Returns a contexts that inherits from the current context.
+    pub fn new_child(&self, id: u32) -> Self {
         Self {
-            data_type,
-            content: None,
+            id,
+            caller_id: self.id,
+            names: self.names.clone(),
+            variables: self.variables.clone(),
+            signals: self.signals.clone(),
+            components: self.components.clone(),
         }
     }
 
-    /// Sets the content of the data item. Returns an error if the item is a signal and is already set.
-    pub fn set_content(&mut self, content: DataContent) -> Result<(), RuntimeError> {
-        match self.data_type {
-            DataType::Signal if self.content.is_some() => Err(RuntimeError::SignalAlreadySet),
-            _ => {
-                self.content = Some(content);
-                Ok(())
+    /// Declares a new item of the specified type with the given name and dimensions.
+    pub fn declare_item(
+        &mut self,
+        data_type: DataType,
+        name: &str,
+        dimensions: &[u32],
+    ) -> Result<(), RuntimeError> {
+        // Check name availability
+        self.add_name(name)?;
+        let name_string = name.to_string();
+
+        match data_type {
+            DataType::Signal => {
+                let signal = Signal::new(dimensions);
+                self.signals.insert(name_string, signal);
+            }
+            DataType::Variable => {
+                let variable = Variable::new(dimensions);
+                self.variables.insert(name_string, variable);
+            }
+            DataType::Component => {
+                let component = Component::new(dimensions);
+                self.components.insert(name_string, component);
+            }
+        };
+
+        Ok(())
+    }
+
+    /// Declares a new item with a random name.
+    /// This might be dropped.
+    pub fn declare_random_item(&mut self, data_type: DataType) -> Result<DataAccess, RuntimeError> {
+        let name = format!("random_{}", self.generate_id());
+        self.declare_item(data_type, &name, &[])?;
+        Ok(DataAccess::new(&name, vec![]))
+    }
+
+    /// Returns the data type of an item.
+    pub fn get_item_data_type(&self, name: &str) -> Result<DataType, RuntimeError> {
+        if self.variables.get(name).is_some() {
+            Ok(DataType::Variable)
+        } else if self.signals.get(name).is_some() {
+            Ok(DataType::Signal)
+        } else if self.components.get(name).is_some() {
+            Ok(DataType::Component)
+        } else {
+            Err(RuntimeError::ItemNotDeclared)
+        }
+    }
+
+    /// Sets the content of a variable.
+    pub fn set_variable(
+        &mut self,
+        access: &DataAccess,
+        value: Option<u32>,
+    ) -> Result<(), RuntimeError> {
+        let variable = self
+            .variables
+            .get_mut(&access.name)
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+
+        variable.set(&access_to_u32(access.get_access())?, value)
+    }
+
+    /// Gets the content of a variable.
+    pub fn get_variable(&self, access: &DataAccess) -> Result<Option<u32>, RuntimeError> {
+        let variable = self
+            .variables
+            .get(&access.name)
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+
+        variable.get(&access_to_u32(access.get_access())?)
+    }
+
+    /// Gets the content of a signal.
+    pub fn get_signal(&self, access: &DataAccess) -> Result<u32, RuntimeError> {
+        let signal = self
+            .signals
+            .get(&access.name)
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+
+        signal.get(&access_to_u32(access.get_access())?)
+    }
+
+    /// Adds a connection in a component.
+    pub fn add_connection(
+        &mut self,
+        component_name: &str,
+        from: DataAccess,
+        to: DataAccess,
+    ) -> Result<(), RuntimeError> {
+        let component = self
+            .components
+            .get_mut(component_name)
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+
+        component.add_connection(from, to)
+    }
+
+    /// Returns the caller context id.
+    pub fn caller_id(&self) -> u32 {
+        self.caller_id
+    }
+
+    /// Checks if the name is already used and adds it to the names set.
+    fn add_name(&mut self, name: &str) -> Result<(), RuntimeError> {
+        if !self.names.insert(name.to_string()) {
+            Err(RuntimeError::ItemAlreadyDeclared)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Generates a random u32 ID.
+    fn generate_id(&self) -> u32 {
+        thread_rng().gen()
+    }
+}
+
+/// Represents a signal that holds a single id or a nested structure of values with unique IDs.
+#[derive(Clone, Debug)]
+struct Signal {
+    value: NestedValue<u32>,
+}
+
+impl Signal {
+    /// Constructs a new Signal as a nested structure based on provided dimensions.
+    fn new(dimensions: &[u32]) -> Self {
+        let mut rng = rand::thread_rng();
+
+        // Create nested signals with unique IDs.
+        fn create_nested_signal(dimensions: &[u32], rng: &mut impl Rng) -> NestedValue<u32> {
+            if let Some((&first, rest)) = dimensions.split_first() {
+                let array = (0..first)
+                    .map(|_| create_nested_signal(rest, rng))
+                    .collect();
+                NestedValue::Array(array)
+            } else {
+                NestedValue::Value(rng.gen())
+            }
+        }
+
+        Self {
+            value: create_nested_signal(dimensions, &mut rng),
+        }
+    }
+
+    /// Retrieves the ID of the signal at the specified index path.
+    fn get(&self, index_path: &[u32]) -> Result<u32, RuntimeError> {
+        get_nested_value(&self.value, index_path)
+    }
+}
+
+/// Represents a variable that can hold a single value or nested structure of values.
+#[derive(Clone, Debug)]
+struct Variable {
+    value: NestedValue<Option<u32>>,
+}
+
+impl Variable {
+    /// Constructs a new Variable as a nested structure based on provided dimensions.
+    fn new(dimensions: &[u32]) -> Self {
+        // Initialize the innermost value.
+        let mut value = NestedValue::Value(None);
+
+        // Construct the nested structure in reverse order to ensure the correct dimensionality.
+        for &dimension in dimensions.iter().rev() {
+            let array = vec![value.clone(); dimension as usize];
+            value = NestedValue::Array(array);
+        }
+
+        Self { value }
+    }
+
+    /// Sets the content of the variable at the specified index path.
+    fn set(&mut self, index_path: &[u32], val: Option<u32>) -> Result<(), RuntimeError> {
+        let inner_value = get_mut_nested_value(&mut self.value, index_path)?;
+        *inner_value = val;
+        Ok(())
+    }
+
+    /// Retrieves the content of the variable at the specified index path.
+    fn get(&self, index_path: &[u32]) -> Result<Option<u32>, RuntimeError> {
+        get_nested_value(&self.value, index_path)
+    }
+}
+
+/// Component
+#[derive(Clone, Debug)]
+pub struct Component {
+    connections: NestedValue<HashMap<DataAccess, DataAccess>>,
+}
+
+impl Component {
+    /// Constructs a new Component as a nested structure based on provided dimensions.
+    fn new(dimensions: &[u32]) -> Self {
+        let mut connections = NestedValue::Value(HashMap::new());
+
+        // Construct the nested structure in reverse order to ensure the correct dimensionality.
+        for &dimension in dimensions.iter().rev() {
+            let array = vec![connections.clone(); dimension as usize];
+            connections = NestedValue::Array(array);
+        }
+
+        Self { connections }
+    }
+
+    // We're not processing the `to` path since this could be another component, etc. It has to be handled later.
+    /// Adds a connection from one DataAccess to another DataAccess.
+    pub fn add_connection(&mut self, from: DataAccess, to: DataAccess) -> Result<(), RuntimeError> {
+        if let ProcessedAccess::Component(component_path, signal_name, signal_path) =
+            process_subaccess(from.get_access())?
+        {
+            let connections = get_mut_nested_value(&mut self.connections, &component_path)?;
+
+            let signal_access = u32_to_access(&signal_path);
+            connections.insert(DataAccess::new(&signal_name, signal_access), to);
+            Ok(())
+        } else {
+            Err(RuntimeError::AccessError)
+        }
+    }
+}
+
+/// Data Access structure.
+/// - The name property is used to access variables, signals and components (by name).
+/// - The access property is used to access an array index or a component signal.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DataAccess {
+    name: String,
+    access: Vec<SubAccess>,
+}
+
+impl DataAccess {
+    /// Constructs a new DataAccess.
+    pub fn new(name: &str, access: Vec<SubAccess>) -> Self {
+        Self {
+            name: name.to_string(),
+            access,
+        }
+    }
+
+    /// Sets the name of the data item.
+    pub fn set_name(&mut self, name: &str) {
+        self.name = name.to_string();
+    }
+
+    /// Gets the name of the data item.
+    pub fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    /// Sets the sub access of the data item.
+    pub fn set_access(&mut self, access: Vec<SubAccess>) {
+        self.access = access;
+    }
+
+    /// Gets the sub access of the data item.
+    pub fn get_access(&self) -> &Vec<SubAccess> {
+        &self.access
+    }
+}
+
+#[derive(Debug)]
+pub enum ProcessedAccess {
+    Array(Vec<u32>),
+    Component(Vec<u32>, String, Vec<u32>), // (initial_path, signal_name, final_path)
+}
+
+/// Processes a vector of SubAccess.
+pub fn process_subaccess(sub_accesses: &[SubAccess]) -> Result<ProcessedAccess, RuntimeError> {
+    let mut initial_path = Vec::new();
+    let mut final_path = Vec::new();
+    let mut signal_name = String::new();
+    let mut has_signal = false;
+
+    for sub_access in sub_accesses {
+        match sub_access {
+            SubAccess::Array(index) => {
+                if has_signal {
+                    final_path.push(*index);
+                } else {
+                    initial_path.push(*index);
+                }
+            }
+            SubAccess::Component(name) => {
+                if has_signal {
+                    // We shouldn't have more than one signal in a sub access.
+                    return Err(RuntimeError::AccessError);
+                }
+                signal_name = name.clone();
+                has_signal = true;
             }
         }
     }
 
-    /// Clears the content of the data item.
-    pub fn clear_content(&mut self) {
-        self.content = None;
+    if has_signal {
+        Ok(ProcessedAccess::Component(
+            initial_path,
+            signal_name,
+            final_path,
+        ))
+    } else {
+        Ok(ProcessedAccess::Array(initial_path))
     }
+}
 
-    /// Gets the content of the data item.
-    pub fn get_content(&self) -> Option<&DataContent> {
-        self.content.as_ref()
-    }
-
-    /// Gets the u32 value if the content is a scalar.
-    /// Returns an error if the content is an array or not set.
-    pub fn get_u32(&self) -> Result<u32, RuntimeError> {
-        match &self.content {
-            Some(DataContent::Scalar(value)) => Ok(*value),
-            Some(DataContent::Array(_)) => Err(RuntimeError::NotAScalar),
-            Some(DataContent::Wiring(_)) => Err(RuntimeError::NotAScalar),
-            None => Err(RuntimeError::EmptyDataItem),
-        }
-    }
-
-    /// Gets the name value if the content is a wiring.
-    /// Returns an error if the content is not a wiring or not set.
-    pub fn get_wiring(&self) -> Result<HashMap<String, String>, RuntimeError> {
-        match &self.content {
-            Some(DataContent::Scalar(_)) => Err(RuntimeError::NotAWiring),
-            Some(DataContent::Array(_)) => Err(RuntimeError::NotAWiring),
-            Some(DataContent::Wiring(value)) => Ok(value.clone()),
-            None => Err(RuntimeError::EmptyDataItem),
-        }
-    }
-
-    /// Retrieves an item from the array content at the specified index.
-    /// Returns an error if the content is not an array or the index is out of bounds.
-    pub fn get_array_item(&self, index: usize) -> Result<&DataContent, RuntimeError> {
-        match &self.content {
-            Some(DataContent::Array(array)) => {
-                array.get(index).ok_or(RuntimeError::IndexOutOfBounds)
+/// Generic function to navigate through NestedValue and return the inner value.
+/// The clone could be removed but then the type would need to implement Copy. Leaving it for now.
+pub fn get_nested_value<T: Clone>(
+    nested_value: &NestedValue<T>,
+    index_path: &[u32],
+) -> Result<T, RuntimeError> {
+    let mut current_level = nested_value;
+    for &index in index_path {
+        match current_level {
+            NestedValue::Array(values) => {
+                current_level = values
+                    .get(index as usize)
+                    .ok_or(RuntimeError::IndexOutOfBounds)?;
             }
-            Some(DataContent::Scalar(_)) => Err(RuntimeError::NotAnArray),
-            Some(DataContent::Wiring(_)) => Err(RuntimeError::NotAnArray),
-            None => Err(RuntimeError::EmptyDataItem),
+            _ => return Err(RuntimeError::AccessError),
         }
     }
 
-    /// Gets the data type of the data item.
-    pub fn get_data_type(&self) -> DataType {
-        self.data_type.clone()
+    match current_level {
+        NestedValue::Value(inner_value) => Ok(inner_value.clone()),
+        _ => Err(RuntimeError::NotAValue),
+    }
+}
+
+/// Generic function to navigate through NestedValue and return a mutable reference to the inner value.
+pub fn get_mut_nested_value<'a, T>(
+    nested_value: &'a mut NestedValue<T>,
+    index_path: &[u32],
+) -> Result<&'a mut T, RuntimeError> {
+    let mut current_level = nested_value;
+    for &index in index_path {
+        current_level = match current_level {
+            NestedValue::Array(values) => values
+                .get_mut(index as usize)
+                .ok_or(RuntimeError::IndexOutOfBounds)?,
+            _ => return Err(RuntimeError::AccessError),
+        };
     }
 
-    /// Checks if the content of the data item is an array.
-    pub fn is_array(&self) -> bool {
-        matches!(self.content, Some(DataContent::Array(_)))
+    match current_level {
+        NestedValue::Value(inner_value) => Ok(inner_value),
+        _ => Err(RuntimeError::NotAValue),
     }
+}
+
+/// Converts a vector of u32 to a vector of SubAccess.
+pub fn u32_to_access(indices: &[u32]) -> Vec<SubAccess> {
+    indices
+        .iter()
+        .map(|&index| SubAccess::Array(index))
+        .collect()
+}
+
+/// Converts a vector of SubAccess to a vector of u32.
+pub fn access_to_u32(sub_accesses: &[SubAccess]) -> Result<Vec<u32>, RuntimeError> {
+    sub_accesses
+        .iter()
+        .map(|sub_access| match sub_access {
+            SubAccess::Array(index) => Ok(*index),
+            _ => Err(RuntimeError::AccessError),
+        })
+        .collect()
+}
+
+/// Increments a multi-dimensional array index.
+/// Returns a boolean that indicates if there are more elements to traverse.
+///
+/// * `indices` - A vector representing the current position in a multi-dimensional array.
+/// * `limits` - A vector representing the limits of each dimension of the array.
+pub fn increment_indices(indices: &mut Vec<u32>, limits: &[u32]) -> Result<bool, RuntimeError> {
+    if indices.len() != limits.len() {
+        return Err(RuntimeError::AccessError);
+    }
+
+    let mut carry = true;
+    for (index, &limit) in indices.iter_mut().zip(limits.iter()).rev() {
+        if carry {
+            if *index < limit - 1 {
+                *index += 1;
+                carry = false;
+            } else {
+                *index = 0;
+            }
+        }
+    }
+
+    Ok(!carry)
 }
 
 /// Runtime errors
 #[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum RuntimeError {
+    #[error("Access Error")]
+    AccessError,
     #[error("Error retrieving context")]
     ContextRetrievalError,
     #[error("Context not found")]
     ContextNotFound,
-    #[error("Data Item already declared")]
-    DataItemAlreadyDeclared,
-    #[error("Data Item not declared")]
-    DataItemNotDeclared,
     #[error("Empty context stack")]
     EmptyContextStack,
-    #[error("Empty data item")]
-    EmptyDataItem,
     #[error("Index out of bounds")]
     IndexOutOfBounds,
+    #[error("Item already declared")]
+    ItemAlreadyDeclared,
+    #[error("Item not declared")]
+    ItemNotDeclared,
     #[error("Data Item content is not an array")]
     NotAnArray,
-    #[error("Data Item content is not a scalar")]
-    NotAScalar,
-    #[error("Data Item content is not a component wiring")]
-    NotAWiring,
-    #[error("Cannot modify an already set signal")]
-    SignalAlreadySet,
+    #[error("Data Item content is not a single value")]
+    NotAValue,
+    #[error("Unsuported data type")]
+    UnsupportedDataType,
 }
