@@ -200,7 +200,7 @@ impl Input {
         Result::Ok(Input {
             //field: P_BN128,
             input_program: input,
-            out_mpc: Input::build_output(&output_path, &file_name, ".json"),
+            out_mpc: Input::build_output(&output_path, &file_name, JSON),
             out_r1cs: Input::build_output(&output_path, &file_name, R1CS),
             out_wat_code: Input::build_output(&output_js_path, &file_name, WAT),
             out_wasm_code: Input::build_output(&output_js_path, &file_name, WASM),
