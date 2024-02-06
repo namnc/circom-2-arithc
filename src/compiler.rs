@@ -91,7 +91,6 @@ pub fn execute_project(
         flag_verbose: config.flag_verbose,
         inspect_constraints: config.inspect_constraints_flag,
         flag_old_heuristics: config.flag_old_heuristics,
-        json_substitutions: config.json_constraints,
         prime: config.prime,
     };
 
