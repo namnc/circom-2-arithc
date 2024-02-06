@@ -14,7 +14,8 @@ Cargo.lock
 *.pdb
 .DS_Store
 
-/*.json
-
 # Local
 .env
+
+# Output
+output/

@@ -1,11 +1,8 @@
-//! # Traverse Module
+//! # Process Module
 //!
-//! This module provides functionality for traversing statements, expressions, infix operations and declaration of components, signals and variables.
-//!
-//! It's main purpose is to traverse signals.
+//! Handles execution of statements and expressions for arithmetic circuit generation within a `Runtime` environment.
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
-use crate::execute::{execute_expression, execute_infix_op, execute_statement};
 use crate::program::ProgramError;
 use crate::runtime::{
     increment_indices, u32_to_access, ContextOrigin, DataAccess, DataType, Runtime, SubAccess,
@@ -16,8 +13,8 @@ use circom_program_structure::program_archive::ProgramArchive;
 use log::debug;
 use std::collections::HashMap;
 
-/// Processes a sequence of statements, handling each based on its specific type and context.
-pub fn traverse_sequence_of_statements(
+/// Processes a sequence of statements.
+pub fn process_statements(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     statements: &[Statement],
@@ -25,26 +22,28 @@ pub fn traverse_sequence_of_statements(
     _is_complete_template: bool,
 ) -> Result<(), ProgramError> {
     for statement in statements {
-        traverse_statement(ac, runtime, statement, program_archive)?;
+        process_statement(ac, runtime, statement, program_archive)?;
     }
-    // TODO: handle complete template
 
     Ok(())
 }
 
-/// Analyzes a single statement, delegating to specialized functions based on the statement's nature.
-pub fn traverse_statement(
+/// Processes a single statement.
+pub fn process_statement(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     stmt: &Statement,
     program_archive: &ProgramArchive,
 ) -> Result<(), ProgramError> {
     match stmt {
+        Statement::Block { stmts, .. } => {
+            process_statements(ac, runtime, stmts, program_archive, true)
+        }
         Statement::InitializationBlock {
             initializations, ..
         } => {
             for statement in initializations {
-                traverse_statement(ac, runtime, statement, program_archive)?;
+                process_statement(ac, runtime, statement, program_archive)?;
             }
 
             Ok(())
@@ -55,16 +54,20 @@ pub fn traverse_statement(
             dimensions,
             ..
         } => {
-            let dimensions: Vec<u32> = dimensions
-                .iter()
-                .map(|exp| {
-                    execute_expression(ac, runtime, exp, program_archive)?
-                        .ok_or(ProgramError::EmptyDataItem)
-                })
-                .collect::<Result<Vec<u32>, _>>()?;
             let data_type = DataType::try_from(xtype)?;
+            let dim_access: Vec<DataAccess> = dimensions
+                .iter()
+                .map(|exp| process_expression(ac, runtime, exp, program_archive))
+                .collect::<Result<Vec<DataAccess>, ProgramError>>()?;
 
             let ctx = runtime.get_current_context()?;
+            let dimensions: Vec<u32> = dim_access
+                .iter()
+                .map(|dim_access| {
+                    ctx.get_variable(dim_access)?
+                        .ok_or(ProgramError::EmptyDataItem)
+                })
+                .collect::<Result<Vec<u32>, ProgramError>>()?;
             ctx.declare_item(data_type.clone(), name, &dimensions)?;
 
             // If the declared item is a signal we should add it to the arithmetic circuit
@@ -95,13 +98,16 @@ pub fn traverse_statement(
         }
         Statement::While { cond, stmt, .. } => {
             loop {
-                let result = execute_expression(ac, runtime, cond, program_archive)?;
+                let result_access = process_expression(ac, runtime, cond, program_archive)?;
+                let result = runtime
+                    .get_current_context()?
+                    .get_variable(&result_access)?;
                 if result == Some(0) {
                     break;
                 }
 
                 debug!("While res = {:?}", result);
-                traverse_statement(ac, runtime, stmt, program_archive)?
+                process_statement(ac, runtime, stmt, program_archive)?
             }
 
             Ok(())
@@ -112,15 +118,18 @@ pub fn traverse_statement(
             else_case,
             ..
         } => {
-            let result = execute_expression(ac, runtime, cond, program_archive)?;
+            let result_access = process_expression(ac, runtime, cond, program_archive)?;
+            let result = runtime
+                .get_current_context()?
+                .get_variable(&result_access)?;
             let else_case = else_case.as_ref().map(|e| e.as_ref());
             if result == Some(0) {
                 if let Option::Some(else_stmt) = else_case {
-                    return traverse_statement(ac, runtime, else_stmt, program_archive);
+                    return process_statement(ac, runtime, else_stmt, program_archive);
                 }
                 Ok(())
             } else {
-                traverse_statement(ac, runtime, if_case, program_archive)
+                process_statement(ac, runtime, if_case, program_archive)
             }
         }
         Statement::Substitution {
@@ -138,7 +147,7 @@ pub fn traverse_statement(
             match data_type {
                 DataType::Signal => {
                     // This corresponds to a gate generation
-                    let temp_output = traverse_expression(ac, runtime, rhe, program_archive)?;
+                    let temp_output = process_expression(ac, runtime, rhe, program_archive)?;
 
                     // Replace the temporary output signal with the given one.
                     let ctx = runtime.get_current_context()?;
@@ -148,12 +157,15 @@ pub fn traverse_statement(
                     ac.replace_output_var_in_gate(temp_output_id, given_output_id);
                 }
                 DataType::Variable => {
-                    // The substitution (variable assignment) is performed in the `execute_statement` fn
-                    execute_statement(ac, runtime, stmt, program_archive)?;
+                    // This corresponds to a variable assignment
+                    let value_access = process_expression(ac, runtime, rhe, program_archive)?;
+                    let value = runtime.get_current_context()?.get_variable(&value_access)?;
+                    let ctx = runtime.get_current_context()?;
+                    ctx.set_variable(&access, value)?;
                 }
                 DataType::Component => {
                     // This corresponds to a component wiring
-                    let rhs = traverse_expression(ac, runtime, rhe, program_archive)?;
+                    let rhs = process_expression(ac, runtime, rhe, program_archive)?;
 
                     // Add connection
                     let ctx = runtime.get_current_context()?;
@@ -165,7 +177,8 @@ pub fn traverse_statement(
         }
         Statement::Return { value, .. } => {
             let access = DataAccess::new("return", vec![]);
-            let res = execute_expression(ac, runtime, value, program_archive)?;
+            let res_access = process_expression(ac, runtime, value, program_archive)?;
+            let res = runtime.get_current_context()?.get_variable(&res_access)?;
             debug!("RETURN {:?}", res);
 
             let ctx = runtime.get_current_context()?;
@@ -180,42 +193,25 @@ pub fn traverse_statement(
 
             Ok(())
         }
-        Statement::Block { stmts, .. } => {
-            traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true)
-        }
-        _ => unimplemented!("Statement not implemented"),
+        _ => unimplemented!("Statement processing not implemented"),
     }
 }
 
-/// Process an expression and returns a name of a data item that contains the result.
-pub fn traverse_expression(
+/// Processes an expression and returns an access to the result.
+pub fn process_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     expression: &Expression,
     _program_archive: &ProgramArchive,
 ) -> Result<DataAccess, ProgramError> {
     match expression {
-        Expression::Number(_, value) => {
-            let ctx = runtime.get_current_context()?;
-            let access = ctx.declare_random_item(DataType::Variable)?;
-
-            ctx.set_variable(
-                &access,
-                Some(value.to_u32().ok_or(ProgramError::ParsingError)?),
-            )?;
-
-            Ok(access)
-        }
         Expression::InfixOp {
             lhe, infix_op, rhe, ..
         } => {
-            let varlop = traverse_expression(ac, runtime, lhe, _program_archive)?;
-            let varrop = traverse_expression(ac, runtime, rhe, _program_archive)?;
+            let varlop = process_expression(ac, runtime, lhe, _program_archive)?;
+            let varrop = process_expression(ac, runtime, rhe, _program_archive)?;
 
             traverse_infix_op(ac, runtime, &varlop, &varrop, infix_op)
-        }
-        Expression::Variable { name, access, .. } => {
-            build_access(runtime, ac, _program_archive, name, access)
         }
         Expression::Call { id, args, .. } => {
             debug!("Call found {}", id);
@@ -234,7 +230,10 @@ pub fn traverse_expression(
             for (arg_name, arg_value) in arg_names.iter().zip(args) {
                 // We set arg_name to have arg_value
                 // Because arg_value is an expression (constant, variable, or an infix operation or a function call) we need to execute to have the actual value
-                let value = execute_expression(ac, runtime, arg_value, _program_archive)?
+                let value_access = process_expression(ac, runtime, arg_value, _program_archive)?;
+                let value = runtime
+                    .get_current_context()?
+                    .get_variable(&value_access)?
                     .ok_or(ProgramError::EmptyDataItem)?;
                 // We cache this to args hashmap
                 args_map.insert(arg_name.to_string(), value);
@@ -258,7 +257,7 @@ pub fn traverse_expression(
                 _program_archive.get_template_data(id).get_body_as_vec()
             };
 
-            traverse_sequence_of_statements(ac, runtime, _body, _program_archive, true)?;
+            process_statements(ac, runtime, _body, _program_archive, true)?;
 
             if functions.contains(id) {
                 // let ret = ctx.get_data_item("RETURN").unwrap().get_u32().unwrap();
@@ -269,6 +268,20 @@ pub fn traverse_expression(
                 // runtime.pop_context();
                 Ok(DataAccess::new(id, vec![]))
             }
+        }
+        Expression::Number(_, value) => {
+            let ctx = runtime.get_current_context()?;
+            let access = ctx.declare_random_item(DataType::Variable)?;
+
+            ctx.set_variable(
+                &access,
+                Some(value.to_u32().ok_or(ProgramError::ParsingError)?),
+            )?;
+
+            Ok(access)
+        }
+        Expression::Variable { name, access, .. } => {
+            build_access(runtime, ac, _program_archive, name, access)
         }
         _ => unimplemented!("Expression not implemented"),
     }
@@ -283,7 +296,7 @@ pub fn traverse_infix_op(
     runtime: &mut Runtime,
     input_lhs: &DataAccess,
     input_rhs: &DataAccess,
-    infixop: &ExpressionInfixOpcode,
+    op: &ExpressionInfixOpcode,
 ) -> Result<DataAccess, ProgramError> {
     let ctx = runtime.get_current_context()?;
 
@@ -300,7 +313,7 @@ pub fn traverse_infix_op(
             .get_variable(input_rhs)?
             .ok_or(ProgramError::EmptyDataItem)?;
 
-        let op_res = execute_infix_op(&lhs_value, &rhs_value, infixop);
+        let op_res = execute_op(&lhs_value, &rhs_value, op);
         let item_access = ctx.declare_random_item(DataType::Variable)?;
         ctx.set_variable(&item_access, Some(op_res))?;
 
@@ -333,7 +346,7 @@ pub fn traverse_infix_op(
     };
 
     // Construct the corresponding circuit gate
-    let gate_type = AGateType::from(infixop);
+    let gate_type = AGateType::from(op);
     let output_signal = ctx.declare_random_item(DataType::Signal)?;
     let output_id = ctx.get_signal(&output_signal)?;
     ac.add_gate(
@@ -360,7 +373,10 @@ pub fn build_access(
     for a in access.iter() {
         match a {
             Access::ArrayAccess(expr) => {
-                let index = execute_expression(ac, runtime, expr, program_archive)?
+                let index_access = process_expression(ac, runtime, expr, program_archive)?;
+                let index = runtime
+                    .get_current_context()?
+                    .get_variable(&index_access)?
                     .ok_or(ProgramError::EmptyDataItem)?;
                 access_vec.push(SubAccess::Array(index));
             }
@@ -371,4 +387,57 @@ pub fn build_access(
     }
 
     Ok(DataAccess::new(name, access_vec))
+}
+
+/// Executes an operation, performing the specified arithmetic or logical computation.
+pub fn execute_op(lhs: &u32, rhs: &u32, op: &ExpressionInfixOpcode) -> u32 {
+    match AGateType::from(op) {
+        AGateType::AAdd => lhs + rhs,
+        AGateType::ADiv => lhs / rhs,
+        AGateType::AEq => {
+            if lhs == rhs {
+                1
+            } else {
+                0
+            }
+        }
+        AGateType::AGEq => {
+            if lhs >= rhs {
+                1
+            } else {
+                0
+            }
+        }
+        AGateType::AGt => {
+            if lhs > rhs {
+                1
+            } else {
+                0
+            }
+        }
+        AGateType::ALEq => {
+            if lhs <= rhs {
+                1
+            } else {
+                0
+            }
+        }
+        AGateType::ALt => {
+            if lhs < rhs {
+                1
+            } else {
+                0
+            }
+        }
+        AGateType::AMul => lhs * rhs,
+        AGateType::ANeq => {
+            if lhs != rhs {
+                1
+            } else {
+                0
+            }
+        }
+        AGateType::ANone => unimplemented!(),
+        AGateType::ASub => lhs - rhs,
+    }
 }

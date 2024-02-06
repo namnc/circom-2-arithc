@@ -1,26 +1,34 @@
-use std::fs::File;
-
-use circom_2_arithc::{compiler::Input, program::parse_circom};
+use circom_2_arithc::{
+    circom::input::{input_processing::view, Input},
+    program::{build_circuit, ProgramError},
+};
 use dotenv::dotenv;
-use env_logger::{init_from_env, Env};
-use std::io::Write;
+use env_logger::init_from_env;
+use serde_json::to_string;
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
 
-fn main() -> Result<(), ()> {
-    dotenv().ok();
-    init_from_env(Env::default().filter_or("LOG_LEVEL", "info"));
-    let input = Input::new()?;
-    match parse_circom(&input) {
-        Err(err) => {
-            println!("Error {}", err);
-            Ok(())
-        },
-        Ok(cir) => {
-            let output_name = input.out_mpc;
-            let mut data_file = File::create(output_name).expect("Creation file failed!");
-            data_file
-                .write_all(serde_json::to_string(&cir).unwrap().as_bytes())
-                .expect("Write file failed!");
-            Ok(())
-        }
-    }
+fn main() -> Result<(), ProgramError> {
+    dotenv().expect("Failed to initialize environment");
+    init_from_env("LOG_LEVEL=info");
+
+    let output_path = PathBuf::from(view().value_of("output").unwrap());
+
+    fs::create_dir_all(&output_path).map_err(|_| ProgramError::OutputDirectoryCreationError)?;
+
+    let input = Input::new().map_err(|_| ProgramError::InputInitializationError)?;
+    let output_dir = input
+        .out_r1cs
+        .parent()
+        .ok_or(ProgramError::OutputDirectoryCreationError)?
+        .to_path_buf();
+
+    let circuit_json = to_string(&build_circuit(&input)?)?;
+    let output_file_path = Input::build_output(&output_dir, &input.out_wasm_name, "json");
+    File::create(output_file_path)?.write_all(circuit_json.as_bytes())?;
+
+    Ok(())
 }

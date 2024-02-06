@@ -1,53 +1,42 @@
 //! # Program Module
 //!
-//! This module handles the parsing and processing of Circom circuits, enabling the construction and analysis of arithmetic circuits from Circom files.
+//! This module processes the circom input program to build the arithmetic circuit.
 
-use std::path::PathBuf;
-
-use crate::circuit::ArithmeticCircuit;
-use crate::compiler::{analyse_project, parse_project, Input};
-use crate::runtime::{Runtime, RuntimeError};
-use crate::traverse::traverse_sequence_of_statements;
-use circom_compiler::compiler_interface::Circuit;
+use crate::{
+    circom::{input::Input, parser::parse_project, type_analysis::analyse_project},
+    circuit::ArithmeticCircuit,
+    process::process_statements,
+    runtime::{Runtime, RuntimeError},
+};
 use circom_program_structure::ast::Expression;
-use circom_program_structure::program_archive::ProgramArchive;
+use std::io;
 use thiserror::Error;
 
-/// Parses a Circom file, processes its content, and sets up the necessary structures for circuit analysis.
-pub fn parse_circom(user_input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
-   
-    let mut program_archive = parse_project(&user_input).map_err(|_| ProgramError::ParsingError)?;
-    analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
-
-    let circuit = traverse_program(&program_archive)?;
-
-    Ok(circuit)
-}
-
-/// Traverses the program structure of a parsed Circom file and constructs an arithmetic circuit.
-pub fn traverse_program(
-    program_archive: &ProgramArchive,
-) -> Result<ArithmeticCircuit, ProgramError> {
+/// Parses a given Circom program and constructs an arithmetic circuit from it.
+pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
     let mut circuit = ArithmeticCircuit::new();
     let mut runtime = Runtime::new()?;
+    let mut program_archive = parse_project(input).map_err(|_| ProgramError::ParsingError)?;
+
+    analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
 
     if let Expression::Call { id, .. } = program_archive.get_main_expression() {
-        let template_body = program_archive.get_template_data(id).get_body_as_vec();
+        let statements = program_archive.get_template_data(id).get_body_as_vec();
 
-        traverse_sequence_of_statements(
+        process_statements(
             &mut circuit,
             &mut runtime,
-            template_body,
-            program_archive,
+            statements,
+            &program_archive,
             true,
         )?;
-    };
+    }
 
     Ok(circuit)
 }
 
 /// Program errors
-#[derive(Error, Debug, PartialEq, Eq, Clone)]
+#[derive(Error, Debug)]
 pub enum ProgramError {
     #[error("Analysis error")]
     AnalysisError,
@@ -55,12 +44,20 @@ pub enum ProgramError {
     CallError,
     #[error("Empty data item")]
     EmptyDataItem,
+    #[error("Input initialization error")]
+    InputInitializationError,
     #[error("Invalid data type")]
     InvalidDataType,
+    #[error("IO error: {0}")]
+    IOError(#[from] io::Error),
+    #[error("JSON serialization error: {0}")]
+    JsonSerializationError(#[from] serde_json::Error),
     #[error("Parsing error")]
     ParsingError,
-    #[error("Context error: {0}")]
+    #[error("Runtime error: {0}")]
     RuntimeError(RuntimeError),
+    #[error("Output directory creation error")]
+    OutputDirectoryCreationError,
 }
 
 impl From<RuntimeError> for ProgramError {
