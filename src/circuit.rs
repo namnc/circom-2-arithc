@@ -311,13 +311,13 @@ impl ArithmeticCircuit {
         let serialized = serde_json::to_string(&self).unwrap();
 
         // Prints serialized = {"x":1,"y":2}
-        println!("serialized = {}", serialized);
+        println!("{}", serialized);
 
         // Convert the JSON string back to a Point.
-        let deserialized: ArithmeticCircuit = serde_json::from_str(&serialized).unwrap();
+        // let deserialized: ArithmeticCircuit = serde_json::from_str(&serialized).unwrap();
 
         // Prints deserialized = Point { x: 1, y: 2 }
-        println!("deserialized = {:#?}", deserialized);
+        // println!("deserialized = {:#?}", deserialized);
     }
 }
 

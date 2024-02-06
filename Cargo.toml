@@ -34,3 +34,4 @@ mpz-circuits =  { git = "https://github.com/privacy-scaling-explorations/mpz", p
 [[bin]]
 name="circom"
 path="./src/main.rs"
+
