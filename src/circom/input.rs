@@ -36,14 +36,14 @@ pub struct Input {
     pub link_libraries : Vec<PathBuf>
 }
 
-const R1CS: &'static str = "r1cs";
-const WAT: &'static str = "wat";
-const WASM: &'static str = "wasm";
-const CPP: &'static str = "cpp";
-const JS: &'static str = "js";
-const DAT: &'static str = "dat";
-const SYM: &'static str = "sym";
-const JSON: &'static str = "json";
+const R1CS: &str = "r1cs";
+const WAT: &str = "wat";
+const WASM: &str = "wasm";
+const CPP: &str = "cpp";
+const JS: &str = "js";
+const DAT: &str = "dat";
+const SYM: &str = "sym";
+const JSON: &str = "json";
 
 impl Input {
     pub fn new() -> Result<Input, ()> {
@@ -87,7 +87,7 @@ impl Input {
             ),
             wat_flag:input_processing::get_wat(&matches),
             wasm_flag: input_processing::get_wasm(&matches),
-            c_flag: c_flag,
+            c_flag,
             r1cs_flag: input_processing::get_r1cs(&matches),
             sym_flag: input_processing::get_sym(&matches),
             main_inputs_flag: input_processing::get_main_inputs_log(&matches),
@@ -124,7 +124,7 @@ impl Input {
     }
 
     pub fn input_file(&self) -> &str {
-        &self.input_program.to_str().unwrap()
+        self.input_program.to_str().unwrap()
     }
     pub fn r1cs_file(&self) -> &str {
         self.out_r1cs.to_str().unwrap()
@@ -238,7 +238,7 @@ pub mod input_processing {
         if route.is_dir() {
             Result::Ok(route)
         } else {
-            Result::Err(eprintln!("{}", "invalid output path"))
+            Result::Err(eprintln!("invalid output path"))
         }
     }
 
