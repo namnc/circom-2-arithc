@@ -63,7 +63,6 @@ pub struct Runtime {
 impl Runtime {
     /// Constructs a new Runtime with an empty stack.
     pub fn new() -> Result<Self, RuntimeError> {
-        debug!("New runtime");
         Ok(Self {
             ctx_stack: vec![Context::new(0, 0)],
             current_ctx: 0,
@@ -122,6 +121,37 @@ impl Runtime {
             .ok_or(RuntimeError::ContextNotFound)
     }
 
+    /// Exit the current context and merge changes back to the parent context
+    pub fn exit_context(&mut self) -> Result<(), RuntimeError> {
+        if self.ctx_stack.len() <= 1 {
+            // Ensure there's a parent context to return to
+            return Err(RuntimeError::EmptyContextStack);
+        }
+
+        // Pop the child context off the stack
+        let child_context = self
+            .ctx_stack
+            .pop()
+            .ok_or(RuntimeError::EmptyContextStack)?;
+        let parent_context_id = child_context.caller_id;
+
+        // Merge child context into the parent context
+        if let Some(parent_context) = self
+            .ctx_stack
+            .iter_mut()
+            .find(|ctx| ctx.id == parent_context_id)
+        {
+            parent_context.merge_child(&child_context)?;
+        } else {
+            return Err(RuntimeError::ContextNotFound);
+        }
+
+        // Update the current context to the parent
+        self.current_ctx = parent_context_id;
+
+        Ok(())
+    }
+
     /// Retrieves the current runtime context.
     pub fn get_current_context(&mut self) -> Result<&mut Context, RuntimeError> {
         self.get_context(self.current_ctx)
@@ -168,6 +198,24 @@ impl Context {
             signals: self.signals.clone(),
             components: self.components.clone(),
         }
+    }
+
+    /// Merges changes from a child context back into the parent context.
+    /// Signals are not merged, as they are read-only.
+    pub fn merge_child(&mut self, child: &Context) -> Result<(), RuntimeError> {
+        for (name, variable) in &child.variables {
+            if self.variables.contains_key(name) {
+                self.variables.insert(name.clone(), variable.clone());
+            }
+        }
+
+        for (name, component) in &child.components {
+            if self.components.contains_key(name) {
+                self.components.insert(name.clone(), component.clone());
+            }
+        }
+
+        Ok(())
     }
 
     /// Declares a new item of the specified type with the given name and dimensions.
