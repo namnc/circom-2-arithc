@@ -15,7 +15,7 @@ use thiserror::Error;
 /// Parses a given Circom program and constructs an arithmetic circuit from it.
 pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
     let mut circuit = ArithmeticCircuit::new();
-    let mut runtime = Runtime::new()?;
+    let mut runtime = Runtime::new();
     let mut program_archive = parse_project(input).map_err(|_| ProgramError::ParsingError)?;
 
     analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;

@@ -4,9 +4,7 @@
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::program::ProgramError;
-use crate::runtime::{
-    increment_indices, u32_to_access, ContextOrigin, DataAccess, DataType, Runtime, SubAccess,
-};
+use crate::runtime::{increment_indices, u32_to_access, DataAccess, DataType, Runtime, SubAccess};
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
 use circom_program_structure::program_archive::ProgramArchive;
@@ -60,7 +58,7 @@ pub fn process_statement(
                 .map(|exp| process_expression(ac, runtime, exp, program_archive))
                 .collect::<Result<Vec<DataAccess>, ProgramError>>()?;
 
-            let ctx = runtime.get_current_context()?;
+            let ctx = runtime.current_context()?;
             let dimensions: Vec<u32> = dim_access
                 .iter()
                 .map(|dim_access| {
@@ -99,9 +97,7 @@ pub fn process_statement(
         Statement::While { cond, stmt, .. } => {
             loop {
                 let result_access = process_expression(ac, runtime, cond, program_archive)?;
-                let result = runtime
-                    .get_current_context()?
-                    .get_variable(&result_access)?;
+                let result = runtime.current_context()?.get_variable(&result_access)?;
                 if result == Some(0) {
                     break;
                 }
@@ -119,9 +115,7 @@ pub fn process_statement(
             ..
         } => {
             let result_access = process_expression(ac, runtime, cond, program_archive)?;
-            let result = runtime
-                .get_current_context()?
-                .get_variable(&result_access)?;
+            let result = runtime.current_context()?.get_variable(&result_access)?;
             let else_case = else_case.as_ref().map(|e| e.as_ref());
             if result == Some(0) {
                 if let Option::Some(else_stmt) = else_case {
@@ -138,7 +132,7 @@ pub fn process_statement(
             debug!("Substitution for {}", var.to_string());
 
             let data_type = {
-                let ctx = runtime.get_current_context()?;
+                let ctx = runtime.current_context()?;
                 ctx.get_item_data_type(var)?
             };
 
@@ -150,7 +144,7 @@ pub fn process_statement(
                     let temp_output = process_expression(ac, runtime, rhe, program_archive)?;
 
                     // Replace the temporary output signal with the given one.
-                    let ctx = runtime.get_current_context()?;
+                    let ctx = runtime.current_context()?;
                     let temp_output_id = ctx.get_signal(&temp_output)?;
                     let given_output_id = ctx.get_signal(&access)?;
 
@@ -159,8 +153,8 @@ pub fn process_statement(
                 DataType::Variable => {
                     // This corresponds to a variable assignment
                     let value_access = process_expression(ac, runtime, rhe, program_archive)?;
-                    let value = runtime.get_current_context()?.get_variable(&value_access)?;
-                    let ctx = runtime.get_current_context()?;
+                    let value = runtime.current_context()?.get_variable(&value_access)?;
+                    let ctx = runtime.current_context()?;
                     ctx.set_variable(&access, value)?;
                 }
                 DataType::Component => {
@@ -168,7 +162,7 @@ pub fn process_statement(
                     let rhs = process_expression(ac, runtime, rhe, program_archive)?;
 
                     // Add connection
-                    let ctx = runtime.get_current_context()?;
+                    let ctx = runtime.current_context()?;
                     ctx.add_connection(var, access, rhs)?;
                 }
             }
@@ -178,10 +172,10 @@ pub fn process_statement(
         Statement::Return { value, .. } => {
             let access = DataAccess::new("return", vec![]);
             let res_access = process_expression(ac, runtime, value, program_archive)?;
-            let res = runtime.get_current_context()?.get_variable(&res_access)?;
+            let res = runtime.current_context()?.get_variable(&res_access)?;
             debug!("RETURN {:?}", res);
 
-            let ctx = runtime.get_current_context()?;
+            let ctx = runtime.current_context()?;
             let declare = ctx.declare_item(DataType::Variable, &access.get_name(), &[]);
 
             // Added check to avoid panic when the return is already declared
@@ -232,7 +226,7 @@ pub fn process_expression(
                 // Because arg_value is an expression (constant, variable, or an infix operation or a function call) we need to execute to have the actual value
                 let value_access = process_expression(ac, runtime, arg_value, _program_archive)?;
                 let value = runtime
-                    .get_current_context()?
+                    .current_context()?
                     .get_variable(&value_access)?
                     .ok_or(ProgramError::EmptyDataItem)?;
                 // We cache this to args hashmap
@@ -241,8 +235,8 @@ pub fn process_expression(
 
             // Here we need to spawn a new context for calling a function or wiring with a component (template)
             // Only after setting arguments that we can spawn a new context because the expression evaluation use values from calling context
-            let _ = runtime.add_context(ContextOrigin::Call);
-            let ctx = runtime.get_current_context()?;
+            let _ = runtime.add_context();
+            let ctx = runtime.current_context()?;
 
             // Now we put args to use
             for (arg_name, &arg_value) in args_map.iter() {
@@ -270,7 +264,7 @@ pub fn process_expression(
             }
         }
         Expression::Number(_, value) => {
-            let ctx = runtime.get_current_context()?;
+            let ctx = runtime.current_context()?;
             let access = ctx.declare_random_item(DataType::Variable)?;
 
             ctx.set_variable(
@@ -298,7 +292,7 @@ pub fn traverse_infix_op(
     input_rhs: &DataAccess,
     op: &ExpressionInfixOpcode,
 ) -> Result<DataAccess, ProgramError> {
-    let ctx = runtime.get_current_context()?;
+    let ctx = runtime.current_context()?;
 
     // Determine the data types of the left and right operands
     let lhs_data_type = ctx.get_item_data_type(&input_lhs.get_name())?;
@@ -375,7 +369,7 @@ pub fn build_access(
             Access::ArrayAccess(expr) => {
                 let index_access = process_expression(ac, runtime, expr, program_archive)?;
                 let index = runtime
-                    .get_current_context()?
+                    .current_context()?
                     .get_variable(&index_access)?
                     .ok_or(ProgramError::EmptyDataItem)?;
                 access_vec.push(SubAccess::Array(index));
