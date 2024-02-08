@@ -235,7 +235,7 @@ pub fn process_expression(
 
             // Here we need to spawn a new context for calling a function or wiring with a component (template)
             // Only after setting arguments that we can spawn a new context because the expression evaluation use values from calling context
-            let _ = runtime.add_context();
+            runtime.push_context(false)?;
             let ctx = runtime.current_context()?;
 
             // Now we put args to use
