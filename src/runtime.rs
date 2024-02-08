@@ -48,6 +48,12 @@ pub struct Runtime {
     contexts: VecDeque<Context>,
 }
 
+impl Default for Runtime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Runtime {
     /// Creates an empty runtime with no contexts.
     pub fn new() -> Self {
@@ -109,6 +115,12 @@ pub struct Context {
     variables: HashMap<String, Variable>,
     signals: HashMap<String, Signal>,
     components: HashMap<String, Component>,
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Context {
