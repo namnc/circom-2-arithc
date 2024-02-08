@@ -349,6 +349,7 @@ pub mod input_processing {
             .about("Compiler for the circom programming language")
             .arg(
                 Arg::with_name("input")
+                    .long("input")
                     .multiple(false)
                     .default_value("./src/assets/circuit.circom")
                     .help("Path to a circuit with a main component"),
