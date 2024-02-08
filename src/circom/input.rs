@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use input_processing::SimplificationStyle;
 
 pub struct Input {
@@ -55,7 +55,7 @@ impl Input {
         let c_flag = input_processing::get_c(&matches);
 
         if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit"){
-            println!("{}", format!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name));
+            println!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name);
             file_name = format!("{}_c", file_name)
         };
         let output_c_path = Input::build_folder(&output_path, &file_name, CPP);
@@ -68,10 +68,10 @@ impl Input {
             out_r1cs: Input::build_output(&output_path, &file_name, R1CS),
             out_wat_code: Input::build_output(&output_js_path, &file_name, WAT),
             out_wasm_code: Input::build_output(&output_js_path, &file_name, WASM),
-	        out_js_folder: output_js_path.clone(),
-	        out_wasm_name: file_name.clone(),
-	        out_c_folder: output_c_path.clone(),
-	        out_c_run_name: file_name.clone(),
+            out_js_folder: output_js_path.clone(),
+            out_wasm_name: file_name.clone(),
+            out_c_folder: output_c_path.clone(),
+            out_c_run_name: file_name.clone(),
             out_c_code: Input::build_output(&output_c_path, &file_name, CPP),
             out_c_dat: Input::build_output(&output_c_path, &file_name, DAT),
             out_sym: Input::build_output(&output_path, &file_name, SYM),
@@ -106,15 +106,15 @@ impl Input {
         })
     }
 
-    fn build_folder(output_path: &PathBuf, filename: &str, ext: &str) -> PathBuf {
-        let mut file = output_path.clone();
-	    let folder_name = format!("{}_{}",filename,ext);
-	    file.push(folder_name);
-	    file
+    fn build_folder(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
+        let mut file = output_path.to_path_buf();
+        let folder_name = format!("{}_{}",filename,ext);
+        file.push(folder_name);
+        file
     }
     
-    pub fn build_output(output_path: &PathBuf, filename: &str, ext: &str) -> PathBuf {
-        let mut file = output_path.clone();
+    pub fn build_output(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
+        let mut file = output_path.to_path_buf();
         file.push(format!("{}.{}",filename,ext));
         file
     }
@@ -255,7 +255,7 @@ pub mod input_processing {
             (_, true, _, _) => Ok(SimplificationStyle::O1),
             (_, _, true,  _) => {
                 let o_2_argument = matches.value_of("simplification_rounds").unwrap();
-                let rounds_r = usize::from_str_radix(o_2_argument, 10);
+                let rounds_r = o_2_argument.parse::<usize>();
                 if let Result::Ok(no_rounds) = rounds_r { 
                     if no_rounds == 0 { Ok(SimplificationStyle::O1) }
                     else {Ok(SimplificationStyle::O2(no_rounds))}} 
