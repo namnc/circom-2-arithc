@@ -9,7 +9,6 @@ use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
 use circom_program_structure::program_archive::ProgramArchive;
 use log::debug;
-use std::collections::HashMap;
 
 /// Processes a sequence of statements.
 pub fn process_statements(
@@ -196,72 +195,88 @@ pub fn process_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     expression: &Expression,
-    _program_archive: &ProgramArchive,
+    program_archive: &ProgramArchive,
 ) -> Result<DataAccess, ProgramError> {
     match expression {
         Expression::InfixOp {
             lhe, infix_op, rhe, ..
         } => {
-            let varlop = process_expression(ac, runtime, lhe, _program_archive)?;
-            let varrop = process_expression(ac, runtime, rhe, _program_archive)?;
+            let varlop = process_expression(ac, runtime, lhe, program_archive)?;
+            let varrop = process_expression(ac, runtime, rhe, program_archive)?;
 
             traverse_infix_op(ac, runtime, &varlop, &varrop, infix_op)
         }
         Expression::Call { id, args, .. } => {
-            debug!("Call found {}", id);
-
-            // We always need to distinguish a function call from a template component wiring
-            let functions = _program_archive.get_function_names();
-            let arg_names = if functions.contains(id) {
-                _program_archive.get_function_data(id).get_name_of_params()
+            // Determine if the call is to a function or a template and get argument names and body
+            let (arg_names, body) = if program_archive.contains_function(id) {
+                let function_data = program_archive.get_function_data(id);
+                (
+                    function_data.get_name_of_params().clone(),
+                    function_data.get_body_as_vec().to_vec(),
+                )
+            } else if program_archive.contains_template(id) {
+                let template_data = program_archive.get_template_data(id);
+                (
+                    template_data.get_name_of_params().clone(),
+                    template_data.get_body_as_vec().to_vec(),
+                )
             } else {
-                _program_archive.get_template_data(id).get_name_of_params()
+                return Err(ProgramError::UndefinedFunctionOrTemplate);
             };
 
-            let mut args_map: HashMap<String, u32> = HashMap::new();
+            let arg_values = args
+                .iter()
+                .map(|arg_expr| {
+                    process_expression(ac, runtime, arg_expr, program_archive).and_then(
+                        |value_access| {
+                            runtime
+                                .current_context()?
+                                .get_variable(&value_access)?
+                                .ok_or(ProgramError::EmptyDataItem)
+                        },
+                    )
+                })
+                .collect::<Result<Vec<u32>, ProgramError>>()?;
 
-            // We start by setting argument values to argument names
-            for (arg_name, arg_value) in arg_names.iter().zip(args) {
-                // We set arg_name to have arg_value
-                // Because arg_value is an expression (constant, variable, or an infix operation or a function call) we need to execute to have the actual value
-                let value_access = process_expression(ac, runtime, arg_value, _program_archive)?;
-                let value = runtime
-                    .current_context()?
-                    .get_variable(&value_access)?
-                    .ok_or(ProgramError::EmptyDataItem)?;
-                // We cache this to args hashmap
-                args_map.insert(arg_name.to_string(), value);
-            }
-
-            // Here we need to spawn a new context for calling a function or wiring with a component (template)
-            // Only after setting arguments that we can spawn a new context because the expression evaluation use values from calling context
+            // Create a new context for the function/template execution
             runtime.push_context(false)?;
-            let ctx = runtime.current_context()?;
 
-            // Now we put args to use
-            for (arg_name, &arg_value) in args_map.iter() {
-                // TODO: Review, all items are unidimensional
-                ctx.declare_item(DataType::Variable, arg_name, &[])?;
-                ctx.set_variable(&DataAccess::new(arg_name, vec![]), Some(arg_value))?;
+            // Scope for the new context operations
+            {
+                let ctx = runtime.current_context()?;
+
+                // Declare and set argument variables in the new context
+                for (arg_name, &arg_value) in arg_names.iter().zip(&arg_values) {
+                    ctx.declare_item(DataType::Variable, arg_name, &[])?;
+                    ctx.set_variable(&DataAccess::new(arg_name, vec![]), Some(arg_value))?;
+                }
+
+                // Process the function/template body
+                process_statements(ac, runtime, &body, program_archive, true)?;
             }
 
-            let _body = if functions.contains(id) {
-                _program_archive.get_function_data(id).get_body_as_vec()
-            } else {
-                _program_archive.get_template_data(id).get_body_as_vec()
-            };
-
-            process_statements(ac, runtime, _body, _program_archive, true)?;
-
-            if functions.contains(id) {
-                // let ret = ctx.get_data_item("RETURN").unwrap().get_u32().unwrap();
-                // runtime.pop_context();
-                debug!("temp return");
-                Ok(DataAccess::new(id, vec![]))
-            } else {
-                // runtime.pop_context();
-                Ok(DataAccess::new(id, vec![]))
+            // Retrieve the return value before and pop the context
+            let mut return_value: Option<u32> = None;
+            if let Ok(value) = runtime
+                .current_context()?
+                .get_variable(&DataAccess::new("return", vec![]))
+            {
+                return_value = value;
             }
+            runtime.pop_context(false)?;
+
+            // Store the return value in the parent context
+            let return_access = DataAccess::new(&format!("return_{}", id), vec![]);
+            runtime.current_context()?.declare_item(
+                DataType::Variable,
+                &return_access.get_name(),
+                &[],
+            )?;
+            runtime
+                .current_context()?
+                .set_variable(&return_access, return_value)?;
+
+            Ok(return_access)
         }
         Expression::Number(_, value) => {
             let ctx = runtime.current_context()?;
@@ -275,7 +290,7 @@ pub fn process_expression(
             Ok(access)
         }
         Expression::Variable { name, access, .. } => {
-            build_access(runtime, ac, _program_archive, name, access)
+            build_access(runtime, ac, program_archive, name, access)
         }
         _ => unimplemented!("Expression not implemented"),
     }
