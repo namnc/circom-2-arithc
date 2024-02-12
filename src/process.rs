@@ -259,8 +259,6 @@ pub fn process_expression(
                 process_statements(ac, runtime, &body, program_archive, true)?;
             }
 
-            // TODO: If this is a component, we should wire the connections.
-
             // Retrieve the return value before and pop the context
             let mut return_value: Option<u32> = None;
             if let Ok(value) = runtime
