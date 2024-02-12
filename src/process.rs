@@ -8,7 +8,8 @@ use crate::runtime::{increment_indices, u32_to_access, DataAccess, DataType, Run
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
 use circom_program_structure::program_archive::ProgramArchive;
-use log::debug;
+
+const RETURN_VAR: &str = "function_return";
 
 /// Processes a sequence of statements.
 pub fn process_statements(
@@ -95,14 +96,17 @@ pub fn process_statement(
         }
         Statement::While { cond, stmt, .. } => {
             loop {
-                let result_access = process_expression(ac, runtime, cond, program_archive)?;
-                let result = runtime.current_context()?.get_variable(&result_access)?;
-                if result == Some(0) {
+                let access = process_expression(ac, runtime, cond, program_archive)?;
+                let result = runtime
+                    .current_context()?
+                    .get_variable(&access)?
+                    .ok_or(ProgramError::EmptyDataItem)?;
+
+                if result == 0 {
                     break;
                 }
 
-                debug!("While res = {:?}", result);
-                process_statement(ac, runtime, stmt, program_archive)?
+                process_statement(ac, runtime, stmt, program_archive)?;
             }
 
             Ok(())
@@ -113,14 +117,18 @@ pub fn process_statement(
             else_case,
             ..
         } => {
-            let result_access = process_expression(ac, runtime, cond, program_archive)?;
-            let result = runtime.current_context()?.get_variable(&result_access)?;
-            let else_case = else_case.as_ref().map(|e| e.as_ref());
-            if result == Some(0) {
-                if let Option::Some(else_stmt) = else_case {
-                    return process_statement(ac, runtime, else_stmt, program_archive);
+            let access = process_expression(ac, runtime, cond, program_archive)?;
+            let result = runtime
+                .current_context()?
+                .get_variable(&access)?
+                .ok_or(ProgramError::EmptyDataItem)?;
+
+            if result == 0 {
+                if let Some(else_stmt) = else_case {
+                    process_statement(ac, runtime, else_stmt, program_archive)
+                } else {
+                    Ok(())
                 }
-                Ok(())
             } else {
                 process_statement(ac, runtime, if_case, program_archive)
             }
@@ -128,8 +136,6 @@ pub fn process_statement(
         Statement::Substitution {
             var, access, rhe, ..
         } => {
-            debug!("Substitution for {}", var.to_string());
-
             let data_type = {
                 let ctx = runtime.current_context()?;
                 ctx.get_item_data_type(var)?
@@ -169,20 +175,18 @@ pub fn process_statement(
             Ok(())
         }
         Statement::Return { value, .. } => {
-            let access = DataAccess::new("return", vec![]);
-            let res_access = process_expression(ac, runtime, value, program_archive)?;
-            let res = runtime.current_context()?.get_variable(&res_access)?;
-            debug!("RETURN {:?}", res);
+            let return_var_access = DataAccess::new(RETURN_VAR, vec![]);
+            let return_access = process_expression(ac, runtime, value, program_archive)?;
+            let return_value = runtime
+                .current_context()?
+                .get_variable(&return_access)?
+                .ok_or(ProgramError::EmptyDataItem)?;
 
             let ctx = runtime.current_context()?;
-            let declare = ctx.declare_item(DataType::Variable, &access.get_name(), &[]);
-
-            // Added check to avoid panic when the return is already declared
-            if declare.is_ok() {
-                declare?;
+            if ctx.get_variable(&return_var_access).is_err() {
+                ctx.declare_item(DataType::Variable, RETURN_VAR, &[])?;
             }
-
-            ctx.set_variable(&access, res)?;
+            ctx.set_variable(&return_var_access, Some(return_value))?;
 
             Ok(())
         }
@@ -255,18 +259,20 @@ pub fn process_expression(
                 process_statements(ac, runtime, &body, program_archive, true)?;
             }
 
+            // TODO: If this is a component, we should wire the connections.
+
             // Retrieve the return value before and pop the context
             let mut return_value: Option<u32> = None;
             if let Ok(value) = runtime
                 .current_context()?
-                .get_variable(&DataAccess::new("return", vec![]))
+                .get_variable(&DataAccess::new(RETURN_VAR, vec![]))
             {
                 return_value = value;
             }
             runtime.pop_context(false)?;
 
             // Store the return value in the parent context
-            let return_access = DataAccess::new(&format!("return_{}", id), vec![]);
+            let return_access = DataAccess::new(&format!("{}_{}", id, RETURN_VAR), vec![]);
             runtime.current_context()?.declare_item(
                 DataType::Variable,
                 &return_access.get_name(),
