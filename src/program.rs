@@ -23,13 +23,7 @@ pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
     if let Expression::Call { id, .. } = program_archive.get_main_expression() {
         let statements = program_archive.get_template_data(id).get_body_as_vec();
 
-        process_statements(
-            &mut circuit,
-            &mut runtime,
-            statements,
-            &program_archive,
-            true,
-        )?;
+        process_statements(&mut circuit, &mut runtime, &program_archive, statements)?;
     }
 
     Ok(circuit)

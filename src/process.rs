@@ -9,18 +9,17 @@ use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
 use circom_program_structure::program_archive::ProgramArchive;
 
-const RETURN_VAR: &str = "function_return";
+pub const RETURN_VAR: &str = "function_return";
 
 /// Processes a sequence of statements.
 pub fn process_statements(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    statements: &[Statement],
     program_archive: &ProgramArchive,
-    _is_complete_template: bool,
+    statements: &[Statement],
 ) -> Result<(), ProgramError> {
     for statement in statements {
-        process_statement(ac, runtime, statement, program_archive)?;
+        process_statement(ac, runtime, program_archive, statement)?;
     }
 
     Ok(())
@@ -30,18 +29,16 @@ pub fn process_statements(
 pub fn process_statement(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    stmt: &Statement,
     program_archive: &ProgramArchive,
+    statement: &Statement,
 ) -> Result<(), ProgramError> {
-    match stmt {
-        Statement::Block { stmts, .. } => {
-            process_statements(ac, runtime, stmts, program_archive, true)
-        }
+    match statement {
+        Statement::Block { stmts, .. } => process_statements(ac, runtime, program_archive, stmts),
         Statement::InitializationBlock {
             initializations, ..
         } => {
-            for statement in initializations {
-                process_statement(ac, runtime, statement, program_archive)?;
+            for stmt in initializations {
+                process_statement(ac, runtime, program_archive, stmt)?;
             }
 
             Ok(())
@@ -55,7 +52,7 @@ pub fn process_statement(
             let data_type = DataType::try_from(xtype)?;
             let dim_access: Vec<DataAccess> = dimensions
                 .iter()
-                .map(|exp| process_expression(ac, runtime, exp, program_archive))
+                .map(|expression| process_expression(ac, runtime, program_archive, expression))
                 .collect::<Result<Vec<DataAccess>, ProgramError>>()?;
 
             let ctx = runtime.current_context()?;
@@ -96,7 +93,7 @@ pub fn process_statement(
         }
         Statement::While { cond, stmt, .. } => {
             loop {
-                let access = process_expression(ac, runtime, cond, program_archive)?;
+                let access = process_expression(ac, runtime, program_archive, cond)?;
                 let result = runtime
                     .current_context()?
                     .get_variable(&access)?
@@ -106,7 +103,7 @@ pub fn process_statement(
                     break;
                 }
 
-                process_statement(ac, runtime, stmt, program_archive)?;
+                process_statement(ac, runtime, program_archive, stmt)?;
             }
 
             Ok(())
@@ -117,58 +114,45 @@ pub fn process_statement(
             else_case,
             ..
         } => {
-            let access = process_expression(ac, runtime, cond, program_archive)?;
+            let access = process_expression(ac, runtime, program_archive, cond)?;
             let result = runtime
                 .current_context()?
                 .get_variable(&access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
 
             if result == 0 {
-                if let Some(else_stmt) = else_case {
-                    process_statement(ac, runtime, else_stmt, program_archive)
+                if let Some(else_statement) = else_case {
+                    process_statement(ac, runtime, program_archive, else_statement)
                 } else {
                     Ok(())
                 }
             } else {
-                process_statement(ac, runtime, if_case, program_archive)
+                process_statement(ac, runtime, program_archive, if_case)
             }
         }
         Statement::Substitution {
             var, access, rhe, ..
         } => {
-            let data_type = {
-                let ctx = runtime.current_context()?;
-                ctx.get_item_data_type(var)?
-            };
+            let data_type = runtime.current_context()?.get_item_data_type(var)?;
+            let lh_access = build_access(runtime, ac, program_archive, var, access)?;
+            let rh_access = process_expression(ac, runtime, program_archive, rhe)?;
 
-            let access = build_access(runtime, ac, program_archive, var, access)?;
-
+            let ctx = runtime.current_context()?;
             match data_type {
                 DataType::Signal => {
-                    // This corresponds to a gate generation
-                    let temp_output = process_expression(ac, runtime, rhe, program_archive)?;
-
-                    // Replace the temporary output signal with the given one.
-                    let ctx = runtime.current_context()?;
-                    let temp_output_id = ctx.get_signal(&temp_output)?;
-                    let given_output_id = ctx.get_signal(&access)?;
-
+                    // Create a temporary signal and replace the output variable in the gate
+                    let temp_output_id = ctx.get_signal(&rh_access)?;
+                    let given_output_id = ctx.get_signal(&lh_access)?;
                     ac.replace_output_var_in_gate(temp_output_id, given_output_id);
                 }
                 DataType::Variable => {
-                    // This corresponds to a variable assignment
-                    let value_access = process_expression(ac, runtime, rhe, program_archive)?;
-                    let value = runtime.current_context()?.get_variable(&value_access)?;
-                    let ctx = runtime.current_context()?;
-                    ctx.set_variable(&access, value)?;
+                    // Assign the evaluated right-hand side to the left-hand side
+                    let value = ctx.get_variable(&rh_access)?;
+                    ctx.set_variable(&lh_access, value)?;
                 }
                 DataType::Component => {
-                    // This corresponds to a component wiring
-                    let rhs = process_expression(ac, runtime, rhe, program_archive)?;
-
                     // Add connection
-                    let ctx = runtime.current_context()?;
-                    ctx.add_connection(var, access, rhs)?;
+                    ctx.add_connection(var, lh_access, rh_access)?;
                 }
             }
 
@@ -176,7 +160,7 @@ pub fn process_statement(
         }
         Statement::Return { value, .. } => {
             let return_var_access = DataAccess::new(RETURN_VAR, vec![]);
-            let return_access = process_expression(ac, runtime, value, program_archive)?;
+            let return_access = process_expression(ac, runtime, program_archive, value)?;
             let return_value = runtime
                 .current_context()?
                 .get_variable(&return_access)?
@@ -198,95 +182,20 @@ pub fn process_statement(
 pub fn process_expression(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    expression: &Expression,
     program_archive: &ProgramArchive,
+    expression: &Expression,
 ) -> Result<DataAccess, ProgramError> {
     match expression {
+        Expression::Call { id, args, .. } => handle_call(ac, runtime, program_archive, id, args),
         Expression::InfixOp {
             lhe, infix_op, rhe, ..
-        } => {
-            let varlop = process_expression(ac, runtime, lhe, program_archive)?;
-            let varrop = process_expression(ac, runtime, rhe, program_archive)?;
-
-            traverse_infix_op(ac, runtime, &varlop, &varrop, infix_op)
-        }
-        Expression::Call { id, args, .. } => {
-            // Determine if the call is to a function or a template and get argument names and body
-            let (arg_names, body) = if program_archive.contains_function(id) {
-                let function_data = program_archive.get_function_data(id);
-                (
-                    function_data.get_name_of_params().clone(),
-                    function_data.get_body_as_vec().to_vec(),
-                )
-            } else if program_archive.contains_template(id) {
-                let template_data = program_archive.get_template_data(id);
-                (
-                    template_data.get_name_of_params().clone(),
-                    template_data.get_body_as_vec().to_vec(),
-                )
-            } else {
-                return Err(ProgramError::UndefinedFunctionOrTemplate);
-            };
-
-            let arg_values = args
-                .iter()
-                .map(|arg_expr| {
-                    process_expression(ac, runtime, arg_expr, program_archive).and_then(
-                        |value_access| {
-                            runtime
-                                .current_context()?
-                                .get_variable(&value_access)?
-                                .ok_or(ProgramError::EmptyDataItem)
-                        },
-                    )
-                })
-                .collect::<Result<Vec<u32>, ProgramError>>()?;
-
-            // Create a new context for the function/template execution
-            runtime.push_context(false)?;
-
-            // Scope for the new context operations
-            {
-                let ctx = runtime.current_context()?;
-
-                // Declare and set argument variables in the new context
-                for (arg_name, &arg_value) in arg_names.iter().zip(&arg_values) {
-                    ctx.declare_item(DataType::Variable, arg_name, &[])?;
-                    ctx.set_variable(&DataAccess::new(arg_name, vec![]), Some(arg_value))?;
-                }
-
-                // Process the function/template body
-                process_statements(ac, runtime, &body, program_archive, true)?;
-            }
-
-            // Retrieve the return value before and pop the context
-            let mut return_value: Option<u32> = None;
-            if let Ok(value) = runtime
-                .current_context()?
-                .get_variable(&DataAccess::new(RETURN_VAR, vec![]))
-            {
-                return_value = value;
-            }
-            runtime.pop_context(false)?;
-
-            // Store the return value in the parent context
-            let return_access = DataAccess::new(&format!("{}_{}", id, RETURN_VAR), vec![]);
-            runtime.current_context()?.declare_item(
-                DataType::Variable,
-                &return_access.get_name(),
-                &[],
-            )?;
-            runtime
-                .current_context()?
-                .set_variable(&return_access, return_value)?;
-
-            Ok(return_access)
-        }
+        } => handle_infix_op(ac, runtime, program_archive, infix_op, lhe, rhe),
         Expression::Number(_, value) => {
-            let ctx = runtime.current_context()?;
-            let access = ctx.declare_random_item(DataType::Variable)?;
+            let access = runtime
+                .current_context()?
+                .declare_random_item(DataType::Variable)?;
 
-            ctx.set_variable(
+            runtime.current_context()?.set_variable(
                 &access,
                 Some(value.to_u32().ok_or(ProgramError::ParsingError)?),
             )?;
@@ -300,30 +209,110 @@ pub fn process_expression(
     }
 }
 
-/// Traverses an infix operation and processes it based on the data types of the inputs.
+/// Handles call expressions for functions or templates.
+fn handle_call(
+    ac: &mut ArithmeticCircuit,
+    runtime: &mut Runtime,
+    program_archive: &ProgramArchive,
+    id: &str,
+    args: &[Expression],
+) -> Result<DataAccess, ProgramError> {
+    // Determine if the call is to a function or a template and get argument names and body
+    let (arg_names, body) = if program_archive.contains_function(id) {
+        let function_data = program_archive.get_function_data(id);
+        (
+            function_data.get_name_of_params().clone(),
+            function_data.get_body_as_vec().to_vec(),
+        )
+    } else if program_archive.contains_template(id) {
+        let template_data = program_archive.get_template_data(id);
+        (
+            template_data.get_name_of_params().clone(),
+            template_data.get_body_as_vec().to_vec(),
+        )
+    } else {
+        return Err(ProgramError::UndefinedFunctionOrTemplate);
+    };
+
+    let arg_values = args
+        .iter()
+        .map(|arg_expr| {
+            process_expression(ac, runtime, program_archive, arg_expr).and_then(|value_access| {
+                runtime
+                    .current_context()?
+                    .get_variable(&value_access)?
+                    .ok_or(ProgramError::EmptyDataItem)
+            })
+        })
+        .collect::<Result<Vec<u32>, ProgramError>>()?;
+
+    // Create a new context for the function/template execution
+    runtime.push_context(false)?;
+
+    // Scope for the new context operations
+    {
+        let ctx = runtime.current_context()?;
+
+        // Declare and set argument variables in the new context
+        for (arg_name, &arg_value) in arg_names.iter().zip(&arg_values) {
+            ctx.declare_item(DataType::Variable, arg_name, &[])?;
+            ctx.set_variable(&DataAccess::new(arg_name, vec![]), Some(arg_value))?;
+        }
+
+        // Process the function/template body
+        process_statements(ac, runtime, program_archive, &body)?;
+    }
+
+    // Retrieve the return value before and pop the context
+    let mut return_value: Option<u32> = None;
+    if let Ok(value) = runtime
+        .current_context()?
+        .get_variable(&DataAccess::new(RETURN_VAR, vec![]))
+    {
+        return_value = value;
+    }
+    runtime.pop_context(false)?;
+
+    // Store the return value in the parent context
+    let return_access = DataAccess::new(&format!("{}_{}", id, RETURN_VAR), vec![]);
+    runtime
+        .current_context()?
+        .declare_item(DataType::Variable, &return_access.get_name(), &[])?;
+    runtime
+        .current_context()?
+        .set_variable(&return_access, return_value)?;
+
+    Ok(return_access)
+}
+
+/// Handles an infix operation.
 /// - If both inputs are variables, it directly computes the operation.
 /// - If one or both inputs are signals, it constructs the corresponding circuit gate.
 /// Returns the access to a variable containing the result of the operation or the signal of the output gate.
-pub fn traverse_infix_op(
+fn handle_infix_op(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
-    input_lhs: &DataAccess,
-    input_rhs: &DataAccess,
+    program_archive: &ProgramArchive,
     op: &ExpressionInfixOpcode,
+    lhe: &Expression,
+    rhe: &Expression,
 ) -> Result<DataAccess, ProgramError> {
+    let lhe_access = process_expression(ac, runtime, program_archive, lhe)?;
+    let rhe_access = process_expression(ac, runtime, program_archive, rhe)?;
+
     let ctx = runtime.current_context()?;
 
     // Determine the data types of the left and right operands
-    let lhs_data_type = ctx.get_item_data_type(&input_lhs.get_name())?;
-    let rhs_data_type = ctx.get_item_data_type(&input_rhs.get_name())?;
+    let lhs_data_type = ctx.get_item_data_type(&lhe_access.get_name())?;
+    let rhs_data_type = ctx.get_item_data_type(&rhe_access.get_name())?;
 
     // Handle the case where both inputs are variables
     if lhs_data_type == DataType::Variable && rhs_data_type == DataType::Variable {
         let lhs_value = ctx
-            .get_variable(input_lhs)?
+            .get_variable(&lhe_access)?
             .ok_or(ProgramError::EmptyDataItem)?;
         let rhs_value = ctx
-            .get_variable(input_rhs)?
+            .get_variable(&rhe_access)?
             .ok_or(ProgramError::EmptyDataItem)?;
 
         let op_res = execute_op(&lhs_value, &rhs_value, op);
@@ -335,10 +324,10 @@ pub fn traverse_infix_op(
 
     // Handle cases where one or both inputs are signals
     let lhs_signal = match lhs_data_type {
-        DataType::Signal => ctx.get_signal(input_lhs)?,
+        DataType::Signal => ctx.get_signal(&lhe_access)?,
         DataType::Variable => {
             let value = ctx
-                .get_variable(input_lhs)?
+                .get_variable(&lhe_access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
             ac.add_const_var(value, value);
             value
@@ -347,10 +336,10 @@ pub fn traverse_infix_op(
     };
 
     let rhs_signal = match rhs_data_type {
-        DataType::Signal => ctx.get_signal(input_rhs)?,
+        DataType::Signal => ctx.get_signal(&rhe_access)?,
         DataType::Variable => {
             let value = ctx
-                .get_variable(input_rhs)?
+                .get_variable(&rhe_access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
             ac.add_const_var(value, value);
             value
@@ -385,8 +374,8 @@ pub fn build_access(
 
     for a in access.iter() {
         match a {
-            Access::ArrayAccess(expr) => {
-                let index_access = process_expression(ac, runtime, expr, program_archive)?;
+            Access::ArrayAccess(expression) => {
+                let index_access = process_expression(ac, runtime, program_archive, expression)?;
                 let index = runtime
                     .current_context()?
                     .get_variable(&index_access)?
