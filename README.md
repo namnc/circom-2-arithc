@@ -45,10 +45,10 @@ The CLI provides options to specify both input and output file paths, allowing f
 
 #### Example
 
-To run the program with specific input and output file paths, use the following command format:
+To run the program with specific input file path and output directory path, use the following command format:
 
 ```bash
-cargo run -- --inputs ./program/circuit.circom --output ./dist/output/
+./target/release/circom --input ./input-path/circuit.circom --output ./output-path/
 ```
 
 ## Contributing

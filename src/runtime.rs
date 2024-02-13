@@ -3,19 +3,9 @@
 //! This module manages the main runtime, keeping track of the multiple contexts and data items in the program.
 
 use circom_program_structure::ast::VariableType;
-use log::debug;
 use rand::{thread_rng, Rng};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;
-
-#[derive(Debug)]
-/// New context origin
-pub enum ContextOrigin {
-    Call,
-    Branch,
-    Loop,
-    Block,
-}
 
 /// Data type
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,83 +43,67 @@ pub enum SubAccess {
     Component(String),
 }
 
-/// Runtime - manages the context stack and variable tracking.
+/// Manages a stack of execution contexts for a runtime environment.
 pub struct Runtime {
-    ctx_stack: Vec<Context>,
-    current_ctx: u32,
-    _last_ctx: u32,
+    contexts: VecDeque<Context>,
+}
+
+impl Default for Runtime {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Runtime {
-    /// Constructs a new Runtime with an empty stack.
-    pub fn new() -> Result<Self, RuntimeError> {
-        debug!("New runtime");
-        Ok(Self {
-            ctx_stack: vec![Context::new(0, 0)],
-            current_ctx: 0,
-            _last_ctx: 0,
-        })
+    /// Creates an empty runtime with no contexts.
+    pub fn new() -> Self {
+        Self {
+            contexts: VecDeque::from([Context::new()]),
+        }
     }
 
-    /// Creates a new context for a function call or similar operation.
-    pub fn add_context(&mut self, origin: ContextOrigin) -> Result<(), RuntimeError> {
-        debug!("New context - origin: {:?}", origin);
-        // Generate a unique ID for the new context
-        let new_id = self.generate_context_id();
-        let current_context = self.get_current_context()?;
-
-        // Create the new context using data from the caller context
-        let new_context = match origin {
-            ContextOrigin::Call => Context::new(new_id, self.current_ctx),
-            ContextOrigin::Branch => current_context.new_child(new_id),
-            ContextOrigin::Loop => current_context.new_child(new_id),
-            ContextOrigin::Block => current_context.new_child(new_id),
+    /// Adds a new context onto the stack, optionally inheriting from the current context.
+    pub fn push_context(&mut self, inherit: bool) -> Result<(), RuntimeError> {
+        let new_context = if inherit {
+            match self.contexts.front() {
+                Some(parent_context) => Context::new_with_inheritance(parent_context),
+                None => return Err(RuntimeError::NoContextToInheritFrom),
+            }
+        } else {
+            Context::new()
         };
+        self.contexts.push_front(new_context);
+        Ok(())
+    }
 
-        // NOTE: above could be the simplest way to do what I wrote below. We just let Call be with an empty map and there will be declaration and initialization coming in from operations code.
-        // TODO: we might want to distiguish the context creation reason here
-        // this behavior right now is good for if_then_else, loop, and block because all variables and signals declare in the caller are accessible inside those
-        // for template and function call we don't really have access to variables and signals outside of the template and function definition
-        // for template we pass some values to initialize the variables define in the args of the template and inside the function we can actually re-declare variables and signals.
-        // for function we also pass some values to initialize the variables define in the args of the function and inside the function we can actually re-declare variables (no signals in functions).
+    /// Removes the current context from the stack, with an option to merge it into its parent.
+    pub fn pop_context(&mut self, merge: bool) -> Result<(), RuntimeError> {
+        if self.contexts.is_empty() {
+            return Err(RuntimeError::EmptyContextStack);
+        }
 
-        // Push the new context onto the stack and update current_ctx
-        self.ctx_stack.push(new_context);
-        self.current_ctx = new_id;
-
-        debug!(
-            "New context added successfully. Current context ID: {}",
-            self.current_ctx
-        );
+        if merge && self.contexts.len() > 1 {
+            let child_context = self
+                .contexts
+                .pop_front()
+                .ok_or(RuntimeError::ContextRetrievalError)?;
+            let parent_context = self
+                .contexts
+                .front_mut()
+                .ok_or(RuntimeError::ContextRetrievalError)?;
+            parent_context.merge(&child_context)?;
+        } else {
+            self.contexts.pop_front();
+        }
 
         Ok(())
     }
 
-    /// Retrieves a specific context by its ID.
-    pub fn get_context(&mut self, id: u32) -> Result<&mut Context, RuntimeError> {
-        self.ctx_stack
-            .iter_mut()
-            .find(|ctx| ctx.id == id)
-            .ok_or(RuntimeError::ContextNotFound)
-    }
-
-    /// Pop context and return to the caller
-    pub fn pop_context(&mut self) -> Result<&mut Context, RuntimeError> {
-        let id = self.current_ctx;
-        self.ctx_stack
-            .iter_mut()
-            .find(|ctx| ctx.id == id)
-            .ok_or(RuntimeError::ContextNotFound)
-    }
-
-    /// Retrieves the current runtime context.
-    pub fn get_current_context(&mut self) -> Result<&mut Context, RuntimeError> {
-        self.get_context(self.current_ctx)
-    }
-
-    /// Generates a unique context ID.
-    fn generate_context_id(&mut self) -> u32 {
-        thread_rng().gen()
+    /// Returns a mutable reference to the current context.
+    pub fn current_context(&mut self) -> Result<&mut Context, RuntimeError> {
+        self.contexts
+            .front_mut()
+            .ok_or(RuntimeError::EmptyContextStack)
     }
 }
 
@@ -137,20 +111,22 @@ impl Runtime {
 /// Handles a specific scope value tracking.
 #[derive(Clone)]
 pub struct Context {
-    id: u32,
-    caller_id: u32,
     names: HashSet<String>,
     variables: HashMap<String, Variable>,
     signals: HashMap<String, Signal>,
     components: HashMap<String, Component>,
 }
 
+impl Default for Context {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Context {
     /// Constructs a new Context.
-    pub fn new(id: u32, caller_id: u32) -> Self {
+    pub fn new() -> Self {
         Self {
-            id,
-            caller_id,
             names: HashSet::new(),
             variables: HashMap::new(),
             signals: HashMap::new(),
@@ -159,15 +135,31 @@ impl Context {
     }
 
     /// Returns a contexts that inherits from the current context.
-    pub fn new_child(&self, id: u32) -> Self {
+    pub fn new_with_inheritance(&self) -> Self {
         Self {
-            id,
-            caller_id: self.id,
             names: self.names.clone(),
             variables: self.variables.clone(),
             signals: self.signals.clone(),
             components: self.components.clone(),
         }
+    }
+
+    /// Merges changes from the given context into this context.
+    /// Signals are not merged, as they are read-only.
+    pub fn merge(&mut self, child: &Context) -> Result<(), RuntimeError> {
+        for (name, variable) in &child.variables {
+            if self.variables.contains_key(name) {
+                self.variables.insert(name.clone(), variable.clone());
+            }
+        }
+
+        for (name, component) in &child.components {
+            if self.components.contains_key(name) {
+                self.components.insert(name.clone(), component.clone());
+            }
+        }
+
+        Ok(())
     }
 
     /// Declares a new item of the specified type with the given name and dimensions.
@@ -202,7 +194,7 @@ impl Context {
     /// Declares a new item with a random name.
     /// This might be dropped.
     pub fn declare_random_item(&mut self, data_type: DataType) -> Result<DataAccess, RuntimeError> {
-        let name = format!("random_{}", self.generate_id());
+        let name = format!("random_{}", generate_u32());
         self.declare_item(data_type, &name, &[])?;
         Ok(DataAccess::new(&name, vec![]))
     }
@@ -269,11 +261,6 @@ impl Context {
         component.add_connection(from, to)
     }
 
-    /// Returns the caller context id.
-    pub fn caller_id(&self) -> u32 {
-        self.caller_id
-    }
-
     /// Checks if the name is already used and adds it to the names set.
     fn add_name(&mut self, name: &str) -> Result<(), RuntimeError> {
         if !self.names.insert(name.to_string()) {
@@ -281,11 +268,6 @@ impl Context {
         } else {
             Ok(())
         }
-    }
-
-    /// Generates a random u32 ID.
-    fn generate_id(&self) -> u32 {
-        thread_rng().gen()
     }
 }
 
@@ -298,22 +280,17 @@ struct Signal {
 impl Signal {
     /// Constructs a new Signal as a nested structure based on provided dimensions.
     fn new(dimensions: &[u32]) -> Self {
-        let mut rng = rand::thread_rng();
-
-        // Create nested signals with unique IDs.
-        fn create_nested_signal(dimensions: &[u32], rng: &mut impl Rng) -> NestedValue<u32> {
+        fn create_nested_signal(dimensions: &[u32]) -> NestedValue<u32> {
             if let Some((&first, rest)) = dimensions.split_first() {
-                let array = (0..first)
-                    .map(|_| create_nested_signal(rest, rng))
-                    .collect();
+                let array = (0..first).map(|_| create_nested_signal(rest)).collect();
                 NestedValue::Array(array)
             } else {
-                NestedValue::Value(rng.gen())
+                NestedValue::Value(generate_u32())
             }
         }
 
         Self {
-            value: create_nested_signal(dimensions, &mut rng),
+            value: create_nested_signal(dimensions),
         }
     }
 
@@ -566,15 +543,17 @@ pub fn increment_indices(indices: &mut Vec<u32>, limits: &[u32]) -> Result<bool,
     Ok(!carry)
 }
 
-/// Runtime errors
+/// Generates a random u32.
+pub fn generate_u32() -> u32 {
+    thread_rng().gen()
+}
+
 #[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum RuntimeError {
     #[error("Access Error")]
     AccessError,
     #[error("Error retrieving context")]
     ContextRetrievalError,
-    #[error("Context not found")]
-    ContextNotFound,
     #[error("Empty context stack")]
     EmptyContextStack,
     #[error("Index out of bounds")]
@@ -583,10 +562,10 @@ pub enum RuntimeError {
     ItemAlreadyDeclared,
     #[error("Item not declared")]
     ItemNotDeclared,
-    #[error("Data Item content is not an array")]
-    NotAnArray,
+    #[error("No context to inherit from")]
+    NoContextToInheritFrom,
     #[error("Data Item content is not a single value")]
     NotAValue,
-    #[error("Unsuported data type")]
+    #[error("Unsupported data type")]
     UnsupportedDataType,
 }

@@ -15,7 +15,7 @@ use thiserror::Error;
 /// Parses a given Circom program and constructs an arithmetic circuit from it.
 pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
     let mut circuit = ArithmeticCircuit::new();
-    let mut runtime = Runtime::new()?;
+    let mut runtime = Runtime::new();
     let mut program_archive = parse_project(input).map_err(|_| ProgramError::ParsingError)?;
 
     analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
@@ -23,13 +23,7 @@ pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
     if let Expression::Call { id, .. } = program_archive.get_main_expression() {
         let statements = program_archive.get_template_data(id).get_body_as_vec();
 
-        process_statements(
-            &mut circuit,
-            &mut runtime,
-            statements,
-            &program_archive,
-            true,
-        )?;
+        process_statements(&mut circuit, &mut runtime, &program_archive, statements)?;
     }
 
     Ok(circuit)
@@ -52,12 +46,14 @@ pub enum ProgramError {
     IOError(#[from] io::Error),
     #[error("JSON serialization error: {0}")]
     JsonSerializationError(#[from] serde_json::Error),
+    #[error("Output directory creation error")]
+    OutputDirectoryCreationError,
     #[error("Parsing error")]
     ParsingError,
     #[error("Runtime error: {0}")]
     RuntimeError(RuntimeError),
-    #[error("Output directory creation error")]
-    OutputDirectoryCreationError,
+    #[error("Undefined function or template")]
+    UndefinedFunctionOrTemplate,
 }
 
 impl From<RuntimeError> for ProgramError {

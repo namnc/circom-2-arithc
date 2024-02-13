@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use input_processing::SimplificationStyle;
 
 pub struct Input {
@@ -36,14 +36,14 @@ pub struct Input {
     pub link_libraries : Vec<PathBuf>
 }
 
-const R1CS: &'static str = "r1cs";
-const WAT: &'static str = "wat";
-const WASM: &'static str = "wasm";
-const CPP: &'static str = "cpp";
-const JS: &'static str = "js";
-const DAT: &'static str = "dat";
-const SYM: &'static str = "sym";
-const JSON: &'static str = "json";
+const R1CS: &str = "r1cs";
+const WAT: &str = "wat";
+const WASM: &str = "wasm";
+const CPP: &str = "cpp";
+const JS: &str = "js";
+const DAT: &str = "dat";
+const SYM: &str = "sym";
+const JSON: &str = "json";
 
 impl Input {
     pub fn new() -> Result<Input, ()> {
@@ -55,7 +55,7 @@ impl Input {
         let c_flag = input_processing::get_c(&matches);
 
         if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit"){
-            println!("{}", format!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name));
+            println!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name);
             file_name = format!("{}_c", file_name)
         };
         let output_c_path = Input::build_folder(&output_path, &file_name, CPP);
@@ -68,10 +68,10 @@ impl Input {
             out_r1cs: Input::build_output(&output_path, &file_name, R1CS),
             out_wat_code: Input::build_output(&output_js_path, &file_name, WAT),
             out_wasm_code: Input::build_output(&output_js_path, &file_name, WASM),
-	        out_js_folder: output_js_path.clone(),
-	        out_wasm_name: file_name.clone(),
-	        out_c_folder: output_c_path.clone(),
-	        out_c_run_name: file_name.clone(),
+            out_js_folder: output_js_path.clone(),
+            out_wasm_name: file_name.clone(),
+            out_c_folder: output_c_path.clone(),
+            out_c_run_name: file_name.clone(),
             out_c_code: Input::build_output(&output_c_path, &file_name, CPP),
             out_c_dat: Input::build_output(&output_c_path, &file_name, DAT),
             out_sym: Input::build_output(&output_path, &file_name, SYM),
@@ -87,7 +87,7 @@ impl Input {
             ),
             wat_flag:input_processing::get_wat(&matches),
             wasm_flag: input_processing::get_wasm(&matches),
-            c_flag: c_flag,
+            c_flag,
             r1cs_flag: input_processing::get_r1cs(&matches),
             sym_flag: input_processing::get_sym(&matches),
             main_inputs_flag: input_processing::get_main_inputs_log(&matches),
@@ -106,15 +106,15 @@ impl Input {
         })
     }
 
-    fn build_folder(output_path: &PathBuf, filename: &str, ext: &str) -> PathBuf {
-        let mut file = output_path.clone();
-	    let folder_name = format!("{}_{}",filename,ext);
-	    file.push(folder_name);
-	    file
+    fn build_folder(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
+        let mut file = output_path.to_path_buf();
+        let folder_name = format!("{}_{}",filename,ext);
+        file.push(folder_name);
+        file
     }
     
-    pub fn build_output(output_path: &PathBuf, filename: &str, ext: &str) -> PathBuf {
-        let mut file = output_path.clone();
+    pub fn build_output(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
+        let mut file = output_path.to_path_buf();
         file.push(format!("{}.{}",filename,ext));
         file
     }
@@ -124,7 +124,7 @@ impl Input {
     }
 
     pub fn input_file(&self) -> &str {
-        &self.input_program.to_str().unwrap()
+        self.input_program.to_str().unwrap()
     }
     pub fn r1cs_file(&self) -> &str {
         self.out_r1cs.to_str().unwrap()
@@ -238,7 +238,7 @@ pub mod input_processing {
         if route.is_dir() {
             Result::Ok(route)
         } else {
-            Result::Err(eprintln!("{}", "invalid output path"))
+            Result::Err(eprintln!("invalid output path"))
         }
     }
 
@@ -255,7 +255,7 @@ pub mod input_processing {
             (_, true, _, _) => Ok(SimplificationStyle::O1),
             (_, _, true,  _) => {
                 let o_2_argument = matches.value_of("simplification_rounds").unwrap();
-                let rounds_r = usize::from_str_radix(o_2_argument, 10);
+                let rounds_r = o_2_argument.parse::<usize>();
                 if let Result::Ok(no_rounds) = rounds_r { 
                     if no_rounds == 0 { Ok(SimplificationStyle::O1) }
                     else {Ok(SimplificationStyle::O2(no_rounds))}} 
@@ -349,6 +349,7 @@ pub mod input_processing {
             .about("Compiler for the circom programming language")
             .arg(
                 Arg::with_name("input")
+                    .long("input")
                     .multiple(false)
                     .default_value("./src/assets/circuit.circom")
                     .help("Path to a circuit with a main component"),
