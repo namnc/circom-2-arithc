@@ -241,7 +241,7 @@ pub fn process_expression(
     }
 }
 
-/// Handles call expressions for functions or templates.
+/// Handles function and template calls.
 fn handle_call(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
@@ -250,7 +250,8 @@ fn handle_call(
     args: &[Expression],
 ) -> Result<DataAccess, ProgramError> {
     // Determine if the call is to a function or a template and get argument names and body
-    let (arg_names, body) = if program_archive.contains_function(id) {
+    let is_function = program_archive.contains_function(id);
+    let (arg_names, body) = if is_function {
         let function_data = program_archive.get_function_data(id);
         (
             function_data.get_name_of_params().clone(),
@@ -278,80 +279,57 @@ fn handle_call(
         })
         .collect::<Result<Vec<u32>, ProgramError>>()?;
 
-    // Create a new context for the function/template execution
+    // Create a new execution context
     runtime.push_context(false)?;
 
-    // Scope for the new context operations
-    {
-        let ctx = runtime.current_context()?;
+    // Set arguments in the new context
+    for (arg_name, &arg_value) in arg_names.iter().zip(&arg_values) {
+        runtime
+            .current_context()?
+            .declare_item(DataType::Variable, arg_name, &[])?;
+        runtime
+            .current_context()?
+            .set_variable(&DataAccess::new(arg_name, vec![]), Some(arg_value))?;
+    }
 
-        // Declare and set argument variables in the new context
-        for (arg_name, &arg_value) in arg_names.iter().zip(&arg_values) {
-            ctx.declare_item(DataType::Variable, arg_name, &[])?;
-            ctx.set_variable(&DataAccess::new(arg_name, vec![]), Some(arg_value))?;
+    // Process the function/template body
+    process_statements(ac, runtime, program_archive, &body)?;
+
+    // Get return values
+    let mut function_return: Option<u32> = None;
+    let mut component_return: HashMap<String, Signal> = HashMap::new();
+
+    if is_function {
+        if let Ok(value) = runtime
+            .current_context()?
+            .get_variable_value(&DataAccess::new(RETURN_VAR, vec![]))
+        {
+            function_return = value;
         }
-
-        // Process the function/template body
-        process_statements(ac, runtime, program_archive, &body)?;
-    }
-
-    // Retrieve return value (if it's a function)
-    let mut function_return_value: Option<u32> = None;
-    if let Ok(value) = runtime
-        .current_context()?
-        .get_variable_value(&DataAccess::new(RETURN_VAR, vec![]))
-    {
-        function_return_value = value;
-    }
-
-    let mut component_signal_map: HashMap<String, Signal> = HashMap::new();
-
-    // Retrieve input and output signals (if it's a template)
-    if program_archive.contains_template(id) {
+    } else {
+        // Retrieve input and output signals
         let template_data = program_archive.get_template_data(id);
         let input_signals = template_data.get_inputs();
         let output_signals = template_data.get_outputs();
 
-        // Put input and output signals names in a single vector
-        let mut signal_names: Vec<String> = Vec::new();
-
+        // Store ids in the component
         for (signal, _) in input_signals.iter().chain(output_signals.iter()) {
-            signal_names.push(signal.to_string());
-        }
-
-        // Retrieve signals content and add them to the component
-        for signal_name in signal_names {
-            let ids = runtime.current_context()?.get_signal(&signal_name)?;
-            component_signal_map.insert(signal_name, ids);
+            let ids = runtime.current_context()?.get_signal(signal)?;
+            component_return.insert(signal.to_string(), ids);
         }
     }
 
     // Return to parent context
     runtime.pop_context(false)?;
-
+    let ctx = runtime.current_context()?;
     let return_access = DataAccess::new(&format!("{}_{}", id, RETURN_VAR), vec![]);
 
-    if program_archive.contains_function(id) {
-        // If this is a signal
-        runtime.current_context()?.declare_item(
-            DataType::Variable,
-            &return_access.get_name(),
-            &[],
-        )?;
-        runtime
-            .current_context()?
-            .set_variable(&return_access, function_return_value)?;
+    if is_function {
+        ctx.declare_item(DataType::Variable, &return_access.get_name(), &[])?;
+        ctx.set_variable(&return_access, function_return)?;
     } else {
-        // If this is a component
-        runtime.current_context()?.declare_item(
-            DataType::Component,
-            &return_access.get_name(),
-            &[],
-        )?;
-
-        runtime
-            .current_context()?
-            .set_component(&return_access, component_signal_map)?;
+        ctx.declare_item(DataType::Component, &return_access.get_name(), &[])?;
+        ctx.set_component(&return_access, component_return)?;
     }
 
     Ok(return_access)
