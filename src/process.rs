@@ -4,10 +4,16 @@
 
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::program::ProgramError;
-use crate::runtime::{increment_indices, u32_to_access, DataAccess, DataType, Runtime, SubAccess};
+use crate::runtime::{
+    increment_indices, u32_to_access, DataAccess, DataType, Runtime, Signal, SubAccess,
+};
 use circom_circom_algebra::num_traits::ToPrimitive;
-use circom_program_structure::ast::{Access, Expression, ExpressionInfixOpcode, Statement};
+use circom_program_structure::ast::{
+    Access, AssignOp, Expression, ExpressionInfixOpcode, Statement,
+};
 use circom_program_structure::program_archive::ProgramArchive;
+use log::debug;
+use std::collections::HashMap;
 
 pub const RETURN_VAR: &str = "function_return";
 
@@ -59,7 +65,7 @@ pub fn process_statement(
             let dimensions: Vec<u32> = dim_access
                 .iter()
                 .map(|dim_access| {
-                    ctx.get_variable(dim_access)?
+                    ctx.get_variable_value(dim_access)?
                         .ok_or(ProgramError::EmptyDataItem)
                 })
                 .collect::<Result<Vec<u32>, ProgramError>>()?;
@@ -70,7 +76,7 @@ pub fn process_statement(
                 let mut signal_access = DataAccess::new(name, Vec::new());
 
                 if dimensions.is_empty() {
-                    let signal_id = ctx.get_signal(&signal_access)?;
+                    let signal_id = ctx.get_signal_id(&signal_access)?;
                     ac.add_var(signal_id, &signal_id.to_string());
                 } else {
                     let mut indices: Vec<u32> = vec![0; dimensions.len()];
@@ -78,7 +84,7 @@ pub fn process_statement(
                     loop {
                         // Set access and get signal id for the current indices
                         signal_access.set_access(u32_to_access(&indices));
-                        let signal_id = ctx.get_signal(&signal_access)?;
+                        let signal_id = ctx.get_signal_id(&signal_access)?;
                         ac.add_var(signal_id, &signal_id.to_string());
 
                         // Increment indices
@@ -92,11 +98,12 @@ pub fn process_statement(
             Ok(())
         }
         Statement::While { cond, stmt, .. } => {
+            // TODO: instantiate a new context
             loop {
                 let access = process_expression(ac, runtime, program_archive, cond)?;
                 let result = runtime
                     .current_context()?
-                    .get_variable(&access)?
+                    .get_variable_value(&access)?
                     .ok_or(ProgramError::EmptyDataItem)?;
 
                 if result == 0 {
@@ -114,10 +121,11 @@ pub fn process_statement(
             else_case,
             ..
         } => {
+            // TODO: instantiate a new context
             let access = process_expression(ac, runtime, program_archive, cond)?;
             let result = runtime
                 .current_context()?
-                .get_variable(&access)?
+                .get_variable_value(&access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
 
             if result == 0 {
@@ -131,7 +139,11 @@ pub fn process_statement(
             }
         }
         Statement::Substitution {
-            var, access, rhe, ..
+            var,
+            access,
+            rhe,
+            op,
+            ..
         } => {
             let data_type = runtime.current_context()?.get_item_data_type(var)?;
             let lh_access = build_access(runtime, ac, program_archive, var, access)?;
@@ -141,19 +153,39 @@ pub fn process_statement(
             match data_type {
                 DataType::Signal => {
                     // Create a temporary signal and replace the output variable in the gate
-                    let temp_output_id = ctx.get_signal(&rh_access)?;
-                    let given_output_id = ctx.get_signal(&lh_access)?;
+                    let temp_output_id = ctx.get_signal_id(&rh_access)?;
+                    let given_output_id = ctx.get_signal_id(&lh_access)?;
                     ac.replace_output_var_in_gate(temp_output_id, given_output_id);
                 }
                 DataType::Variable => {
                     // Assign the evaluated right-hand side to the left-hand side
-                    let value = ctx.get_variable(&rh_access)?;
+                    let value = ctx.get_variable_value(&rh_access)?;
                     ctx.set_variable(&lh_access, value)?;
                 }
-                DataType::Component => {
-                    // Add connection
-                    ctx.add_connection(var, lh_access, rh_access)?;
-                }
+                DataType::Component => match op {
+                    AssignOp::AssignVar => {
+                        // Component assignment
+                        let signal_map = ctx.get_component_map(&rh_access)?;
+                        ctx.set_component(&lh_access, signal_map)?;
+                    }
+                    AssignOp::AssignConstraintSignal => {
+                        // Wiring
+                        // Get the component's signal id (old id)
+                        let component_signal_id = ctx.get_component_signal_id(&lh_access)?;
+
+                        // Get the assigned signal id (new id)
+                        let signal_id = ctx.get_signal_id(&rh_access)?;
+
+                        debug!(
+                            "Wiring signal {} to component signal {}",
+                            signal_id, component_signal_id
+                        );
+
+                        // Replace id in the circuit
+                        ac.replace_var_id(component_signal_id, signal_id)
+                    }
+                    _ => return Err(ProgramError::ParsingError),
+                },
             }
 
             Ok(())
@@ -163,11 +195,11 @@ pub fn process_statement(
             let return_access = process_expression(ac, runtime, program_archive, value)?;
             let return_value = runtime
                 .current_context()?
-                .get_variable(&return_access)?
+                .get_variable_value(&return_access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
 
             let ctx = runtime.current_context()?;
-            if ctx.get_variable(&return_var_access).is_err() {
+            if ctx.get_variable_value(&return_var_access).is_err() {
                 ctx.declare_item(DataType::Variable, RETURN_VAR, &[])?;
             }
             ctx.set_variable(&return_var_access, Some(return_value))?;
@@ -240,7 +272,7 @@ fn handle_call(
             process_expression(ac, runtime, program_archive, arg_expr).and_then(|value_access| {
                 runtime
                     .current_context()?
-                    .get_variable(&value_access)?
+                    .get_variable_value(&value_access)?
                     .ok_or(ProgramError::EmptyDataItem)
             })
         })
@@ -263,24 +295,64 @@ fn handle_call(
         process_statements(ac, runtime, program_archive, &body)?;
     }
 
-    // Retrieve the return value before and pop the context
-    let mut return_value: Option<u32> = None;
+    // Retrieve return value (if it's a function)
+    let mut function_return_value: Option<u32> = None;
     if let Ok(value) = runtime
         .current_context()?
-        .get_variable(&DataAccess::new(RETURN_VAR, vec![]))
+        .get_variable_value(&DataAccess::new(RETURN_VAR, vec![]))
     {
-        return_value = value;
+        function_return_value = value;
     }
+
+    let mut component_signal_map: HashMap<String, Signal> = HashMap::new();
+
+    // Retrieve input and output signals (if it's a template)
+    if program_archive.contains_template(id) {
+        let template_data = program_archive.get_template_data(id);
+        let input_signals = template_data.get_inputs();
+        let output_signals = template_data.get_outputs();
+
+        // Put input and output signals names in a single vector
+        let mut signal_names: Vec<String> = Vec::new();
+
+        for (signal, _) in input_signals.iter().chain(output_signals.iter()) {
+            signal_names.push(signal.to_string());
+        }
+
+        // Retrieve signals content and add them to the component
+        for signal_name in signal_names {
+            let ids = runtime.current_context()?.get_signal(&signal_name)?;
+            component_signal_map.insert(signal_name, ids);
+        }
+    }
+
+    // Return to parent context
     runtime.pop_context(false)?;
 
-    // Store the return value in the parent context
     let return_access = DataAccess::new(&format!("{}_{}", id, RETURN_VAR), vec![]);
-    runtime
-        .current_context()?
-        .declare_item(DataType::Variable, &return_access.get_name(), &[])?;
-    runtime
-        .current_context()?
-        .set_variable(&return_access, return_value)?;
+
+    if program_archive.contains_function(id) {
+        // If this is a signal
+        runtime.current_context()?.declare_item(
+            DataType::Variable,
+            &return_access.get_name(),
+            &[],
+        )?;
+        runtime
+            .current_context()?
+            .set_variable(&return_access, function_return_value)?;
+    } else {
+        // If this is a component
+        runtime.current_context()?.declare_item(
+            DataType::Component,
+            &return_access.get_name(),
+            &[],
+        )?;
+
+        runtime
+            .current_context()?
+            .set_component(&return_access, component_signal_map)?;
+    }
 
     Ok(return_access)
 }
@@ -309,10 +381,10 @@ fn handle_infix_op(
     // Handle the case where both inputs are variables
     if lhs_data_type == DataType::Variable && rhs_data_type == DataType::Variable {
         let lhs_value = ctx
-            .get_variable(&lhe_access)?
+            .get_variable_value(&lhe_access)?
             .ok_or(ProgramError::EmptyDataItem)?;
         let rhs_value = ctx
-            .get_variable(&rhe_access)?
+            .get_variable_value(&rhe_access)?
             .ok_or(ProgramError::EmptyDataItem)?;
 
         let op_res = execute_op(&lhs_value, &rhs_value, op);
@@ -324,33 +396,33 @@ fn handle_infix_op(
 
     // Handle cases where one or both inputs are signals
     let lhs_signal = match lhs_data_type {
-        DataType::Signal => ctx.get_signal(&lhe_access)?,
+        DataType::Signal => ctx.get_signal_id(&lhe_access)?,
         DataType::Variable => {
             let value = ctx
-                .get_variable(&lhe_access)?
+                .get_variable_value(&lhe_access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
             ac.add_const_var(value, value);
             value
         }
-        _ => return Err(ProgramError::InvalidDataType),
+        DataType::Component => ctx.get_component_signal_id(&lhe_access)?,
     };
 
     let rhs_signal = match rhs_data_type {
-        DataType::Signal => ctx.get_signal(&rhe_access)?,
+        DataType::Signal => ctx.get_signal_id(&rhe_access)?,
         DataType::Variable => {
             let value = ctx
-                .get_variable(&rhe_access)?
+                .get_variable_value(&rhe_access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
             ac.add_const_var(value, value);
             value
         }
-        _ => return Err(ProgramError::InvalidDataType),
+        DataType::Component => ctx.get_component_signal_id(&rhe_access)?,
     };
 
     // Construct the corresponding circuit gate
     let gate_type = AGateType::from(op);
     let output_signal = ctx.declare_random_item(DataType::Signal)?;
-    let output_id = ctx.get_signal(&output_signal)?;
+    let output_id = ctx.get_signal_id(&output_signal)?;
     ac.add_gate(
         &output_signal.get_name(),
         output_id,
@@ -378,7 +450,7 @@ pub fn build_access(
                 let index_access = process_expression(ac, runtime, program_archive, expression)?;
                 let index = runtime
                     .current_context()?
-                    .get_variable(&index_access)?
+                    .get_variable_value(&index_access)?
                     .ok_or(ProgramError::EmptyDataItem)?;
                 access_vec.push(SubAccess::Array(index));
             }

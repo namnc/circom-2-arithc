@@ -169,22 +169,26 @@ impl Context {
         name: &str,
         dimensions: &[u32],
     ) -> Result<(), RuntimeError> {
-        // Check name availability
-        self.add_name(name)?;
-        let name_string = name.to_string();
+        // Parse name
+        let name = name.to_string();
+
+        // Check availability
+        if !self.names.insert(name.clone()) {
+            return Err(RuntimeError::ItemAlreadyDeclared);
+        }
 
         match data_type {
             DataType::Signal => {
                 let signal = Signal::new(dimensions);
-                self.signals.insert(name_string, signal);
+                self.signals.insert(name, signal);
             }
             DataType::Variable => {
                 let variable = Variable::new(dimensions);
-                self.variables.insert(name_string, variable);
+                self.variables.insert(name, variable);
             }
             DataType::Component => {
                 let component = Component::new(dimensions);
-                self.components.insert(name_string, component);
+                self.components.insert(name, component);
             }
         };
 
@@ -192,7 +196,6 @@ impl Context {
     }
 
     /// Declares a new item with a random name.
-    /// This might be dropped.
     pub fn declare_random_item(&mut self, data_type: DataType) -> Result<DataAccess, RuntimeError> {
         let name = format!("random_{}", generate_u32());
         self.declare_item(data_type, &name, &[])?;
@@ -227,7 +230,7 @@ impl Context {
     }
 
     /// Gets the content of a variable.
-    pub fn get_variable(&self, access: &DataAccess) -> Result<Option<u32>, RuntimeError> {
+    pub fn get_variable_value(&self, access: &DataAccess) -> Result<Option<u32>, RuntimeError> {
         let variable = self
             .variables
             .get(&access.name)
@@ -236,8 +239,16 @@ impl Context {
         variable.get(&access_to_u32(access.get_access())?)
     }
 
-    /// Gets the content of a signal.
-    pub fn get_signal(&self, access: &DataAccess) -> Result<u32, RuntimeError> {
+    /// Gets a signal with all its dimensions.
+    pub fn get_signal(&self, name: &str) -> Result<Signal, RuntimeError> {
+        self.signals
+            .get(name)
+            .ok_or(RuntimeError::ItemNotDeclared)
+            .map(|signal| signal.clone())
+    }
+
+    /// Gets the id of the signal at the specified index path.
+    pub fn get_signal_id(&self, access: &DataAccess) -> Result<u32, RuntimeError> {
         let signal = self
             .signals
             .get(&access.name)
@@ -246,34 +257,52 @@ impl Context {
         signal.get(&access_to_u32(access.get_access())?)
     }
 
-    /// Adds a connection in a component.
-    pub fn add_connection(
+    /// Gets a component.
+    pub fn get_component_map(
+        &self,
+        access: &DataAccess,
+    ) -> Result<HashMap<String, Signal>, RuntimeError> {
+        let component = self
+            .components
+            .get(&access.name)
+            .ok_or(RuntimeError::ItemNotDeclared)
+            .map(|component| component.clone())?;
+
+        component.get_map(&access_to_u32(access.get_access())?)
+    }
+
+    /// Gets the id of a component's signal.
+    pub fn get_component_signal_id(&self, access: &DataAccess) -> Result<u32, RuntimeError> {
+        let (component_access, signal_access) = process_component_access(access)?;
+        let component = self
+            .components
+            .get(&component_access.name)
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+
+        component.get_signal_id(
+            &access_to_u32(component_access.get_access())?,
+            &signal_access,
+        )
+    }
+
+    /// Sets a component's input/output signal map.
+    pub fn set_component(
         &mut self,
-        component_name: &str,
-        from: DataAccess,
-        to: DataAccess,
+        access: &DataAccess,
+        map: HashMap<String, Signal>,
     ) -> Result<(), RuntimeError> {
         let component = self
             .components
-            .get_mut(component_name)
+            .get_mut(&access.name)
             .ok_or(RuntimeError::ItemNotDeclared)?;
 
-        component.add_connection(from, to)
-    }
-
-    /// Checks if the name is already used and adds it to the names set.
-    fn add_name(&mut self, name: &str) -> Result<(), RuntimeError> {
-        if !self.names.insert(name.to_string()) {
-            Err(RuntimeError::ItemAlreadyDeclared)
-        } else {
-            Ok(())
-        }
+        component.set_signal_map(&access_to_u32(access.get_access())?, map)
     }
 }
 
 /// Represents a signal that holds a single id or a nested structure of values with unique IDs.
 #[derive(Clone, Debug)]
-struct Signal {
+pub struct Signal {
     value: NestedValue<u32>,
 }
 
@@ -302,7 +331,7 @@ impl Signal {
 
 /// Represents a variable that can hold a single value or nested structure of values.
 #[derive(Clone, Debug)]
-struct Variable {
+pub struct Variable {
     value: NestedValue<Option<u32>>,
 }
 
@@ -334,40 +363,55 @@ impl Variable {
     }
 }
 
-/// Component
+/// Stores a component's input/output signals with their respective identifiers.
 #[derive(Clone, Debug)]
 pub struct Component {
-    connections: NestedValue<HashMap<DataAccess, DataAccess>>,
+    signal_map: NestedValue<HashMap<String, Signal>>,
 }
 
 impl Component {
     /// Constructs a new Component as a nested structure based on provided dimensions.
     fn new(dimensions: &[u32]) -> Self {
-        let mut connections = NestedValue::Value(HashMap::new());
+        let mut signal_map = NestedValue::Value(HashMap::new());
 
         // Construct the nested structure in reverse order to ensure the correct dimensionality.
         for &dimension in dimensions.iter().rev() {
-            let array = vec![connections.clone(); dimension as usize];
-            connections = NestedValue::Array(array);
+            let array = vec![signal_map.clone(); dimension as usize];
+            signal_map = NestedValue::Array(array);
         }
 
-        Self { connections }
+        Self { signal_map }
     }
 
-    // We're not processing the `to` path since this could be another component, etc. It has to be handled later.
-    /// Adds a connection from one DataAccess to another DataAccess.
-    pub fn add_connection(&mut self, from: DataAccess, to: DataAccess) -> Result<(), RuntimeError> {
-        if let ProcessedAccess::Component(component_path, signal_name, signal_path) =
-            process_subaccess(from.get_access())?
-        {
-            let connections = get_mut_nested_value(&mut self.connections, &component_path)?;
+    /// Retrieves the component signal map at the specified index path.
+    fn get_map(&self, index_path: &[u32]) -> Result<HashMap<String, Signal>, RuntimeError> {
+        get_nested_value(&self.signal_map, index_path)
+    }
 
-            let signal_access = u32_to_access(&signal_path);
-            connections.insert(DataAccess::new(&signal_name, signal_access), to);
-            Ok(())
-        } else {
-            Err(RuntimeError::AccessError)
-        }
+    /// Sets the signal map
+    fn set_signal_map(
+        &mut self,
+        component_access: &[u32],
+        map: HashMap<String, Signal>,
+    ) -> Result<(), RuntimeError> {
+        let nested_map = get_mut_nested_value(&mut self.signal_map, component_access)?;
+        *nested_map = map;
+
+        Ok(())
+    }
+
+    /// Returns the signal's ID at the specified index path.
+    fn get_signal_id(
+        &self,
+        component_access: &[u32],
+        signal_access: &DataAccess,
+    ) -> Result<u32, RuntimeError> {
+        let map = get_nested_value(&self.signal_map, component_access)?;
+        let signal = map
+            .get(&signal_access.get_name())
+            .ok_or(RuntimeError::ItemNotDeclared)?;
+
+        signal.get(&access_to_u32(signal_access.get_access())?)
     }
 }
 
@@ -410,20 +454,18 @@ impl DataAccess {
     }
 }
 
-#[derive(Debug)]
-pub enum ProcessedAccess {
-    Array(Vec<u32>),
-    Component(Vec<u32>, String, Vec<u32>), // (initial_path, signal_name, final_path)
-}
-
-/// Processes a vector of SubAccess.
-pub fn process_subaccess(sub_accesses: &[SubAccess]) -> Result<ProcessedAccess, RuntimeError> {
+/// Processes an access to a component's signal.
+/// Returns a tuple containing the component access, and the signal access.
+/// (component_access, signal_access)
+pub fn process_component_access(
+    access: &DataAccess,
+) -> Result<(DataAccess, DataAccess), RuntimeError> {
     let mut initial_path = Vec::new();
     let mut final_path = Vec::new();
     let mut signal_name = String::new();
     let mut has_signal = false;
 
-    for sub_access in sub_accesses {
+    for sub_access in access.get_access() {
         match sub_access {
             SubAccess::Array(index) => {
                 if has_signal {
@@ -443,15 +485,14 @@ pub fn process_subaccess(sub_accesses: &[SubAccess]) -> Result<ProcessedAccess, 
         }
     }
 
-    if has_signal {
-        Ok(ProcessedAccess::Component(
-            initial_path,
-            signal_name,
-            final_path,
-        ))
-    } else {
-        Ok(ProcessedAccess::Array(initial_path))
+    if !has_signal {
+        return Err(RuntimeError::AccessError);
     }
+
+    Ok((
+        DataAccess::new(&access.get_name(), u32_to_access(&initial_path)),
+        DataAccess::new(&signal_name, u32_to_access(&final_path)),
+    ))
 }
 
 /// Generic function to navigate through NestedValue and return the inner value.
@@ -548,7 +589,7 @@ pub fn generate_u32() -> u32 {
     thread_rng().gen()
 }
 
-#[derive(Error, Debug, PartialEq, Eq, Clone)]
+#[derive(Error, Debug)]
 pub enum RuntimeError {
     #[error("Access Error")]
     AccessError,
@@ -568,4 +609,23 @@ pub enum RuntimeError {
     NotAValue,
     #[error("Unsupported data type")]
     UnsupportedDataType,
+    #[error("{inner}\n{backtrace}")]
+    WithBacktrace {
+        inner: Box<Self>,
+        backtrace: Box<std::backtrace::Backtrace>,
+    },
+}
+
+impl RuntimeError {
+    pub fn bt(self) -> Self {
+        let backtrace = std::backtrace::Backtrace::capture();
+        match backtrace.status() {
+            std::backtrace::BacktraceStatus::Disabled
+            | std::backtrace::BacktraceStatus::Unsupported => self,
+            _ => Self::WithBacktrace {
+                inner: Box::new(self),
+                backtrace: Box::new(backtrace),
+            },
+        }
+    }
 }

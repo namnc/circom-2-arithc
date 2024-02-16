@@ -54,10 +54,29 @@ pub enum ProgramError {
     RuntimeError(RuntimeError),
     #[error("Undefined function or template")]
     UndefinedFunctionOrTemplate,
+    #[error("{inner}\n{backtrace}")]
+    WithBacktrace {
+        inner: Box<Self>,
+        backtrace: Box<std::backtrace::Backtrace>,
+    },
 }
 
 impl From<RuntimeError> for ProgramError {
     fn from(e: RuntimeError) -> Self {
         ProgramError::RuntimeError(e)
+    }
+}
+
+impl ProgramError {
+    pub fn bt(self) -> Self {
+        let backtrace = std::backtrace::Backtrace::capture();
+        match backtrace.status() {
+            std::backtrace::BacktraceStatus::Disabled
+            | std::backtrace::BacktraceStatus::Unsupported => self,
+            _ => Self::WithBacktrace {
+                inner: Box::new(self),
+                backtrace: Box::new(backtrace),
+            },
+        }
     }
 }

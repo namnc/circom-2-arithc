@@ -241,6 +241,20 @@ impl ArithmeticCircuit {
         }
     }
 
+    pub fn replace_var_id(&mut self, old_id: u32, new_id: u32) {
+        for node in self.gates.values_mut() {
+            if node.input_lhs_id == old_id {
+                node.input_lhs_id = new_id;
+            }
+            if node.input_rhs_id == old_id {
+                node.input_rhs_id = new_id;
+            }
+            if node.output_id == old_id {
+                node.output_id = new_id;
+            }
+        }
+    }
+
     pub fn truncate_zero_add_gate(&mut self) {
         let mut zero_add_gate_indice = vec![];
         for i in 1..(self.gate_count + 1) {
