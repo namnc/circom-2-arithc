@@ -5,7 +5,7 @@
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::program::ProgramError;
 use crate::runtime::{
-    increment_indices, u32_to_access, DataAccess, DataType, Runtime, Signal, SubAccess,
+    increment_indices, u32_to_access, Context, DataAccess, DataType, Runtime, Signal, SubAccess,
 };
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
@@ -146,7 +146,7 @@ pub fn process_statement(
             ..
         } => {
             let data_type = runtime.current_context()?.get_item_data_type(var)?;
-            let lh_access = build_access(runtime, ac, program_archive, var, access)?;
+            let lh_access = build_access(ac, runtime, program_archive, var, access)?;
             let rh_access = process_expression(ac, runtime, program_archive, rhe)?;
 
             let ctx = runtime.current_context()?;
@@ -171,20 +171,15 @@ pub fn process_statement(
                     AssignOp::AssignConstraintSignal => {
                         // Wiring
                         // Get the component's signal id (old id)
-                        let component_signal_id = ctx.get_component_signal_id(&lh_access)?;
-
-                        // TODO: check if this is a variable, in that case we have to create a new signal and add it to the ac
+                        let old_id = ctx.get_component_signal_id(&lh_access)?;
 
                         // Get the assigned signal id (new id)
-                        let signal_id = ctx.get_signal_id(&rh_access)?;
+                        let new_id = get_signal_for_access(ac, &ctx, &rh_access)?;
 
-                        debug!(
-                            "Wiring signal {} to component signal {}",
-                            signal_id, component_signal_id
-                        );
+                        debug!("Wiring old signal {} to new signal {}", old_id, new_id);
 
                         // Replace id in the circuit
-                        ac.replace_var_id(component_signal_id, signal_id)
+                        ac.replace_var_id(old_id, new_id)
                     }
                     _ => return Err(ProgramError::ParsingError),
                 },
@@ -237,7 +232,7 @@ pub fn process_expression(
             Ok(access)
         }
         Expression::Variable { name, access, .. } => {
-            build_access(runtime, ac, program_archive, name, access)
+            build_access(ac, runtime, program_archive, name, access)
         }
         _ => unimplemented!("Expression not implemented"),
     }
@@ -375,29 +370,8 @@ fn handle_infix_op(
     }
 
     // Handle cases where one or both inputs are signals
-    let lhs_signal = match lhs_data_type {
-        DataType::Signal => ctx.get_signal_id(&lhe_access)?,
-        DataType::Variable => {
-            let value = ctx
-                .get_variable_value(&lhe_access)?
-                .ok_or(ProgramError::EmptyDataItem)?;
-            ac.add_const_var(value, value);
-            value
-        }
-        DataType::Component => ctx.get_component_signal_id(&lhe_access)?,
-    };
-
-    let rhs_signal = match rhs_data_type {
-        DataType::Signal => ctx.get_signal_id(&rhe_access)?,
-        DataType::Variable => {
-            let value = ctx
-                .get_variable_value(&rhe_access)?
-                .ok_or(ProgramError::EmptyDataItem)?;
-            ac.add_const_var(value, value);
-            value
-        }
-        DataType::Component => ctx.get_component_signal_id(&rhe_access)?,
-    };
+    let lhs_signal = get_signal_for_access(ac, &ctx, &lhe_access)?;
+    let rhs_signal = get_signal_for_access(ac, &ctx, &rhe_access)?;
 
     // Construct the corresponding circuit gate
     let gate_type = AGateType::from(op);
@@ -414,10 +388,31 @@ fn handle_infix_op(
     Ok(output_signal)
 }
 
+/// Returns a signal id for a given access
+/// - If the access is a signal or a component, it returns the corresponding signal id.
+/// - If the access is a variable, it adds a constant variable to the circuit and returns the corresponding signal id.
+fn get_signal_for_access(
+    ac: &mut ArithmeticCircuit,
+    ctx: &Context,
+    access: &DataAccess,
+) -> Result<u32, ProgramError> {
+    match ctx.get_item_data_type(&access.get_name())? {
+        DataType::Signal => Ok(ctx.get_signal_id(access)?),
+        DataType::Variable => {
+            let value = ctx
+                .get_variable_value(access)?
+                .ok_or(ProgramError::EmptyDataItem)?;
+            ac.add_const_var(value, value);
+            Ok(value)
+        }
+        DataType::Component => Ok(ctx.get_component_signal_id(access)?),
+    }
+}
+
 /// Builds a DataAccess from an Access array
 pub fn build_access(
-    runtime: &mut Runtime,
     ac: &mut ArithmeticCircuit,
+    runtime: &mut Runtime,
     program_archive: &ProgramArchive,
     name: &str,
     access: &[Access],

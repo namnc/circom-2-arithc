@@ -24,7 +24,7 @@ template Product () {
 
    wire_component[0] = Wire();
 
-   wire_component[0].input_signal[1] <== input_A;
+   wire_component[0].input_signal[1] <== 5;
 
    while (variable_A > 10) {
       variable_A = variable_A - 1;
