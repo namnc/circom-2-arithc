@@ -173,6 +173,8 @@ pub fn process_statement(
                         // Get the component's signal id (old id)
                         let component_signal_id = ctx.get_component_signal_id(&lh_access)?;
 
+                        // TODO: check if this is a variable, in that case we have to create a new signal and add it to the ac
+
                         // Get the assigned signal id (new id)
                         let signal_id = ctx.get_signal_id(&rh_access)?;
 
