@@ -98,7 +98,6 @@ pub fn process_statement(
             Ok(())
         }
         Statement::While { cond, stmt, .. } => {
-            // TODO: instantiate a new context
             loop {
                 let access = process_expression(ac, runtime, program_archive, cond)?;
                 let result = runtime
@@ -121,7 +120,6 @@ pub fn process_statement(
             else_case,
             ..
         } => {
-            // TODO: instantiate a new context
             let access = process_expression(ac, runtime, program_archive, cond)?;
             let result = runtime
                 .current_context()?
