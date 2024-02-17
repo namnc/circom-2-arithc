@@ -17,13 +17,11 @@ template Product () {
    var variable_B;
 
    variable_A = 100;
-
    variable_B = is_positive(variable_A);
 
    component wire_component[2];
 
    wire_component[0] = Wire();
-
    wire_component[0].input_signal[1] <== 5;
 
    while (variable_A > 10) {
