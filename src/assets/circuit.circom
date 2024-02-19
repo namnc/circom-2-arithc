@@ -8,7 +8,7 @@ template Wire(){
    output_signal <== input_signal[1];
 }
 
-template Product () {  
+template MainComponent () {  
    signal input input_A;  
    signal input input_B;  
    signal output ip;
@@ -36,4 +36,4 @@ function is_positive(n){
    else{ return 0;}
 }
 
-component main = Product();
+component main = MainComponent();
