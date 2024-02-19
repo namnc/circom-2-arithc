@@ -12,7 +12,6 @@ use circom_program_structure::ast::{
     Access, AssignOp, Expression, ExpressionInfixOpcode, Statement,
 };
 use circom_program_structure::program_archive::ProgramArchive;
-use log::debug;
 use std::collections::HashMap;
 
 pub const RETURN_VAR: &str = "function_return";
@@ -77,7 +76,7 @@ pub fn process_statement(
 
                 if dimensions.is_empty() {
                     let signal_id = ctx.get_signal_id(&signal_access)?;
-                    ac.add_var(signal_id, &signal_id.to_string());
+                    ac.add_signal(signal_id)?;
                 } else {
                     let mut indices: Vec<u32> = vec![0; dimensions.len()];
 
@@ -85,7 +84,7 @@ pub fn process_statement(
                         // Set access and get signal id for the current indices
                         signal_access.set_access(u32_to_access(&indices));
                         let signal_id = ctx.get_signal_id(&signal_access)?;
-                        ac.add_var(signal_id, &signal_id.to_string());
+                        ac.add_signal(signal_id)?;
 
                         // Increment indices
                         if !increment_indices(&mut indices, &dimensions)? {
@@ -153,7 +152,9 @@ pub fn process_statement(
                     // Create a temporary signal and replace the output variable in the gate
                     let temp_output_id = ctx.get_signal_id(&rh_access)?;
                     let given_output_id = ctx.get_signal_id(&lh_access)?;
-                    ac.replace_output_var_in_gate(temp_output_id, given_output_id);
+
+                    // Add connection
+                    ac.add_connection(temp_output_id, given_output_id)?;
                 }
                 DataType::Variable => {
                     // Assign the evaluated right-hand side to the left-hand side
@@ -174,10 +175,8 @@ pub fn process_statement(
                         // Get the assigned signal id (new id)
                         let new_id = get_signal_for_access(ac, &ctx, &rh_access)?;
 
-                        debug!("Wiring old signal {} to new signal {}", old_id, new_id);
-
-                        // Replace id in the circuit
-                        ac.replace_var_id(old_id, new_id)
+                        // Add connection
+                        ac.add_connection(old_id, new_id)?;
                     }
                     _ => return Err(ProgramError::ParsingError),
                 },
@@ -368,20 +367,14 @@ fn handle_infix_op(
     }
 
     // Handle cases where one or both inputs are signals
-    let lhs_signal = get_signal_for_access(ac, &ctx, &lhe_access)?;
-    let rhs_signal = get_signal_for_access(ac, &ctx, &rhe_access)?;
+    let lhs_id = get_signal_for_access(ac, &ctx, &lhe_access)?;
+    let rhs_id = get_signal_for_access(ac, &ctx, &rhe_access)?;
 
     // Construct the corresponding circuit gate
     let gate_type = AGateType::from(op);
     let output_signal = ctx.declare_random_item(DataType::Signal)?;
     let output_id = ctx.get_signal_id(&output_signal)?;
-    ac.add_gate(
-        &output_signal.get_name(),
-        output_id,
-        lhs_signal,
-        rhs_signal,
-        gate_type,
-    );
+    ac.add_gate(gate_type, lhs_id, rhs_id, output_id)?;
 
     Ok(output_signal)
 }
@@ -400,7 +393,7 @@ fn get_signal_for_access(
             let value = ctx
                 .get_variable_value(access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
-            ac.add_const_var(value, value);
+            ac.add_const(value)?;
             Ok(value)
         }
         DataType::Component => Ok(ctx.get_component_signal_id(access)?),

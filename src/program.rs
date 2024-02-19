@@ -4,7 +4,7 @@
 
 use crate::{
     circom::{input::Input, parser::parse_project, type_analysis::analyse_project},
-    circuit::ArithmeticCircuit,
+    circuit::{ArithmeticCircuit, CircuitError},
     process::process_statements,
     runtime::{Runtime, RuntimeError},
 };
@@ -36,6 +36,8 @@ pub enum ProgramError {
     AnalysisError,
     #[error("Call error")]
     CallError,
+    #[error("Circuit error: {0}")]
+    CircuitError(CircuitError),
     #[error("Empty data item")]
     EmptyDataItem,
     #[error("Input initialization error")]
@@ -59,5 +61,11 @@ pub enum ProgramError {
 impl From<RuntimeError> for ProgramError {
     fn from(e: RuntimeError) -> Self {
         ProgramError::RuntimeError(e)
+    }
+}
+
+impl From<CircuitError> for ProgramError {
+    fn from(e: CircuitError) -> Self {
+        ProgramError::CircuitError(e)
     }
 }
