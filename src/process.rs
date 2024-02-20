@@ -431,6 +431,7 @@ pub fn build_access(
 
 /// Executes an operation, performing the specified arithmetic or logical computation.
 pub fn execute_op(lhs: &u32, rhs: &u32, op: &ExpressionInfixOpcode) -> u32 {
+    // match ExpressionInfixOpcode directly?
     match AGateType::from(op) {
         AGateType::AAdd => lhs + rhs,
         AGateType::ADiv => lhs / rhs,
