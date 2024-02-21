@@ -1,17 +1,16 @@
 pragma circom 2.0.0;
 
 template Wire(){
-   signal input input_signal[3];
-   signal input input_signal_b[3];
-   signal input input_signal_c[3];
+   signal input input_signal;
    signal output output_signal;
-   output_signal <== input_signal[1];
+   output_signal <== input_signal;
 }
 
 template MainComponent () {  
    signal input input_A;  
    signal input input_B;  
    signal output ip;
+   signal x;
 
    var variable_A;
    var variable_B;
@@ -19,16 +18,17 @@ template MainComponent () {
    variable_A = 100;
    variable_B = is_positive(variable_A);
 
-   component wire_component[2];
+   component wire_component;
 
-   wire_component[0] = Wire();
-   wire_component[0].input_signal[1] <== 5;
+   wire_component = Wire();
+   wire_component.input_signal <== input_A + input_B;
+   wire_component.output_signal <== x;
 
    while (variable_A > 10) {
       variable_A = variable_A - 1;
    }
 
-   ip <==  input_B + variable_B + variable_A + wire_component[0].input_signal[1];
+   ip <== x;
 }
 
 function is_positive(n){
