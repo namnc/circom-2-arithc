@@ -142,19 +142,17 @@ pub fn process_statement(
             op,
             ..
         } => {
-            let data_type = runtime.current_context()?.get_item_data_type(var)?;
             let lh_access = build_access(ac, runtime, program_archive, var, access)?;
             let rh_access = process_expression(ac, runtime, program_archive, rhe)?;
 
             let ctx = runtime.current_context()?;
-            match data_type {
+            match ctx.get_item_data_type(var)? {
                 DataType::Signal => {
-                    // Create a temporary signal and replace the output variable in the gate
-                    let temp_output_id = ctx.get_signal_id(&rh_access)?;
+                    // Connect the generated gate output to the given signal
+                    let gate_output_id = ctx.get_signal_id(&rh_access)?;
                     let given_output_id = ctx.get_signal_id(&lh_access)?;
 
-                    // Add connection
-                    ac.add_connection(temp_output_id, given_output_id)?;
+                    ac.add_connection(gate_output_id, given_output_id)?;
                 }
                 DataType::Variable => {
                     // Assign the evaluated right-hand side to the left-hand side
@@ -168,17 +166,13 @@ pub fn process_statement(
                         ctx.set_component(&lh_access, signal_map)?;
                     }
                     AssignOp::AssignConstraintSignal => {
-                        // Wiring
-                        // Get the component's signal id (old id)
-                        let old_id = ctx.get_component_signal_id(&lh_access)?;
-
-                        // Get the assigned signal id (new id)
-                        let new_id = get_signal_for_access(ac, &ctx, &rh_access)?;
-
                         // Add connection
-                        ac.add_connection(old_id, new_id)?;
+                        let component_signal = ctx.get_component_signal_id(&lh_access)?;
+                        let assigned_signal = get_signal_for_access(ac, ctx, &rh_access)?;
+
+                        ac.add_connection(assigned_signal, component_signal)?;
                     }
-                    _ => return Err(ProgramError::ParsingError),
+                    _ => return Err(ProgramError::OperationNotSupported),
                 },
             }
 
@@ -367,13 +361,16 @@ fn handle_infix_op(
     }
 
     // Handle cases where one or both inputs are signals
-    let lhs_id = get_signal_for_access(ac, &ctx, &lhe_access)?;
-    let rhs_id = get_signal_for_access(ac, &ctx, &rhe_access)?;
+    let lhs_id = get_signal_for_access(ac, ctx, &lhe_access)?;
+    let rhs_id = get_signal_for_access(ac, ctx, &rhe_access)?;
 
     // Construct the corresponding circuit gate
     let gate_type = AGateType::from(op);
     let output_signal = ctx.declare_random_item(DataType::Signal)?;
     let output_id = ctx.get_signal_id(&output_signal)?;
+
+    // Add output signal and gate to the circuit
+    ac.add_signal(output_id)?;
     ac.add_gate(gate_type, lhs_id, rhs_id, output_id)?;
 
     Ok(output_signal)

@@ -50,6 +50,8 @@ pub enum ProgramError {
     JsonSerializationError(#[from] serde_json::Error),
     #[error("Output directory creation error")]
     OutputDirectoryCreationError,
+    #[error("Operation not supported")]
+    OperationNotSupported,
     #[error("Parsing error")]
     ParsingError,
     #[error("Runtime error: {0}")]
@@ -58,14 +60,3 @@ pub enum ProgramError {
     UndefinedFunctionOrTemplate,
 }
 
-impl From<RuntimeError> for ProgramError {
-    fn from(e: RuntimeError) -> Self {
-        ProgramError::RuntimeError(e)
-    }
-}
-
-impl From<CircuitError> for ProgramError {
-    fn from(e: CircuitError) -> Self {
-        ProgramError::CircuitError(e)
-    }
-}

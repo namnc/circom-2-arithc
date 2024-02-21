@@ -2,6 +2,7 @@
 //!
 //! This module manages the main runtime, keeping track of the multiple contexts and data items in the program.
 
+use crate::program::ProgramError;
 use circom_program_structure::ast::VariableType;
 use rand::{thread_rng, Rng};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -609,4 +610,10 @@ pub enum RuntimeError {
     NotAValue,
     #[error("Unsupported data type")]
     UnsupportedDataType,
+}
+
+impl From<RuntimeError> for ProgramError {
+    fn from(e: RuntimeError) -> Self {
+        ProgramError::RuntimeError(e)
+    }
 }
