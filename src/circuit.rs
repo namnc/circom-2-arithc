@@ -8,10 +8,7 @@ use log::debug;
 use mpz_circuits::GateType;
 use regex::Captures;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    fmt::{self, Display},
-};
+use std::collections::HashMap;
 use thiserror::Error;
 
 /// Types of gates that can be used in an arithmetic circuit.
@@ -30,24 +27,6 @@ pub enum AGateType {
     ASub,
 }
 
-impl Display for AGateType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            AGateType::ANone => write!(f, "None"),
-            AGateType::AAdd => write!(f, "AAdd"),
-            AGateType::ASub => write!(f, "ASub"),
-            AGateType::AMul => write!(f, "AMul"),
-            AGateType::ADiv => write!(f, "ADiv"),
-            AGateType::AEq => write!(f, "AEq"),
-            AGateType::ANeq => write!(f, "ANEq"),
-            AGateType::ALEq => write!(f, "ALEq"),
-            AGateType::AGEq => write!(f, "AGEq"),
-            AGateType::ALt => write!(f, "ALt"),
-            AGateType::AGt => write!(f, "AGt"),
-        }
-    }
-}
-
 impl From<&ExpressionInfixOpcode> for AGateType {
     fn from(opcode: &ExpressionInfixOpcode) -> Self {
         match opcode {
@@ -62,59 +41,6 @@ impl From<&ExpressionInfixOpcode> for AGateType {
             ExpressionInfixOpcode::NotEq => AGateType::ANeq,
             ExpressionInfixOpcode::Sub => AGateType::ASub,
             _ => AGateType::ANone,
-        }
-    }
-}
-
-/// Represents a variable in an arithmetic circuit, with an optional constant value.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ArithmeticVar {
-    id: u32,
-    value: Option<u32>,
-}
-
-impl ArithmeticVar {
-    /// Creates a new arithmetic variable.
-    pub fn new(id: u32, value: Option<u32>) -> Self {
-        Self { id, value }
-    }
-
-    /// Returns whether the variable is a constant.
-    pub fn is_const(&self) -> bool {
-        self.value.is_some()
-    }
-
-    /// Sets the value of the variable, if it is not already set.
-    pub fn set_value(&mut self, value: u32) -> Result<(), CircuitError> {
-        if self.value.is_some() {
-            return Err(CircuitError::ConstantValueAlreadySet);
-        }
-
-        self.value = Some(value);
-
-        Ok(())
-    }
-}
-
-/// Represents a circuit gate, with a left-hand input, right-hand input, and output identifiers.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ArithmeticGate {
-    id: u32,
-    gate_type: AGateType,
-    lh_input: u32,
-    rh_input: u32,
-    output: u32,
-}
-
-impl ArithmeticGate {
-    /// Creates a new gate.
-    pub fn new(id: u32, gate_type: AGateType, lh_input: u32, rh_input: u32, output: u32) -> Self {
-        Self {
-            id,
-            gate_type,
-            lh_input,
-            rh_input,
-            output,
         }
     }
 }
@@ -164,10 +90,33 @@ impl Node {
     }
 }
 
+/// Represents a circuit gate, with a left-hand input, right-hand input, and output node identifiers.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ArithmeticGate {
+    id: u32,
+    gate_type: AGateType,
+    lh_input: u32,
+    rh_input: u32,
+    output: u32,
+}
+
+impl ArithmeticGate {
+    /// Creates a new gate.
+    pub fn new(id: u32, gate_type: AGateType, lh_input: u32, rh_input: u32, output: u32) -> Self {
+        Self {
+            id,
+            gate_type,
+            lh_input,
+            rh_input,
+            output,
+        }
+    }
+}
+
 /// Represents an arithmetic circuit, with a set of variables and gates.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ArithmeticCircuit {
-    vars: HashMap<u32, ArithmeticVar>,
+    vars: HashMap<u32, Option<u32>>,
     nodes: Vec<Node>,
     gates: Vec<ArithmeticGate>,
 }
@@ -188,7 +137,7 @@ impl ArithmeticCircuit {
         if self.contains_var(&id) {
             return Err(CircuitError::CircuitVariableAlreadyDeclared);
         }
-        self.vars.insert(id, ArithmeticVar::new(id, None));
+        self.vars.insert(id, None);
 
         // Create a new node for the signal
         let node = Node::new(id);
@@ -204,8 +153,7 @@ impl ArithmeticCircuit {
         if self.contains_var(&value) {
             return Ok(());
         }
-        self.vars
-            .insert(value, ArithmeticVar::new(value, Some(value)));
+        self.vars.insert(value, Some(value));
 
         // Create a new node for the constant
         let node = Node::new(value);
