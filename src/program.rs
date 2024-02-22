@@ -4,7 +4,7 @@
 
 use crate::{
     circom::{input::Input, parser::parse_project, type_analysis::analyse_project},
-    circuit::ArithmeticCircuit,
+    circuit::{ArithmeticCircuit, CircuitError},
     process::process_statements,
     runtime::{Runtime, RuntimeError},
 };
@@ -36,6 +36,8 @@ pub enum ProgramError {
     AnalysisError,
     #[error("Call error")]
     CallError,
+    #[error("Circuit error: {0}")]
+    CircuitError(CircuitError),
     #[error("Empty data item")]
     EmptyDataItem,
     #[error("Input initialization error")]
@@ -48,6 +50,8 @@ pub enum ProgramError {
     JsonSerializationError(#[from] serde_json::Error),
     #[error("Output directory creation error")]
     OutputDirectoryCreationError,
+    #[error("Operation not supported")]
+    OperationNotSupported,
     #[error("Parsing error")]
     ParsingError,
     #[error("Runtime error: {0}")]
@@ -56,8 +60,3 @@ pub enum ProgramError {
     UndefinedFunctionOrTemplate,
 }
 
-impl From<RuntimeError> for ProgramError {
-    fn from(e: RuntimeError) -> Self {
-        ProgramError::RuntimeError(e)
-    }
-}
