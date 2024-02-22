@@ -97,6 +97,7 @@ pub fn process_statement(
             Ok(())
         }
         Statement::While { cond, stmt, .. } => {
+            runtime.push_context(true)?;
             loop {
                 let access = process_expression(ac, runtime, program_archive, cond)?;
                 let result = runtime
@@ -108,8 +109,11 @@ pub fn process_statement(
                     break;
                 }
 
+                runtime.push_context(true)?;
                 process_statement(ac, runtime, program_archive, stmt)?;
+                runtime.pop_context(true)?;
             }
+            runtime.pop_context(true)?;
 
             Ok(())
         }
@@ -127,12 +131,18 @@ pub fn process_statement(
 
             if result == 0 {
                 if let Some(else_statement) = else_case {
-                    process_statement(ac, runtime, program_archive, else_statement)
+                    runtime.push_context(true)?;
+                    process_statement(ac, runtime, program_archive, else_statement)?;
+                    runtime.pop_context(true)?;
+                    Ok(())
                 } else {
                     Ok(())
                 }
             } else {
-                process_statement(ac, runtime, program_archive, if_case)
+                runtime.push_context(true)?;
+                process_statement(ac, runtime, program_archive, if_case)?;
+                runtime.pop_context(true)?;
+                Ok(())
             }
         }
         Statement::Substitution {
