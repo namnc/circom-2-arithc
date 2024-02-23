@@ -6,6 +6,7 @@ use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::program::ProgramError;
 use crate::runtime::{
     increment_indices, u32_to_access, Context, DataAccess, DataType, Runtime, Signal, SubAccess,
+    RETURN_VAR,
 };
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
@@ -13,8 +14,6 @@ use circom_program_structure::ast::{
 };
 use circom_program_structure::program_archive::ProgramArchive;
 use std::collections::HashMap;
-
-pub const RETURN_VAR: &str = "function_return";
 
 /// Processes a sequence of statements.
 pub fn process_statements(
@@ -189,18 +188,15 @@ pub fn process_statement(
             Ok(())
         }
         Statement::Return { value, .. } => {
-            let return_var_access = DataAccess::new(RETURN_VAR, vec![]);
             let return_access = process_expression(ac, runtime, program_archive, value)?;
-            let return_value = runtime
-                .current_context()?
+
+            let ctx = runtime.current_context()?;
+            let return_value = ctx
                 .get_variable_value(&return_access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
 
-            let ctx = runtime.current_context()?;
-            if ctx.get_variable_value(&return_var_access).is_err() {
-                ctx.declare_item(DataType::Variable, RETURN_VAR, &[])?;
-            }
-            ctx.set_variable(&return_var_access, Some(return_value))?;
+            ctx.declare_item(DataType::Variable, RETURN_VAR, &[])?;
+            ctx.set_variable(&DataAccess::new(RETURN_VAR, vec![]), Some(return_value))?;
 
             Ok(())
         }
@@ -363,7 +359,7 @@ fn handle_infix_op(
             .get_variable_value(&rhe_access)?
             .ok_or(ProgramError::EmptyDataItem)?;
 
-        let op_res = execute_op(&lhs_value, &rhs_value, op);
+        let op_res = execute_op(lhs_value, rhs_value, op)?;
         let item_access = ctx.declare_random_item(DataType::Variable)?;
         ctx.set_variable(&item_access, Some(op_res))?;
 
@@ -436,55 +432,98 @@ pub fn build_access(
     Ok(DataAccess::new(name, access_vec))
 }
 
-/// Executes an operation, performing the specified arithmetic or logical computation.
-pub fn execute_op(lhs: &u32, rhs: &u32, op: &ExpressionInfixOpcode) -> u32 {
-    match AGateType::from(op) {
-        AGateType::AAdd => lhs + rhs,
-        AGateType::ADiv => lhs / rhs,
-        AGateType::AEq => {
-            if lhs == rhs {
-                1
-            } else {
-                0
+/// Executes an operation on two u32 values, performing the specified arithmetic or logical computation.
+pub fn execute_op(lhs: u32, rhs: u32, op: &ExpressionInfixOpcode) -> Result<u32, ProgramError> {
+    let res = match op {
+        ExpressionInfixOpcode::Mul => lhs * rhs,
+        ExpressionInfixOpcode::Div => {
+            if rhs == 0 {
+                return Err(ProgramError::OperationError("Division by zero".to_string()));
             }
+
+            lhs / rhs
         }
-        AGateType::AGEq => {
-            if lhs >= rhs {
-                1
-            } else {
-                0
+        ExpressionInfixOpcode::Add => lhs + rhs,
+        ExpressionInfixOpcode::Sub => lhs - rhs,
+        ExpressionInfixOpcode::Pow => lhs.pow(rhs),
+        ExpressionInfixOpcode::IntDiv => {
+            if rhs == 0 {
+                return Err(ProgramError::OperationError(
+                    "Integer division by zero".to_string(),
+                ));
             }
+
+            lhs / rhs
         }
-        AGateType::AGt => {
-            if lhs > rhs {
-                1
-            } else {
-                0
+        ExpressionInfixOpcode::Mod => {
+            if rhs == 0 {
+                return Err(ProgramError::OperationError("Modulo by zero".to_string()));
             }
+
+            lhs % rhs
         }
-        AGateType::ALEq => {
+        ExpressionInfixOpcode::ShiftL => lhs << rhs,
+        ExpressionInfixOpcode::ShiftR => lhs >> rhs,
+        ExpressionInfixOpcode::LesserEq => {
             if lhs <= rhs {
                 1
             } else {
                 0
             }
         }
-        AGateType::ALt => {
+        ExpressionInfixOpcode::GreaterEq => {
+            if lhs >= rhs {
+                1
+            } else {
+                0
+            }
+        }
+        ExpressionInfixOpcode::Lesser => {
             if lhs < rhs {
                 1
             } else {
                 0
             }
         }
-        AGateType::AMul => lhs * rhs,
-        AGateType::ANeq => {
+        ExpressionInfixOpcode::Greater => {
+            if lhs > rhs {
+                1
+            } else {
+                0
+            }
+        }
+        ExpressionInfixOpcode::Eq => {
+            if lhs == rhs {
+                1
+            } else {
+                0
+            }
+        }
+        ExpressionInfixOpcode::NotEq => {
             if lhs != rhs {
                 1
             } else {
                 0
             }
         }
-        AGateType::ANone => unimplemented!(),
-        AGateType::ASub => lhs - rhs,
-    }
+        ExpressionInfixOpcode::BoolOr => {
+            if lhs != 0 || rhs != 0 {
+                1
+            } else {
+                0
+            }
+        }
+        ExpressionInfixOpcode::BoolAnd => {
+            if lhs != 0 && rhs != 0 {
+                1
+            } else {
+                0
+            }
+        }
+        ExpressionInfixOpcode::BitOr => lhs | rhs,
+        ExpressionInfixOpcode::BitAnd => lhs & rhs,
+        ExpressionInfixOpcode::BitXor => lhs ^ rhs,
+    };
+
+    Ok(res)
 }
