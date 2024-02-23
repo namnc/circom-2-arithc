@@ -173,8 +173,8 @@ impl Context {
         // Parse name
         let name = name.to_string();
 
-        // Check availability
-        if !self.names.insert(name.clone()) {
+        // Check availability. Ignore variables redeclaration.
+        if !self.names.insert(name.clone()) && data_type != DataType::Variable {
             return Err(RuntimeError::ItemAlreadyDeclared);
         }
 
