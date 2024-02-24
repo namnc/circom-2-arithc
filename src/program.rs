@@ -48,10 +48,12 @@ pub enum ProgramError {
     IOError(#[from] io::Error),
     #[error("JSON serialization error: {0}")]
     JsonSerializationError(#[from] serde_json::Error),
-    #[error("Output directory creation error")]
-    OutputDirectoryCreationError,
+    #[error("Operation error: {0}")]
+    OperationError(String),
     #[error("Operation not supported")]
     OperationNotSupported,
+    #[error("Output directory creation error")]
+    OutputDirectoryCreationError,
     #[error("Parsing error")]
     ParsingError,
     #[error("Runtime error: {0}")]
@@ -59,4 +61,3 @@ pub enum ProgramError {
     #[error("Undefined function or template")]
     UndefinedFunctionOrTemplate,
 }
-

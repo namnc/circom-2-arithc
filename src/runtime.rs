@@ -8,6 +8,8 @@ use rand::{thread_rng, Rng};
 use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;
 
+pub const RETURN_VAR: &str = "function_return_value";
+
 /// Data type
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DataType {
@@ -152,6 +154,12 @@ impl Context {
             if self.variables.contains_key(name) {
                 self.variables.insert(name.clone(), variable.clone());
             }
+        }
+
+        // Force the merge of the return variable.
+        if child.variables.contains_key(RETURN_VAR) {
+            self.variables
+                .insert(RETURN_VAR.to_string(), child.variables[RETURN_VAR].clone());
         }
 
         for (name, component) in &child.components {
