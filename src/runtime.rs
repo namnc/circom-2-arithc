@@ -220,7 +220,10 @@ impl Context {
         } else if self.components.get(name).is_some() {
             Ok(DataType::Component)
         } else {
-            Err(RuntimeError::ItemNotDeclared)
+            Err(RuntimeError::ItemNotDeclared(format!(
+                "get_item_data_type: {}",
+                name
+            )))
         }
     }
 
@@ -230,10 +233,13 @@ impl Context {
         access: &DataAccess,
         value: Option<u32>,
     ) -> Result<(), RuntimeError> {
-        let variable = self
-            .variables
-            .get_mut(&access.name)
-            .ok_or(RuntimeError::ItemNotDeclared)?;
+        let variable =
+            self.variables
+                .get_mut(&access.name)
+                .ok_or(RuntimeError::ItemNotDeclared(format!(
+                    "set_variable: {:?}",
+                    access
+                )))?;
 
         variable.set(&access_to_u32(access.get_access())?, value)
     }
@@ -243,7 +249,10 @@ impl Context {
         let variable = self
             .variables
             .get(&access.name)
-            .ok_or(RuntimeError::ItemNotDeclared)?;
+            .ok_or(RuntimeError::ItemNotDeclared(format!(
+                "get_variable_value: {:?}",
+                access
+            )))?;
 
         variable.get(&access_to_u32(access.get_access())?)
     }
@@ -252,7 +261,10 @@ impl Context {
     pub fn get_signal(&self, name: &str) -> Result<Signal, RuntimeError> {
         self.signals
             .get(name)
-            .ok_or(RuntimeError::ItemNotDeclared)
+            .ok_or(RuntimeError::ItemNotDeclared(format!(
+                "get_signal: {}",
+                name
+            )))
             .map(|signal| signal.clone())
     }
 
@@ -261,7 +273,10 @@ impl Context {
         let signal = self
             .signals
             .get(&access.name)
-            .ok_or(RuntimeError::ItemNotDeclared)?;
+            .ok_or(RuntimeError::ItemNotDeclared(format!(
+                "get_component_map: {:?}",
+                access
+            )))?;
 
         signal.get(&access_to_u32(access.get_access())?)
     }
@@ -274,8 +289,10 @@ impl Context {
         let component = self
             .components
             .get(&access.name)
-            .ok_or(RuntimeError::ItemNotDeclared)
-            .map(|component| component.clone())?;
+            .ok_or(RuntimeError::ItemNotDeclared(format!(
+                "get_component_map: {:?}",
+                access
+            )))?;
 
         component.get_map(&access_to_u32(access.get_access())?)
     }
@@ -283,10 +300,13 @@ impl Context {
     /// Gets the id of a component's signal.
     pub fn get_component_signal_id(&self, access: &DataAccess) -> Result<u32, RuntimeError> {
         let (component_access, signal_access) = process_component_access(access)?;
-        let component = self
-            .components
-            .get(&component_access.name)
-            .ok_or(RuntimeError::ItemNotDeclared)?;
+        let component =
+            self.components
+                .get(&component_access.name)
+                .ok_or(RuntimeError::ItemNotDeclared(format!(
+                    "get_component_signal_id: {:?}",
+                    access
+                )))?;
 
         component.get_signal_id(
             &access_to_u32(component_access.get_access())?,
@@ -300,10 +320,13 @@ impl Context {
         access: &DataAccess,
         map: HashMap<String, Signal>,
     ) -> Result<(), RuntimeError> {
-        let component = self
-            .components
-            .get_mut(&access.name)
-            .ok_or(RuntimeError::ItemNotDeclared)?;
+        let component =
+            self.components
+                .get_mut(&access.name)
+                .ok_or(RuntimeError::ItemNotDeclared(format!(
+                    "set_component: {:?}",
+                    access
+                )))?;
 
         component.set_signal_map(&access_to_u32(access.get_access())?, map)
     }
@@ -418,7 +441,10 @@ impl Component {
         let map = get_nested_value(&self.signal_map, component_access)?;
         let signal = map
             .get(&signal_access.get_name())
-            .ok_or(RuntimeError::ItemNotDeclared)?;
+            .ok_or(RuntimeError::ItemNotDeclared(format!(
+                "get_signal_id: {:?}",
+                signal_access
+            )))?;
 
         signal.get(&access_to_u32(signal_access.get_access())?)
     }
@@ -610,8 +636,8 @@ pub enum RuntimeError {
     IndexOutOfBounds,
     #[error("Item already declared")]
     ItemAlreadyDeclared,
-    #[error("Item not declared")]
-    ItemNotDeclared,
+    #[error("Item not declared: {0}")]
+    ItemNotDeclared(String),
     #[error("No context to inherit from")]
     NoContextToInheritFrom,
     #[error("Data Item content is not a single value")]
