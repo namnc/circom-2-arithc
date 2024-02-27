@@ -5,8 +5,8 @@
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::program::ProgramError;
 use crate::runtime::{
-    increment_indices, u32_to_access, Context, DataAccess, DataType, Runtime, Signal, SubAccess,
-    RETURN_VAR,
+    generate_u32, increment_indices, u32_to_access, Context, DataAccess, DataType, Runtime, Signal,
+    SubAccess, RETURN_VAR,
 };
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
@@ -382,7 +382,8 @@ fn handle_call(
     // Return to parent context
     runtime.pop_context(false)?;
     let ctx = runtime.current_context()?;
-    let return_access = DataAccess::new(&format!("{}_{}", id, RETURN_VAR), vec![]);
+    let return_access =
+        DataAccess::new(&format!("{}_{}_{}", id, RETURN_VAR, generate_u32()), vec![]);
 
     if is_function {
         ctx.declare_item(DataType::Variable, &return_access.get_name(), &[])?;
