@@ -170,6 +170,9 @@ impl ArithmeticCircuit {
         lhs_id: u32,
         rhs_id: u32,
         output_id: u32,
+        lh_name: String,
+        rh_name: String,
+        o_name: String
     ) -> Result<(), CircuitError> {
         // Check that the inputs are declared
         if !self.contains_var(&lhs_id)
@@ -178,6 +181,26 @@ impl ArithmeticCircuit {
         {
             return Err(CircuitError::VariableNotDeclared);
         }
+
+        match gate_type {
+            AGateType::AAdd => {
+                println!("DEBUG =================================================== {:?} = {:?} + {:?}", o_name, lh_name, rh_name);
+            },
+            AGateType::ADiv => todo!(),
+            AGateType::AEq => todo!(),
+            AGateType::AGEq => todo!(),
+            AGateType::AGt => todo!(),
+            AGateType::ALEq => todo!(),
+            AGateType::ALt => todo!(),
+            AGateType::AMul => {
+                println!("DEBUG =================================================== {:?} = {:?} * {:?}", o_name, lh_name, rh_name);
+            },
+            AGateType::ANeq => todo!(),
+            AGateType::ANone => todo!(),
+            AGateType::ASub => {
+                println!("DEBUG =================================================== {:?} = {:?} - {:?}", o_name, lh_name, rh_name);
+            },
+        };
 
         // Get the signal nodes
         let lhs_node = self.get_signal_node(lhs_id)?;
@@ -200,7 +223,7 @@ impl ArithmeticCircuit {
 
     /// Creates a connection between two signals in the circuit.
     /// This is done by finding the nodes that contain the signals and merging them.
-    pub fn add_connection(&mut self, a: u32, b: u32) -> Result<(), CircuitError> {
+    pub fn add_connection(&mut self, a: u32, b: u32, a_name: String, b_name: String) -> Result<(), CircuitError> {
         // Check that the endpoints are declared
         if !self.contains_var(&a) || !self.contains_var(&b) {
             return Err(CircuitError::VariableNotDeclared);
@@ -240,6 +263,8 @@ impl ArithmeticCircuit {
         self.nodes
             .retain(|node| node.id != node_a.id && node.id != node_b.id);
         self.nodes.push(merged_node);
+
+        println!("DEBUG =================================================== {:?} = {:?}", a_name, b_name);
 
         Ok(())
     }

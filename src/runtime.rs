@@ -5,7 +5,7 @@
 use crate::program::ProgramError;
 use circom_program_structure::ast::VariableType;
 use rand::{thread_rng, Rng};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{collections::{HashMap, HashSet, VecDeque}, fmt::format};
 use thiserror::Error;
 
 pub const RETURN_VAR: &str = "function_return_value";
@@ -486,6 +486,10 @@ impl DataAccess {
     /// Gets the sub access of the data item.
     pub fn get_access(&self) -> &Vec<SubAccess> {
         &self.access
+    }
+
+    pub fn access_str(&self) -> String {
+        format!("{:?} {:?}", self.get_name(), self.get_access())
     }
 }
 

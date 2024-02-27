@@ -160,8 +160,9 @@ pub fn process_statement(
                     // Connect the generated gate output to the given signal
                     let given_output_id = ctx.get_signal_id(&lh_access)?;
                     let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
-
-                    ac.add_connection(gate_output_id, given_output_id)?;
+                    let a_name = lh_access.access_str();
+                    let b_name =  rh_access.access_str();
+                    ac.add_connection(gate_output_id, given_output_id, a_name, b_name)?;
                 }
                 DataType::Variable => {
                     // Assign the evaluated right-hand side to the left-hand side
@@ -179,7 +180,10 @@ pub fn process_statement(
                         let component_signal = ctx.get_component_signal_id(&lh_access)?;
                         let assigned_signal = get_signal_for_access(ac, ctx, &rh_access)?;
 
-                        ac.add_connection(assigned_signal, component_signal)?;
+                        let a_name = lh_access.access_str();
+                        let b_name =  rh_access.access_str();
+
+                        ac.add_connection(assigned_signal, component_signal, a_name, b_name)?;
                     }
                     _ => return Err(ProgramError::OperationNotSupported),
                 },
@@ -444,7 +448,12 @@ fn handle_infix_op(
 
     // Add output signal and gate to the circuit
     ac.add_signal(output_id)?;
-    ac.add_gate(gate_type, lhs_id, rhs_id, output_id)?;
+
+    let lh_name = lhe_access.access_str();
+    let rh_name = rhe_access.access_str();
+    let o_name = output_signal.access_str();
+
+    ac.add_gate(gate_type, lhs_id, rhs_id, output_id, lh_name, rh_name, o_name)?;
 
     Ok(output_signal)
 }
