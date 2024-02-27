@@ -159,7 +159,7 @@ pub fn process_statement(
                 DataType::Signal => {
                     // Connect the generated gate output to the given signal
                     let gate_output_id = ctx.get_signal_id(&rh_access)?;
-                    let given_output_id = ctx.get_signal_id(&lh_access)?;
+                    let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
 
                     ac.add_connection(gate_output_id, given_output_id)?;
                 }
