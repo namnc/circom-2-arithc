@@ -274,7 +274,7 @@ impl Context {
             .signals
             .get(&access.name)
             .ok_or(RuntimeError::ItemNotDeclared(format!(
-                "get_component_map: {:?}",
+                "get_signal_id: {:?}",
                 access
             )))?;
 
