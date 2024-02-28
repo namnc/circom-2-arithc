@@ -373,6 +373,15 @@ fn handle_infix_op(
         return Ok(item_access);
     }
 
+    match op {
+        ExpressionInfixOpcode::Lesser => {
+            println!("DEBUG ALt");
+        },
+        _ => {
+
+        }
+    }
+
     // Handle cases where one or both inputs are signals
     let lhs_id = get_signal_for_access(ac, ctx, &lhe_access)?;
     let rhs_id = get_signal_for_access(ac, ctx, &rhe_access)?;
@@ -408,7 +417,7 @@ fn get_signal_for_access(
             let value = ctx
                 .get_variable_value(access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
-            ac.add_const(value)?;
+            ac.add_const(value, access.access_str(ctx.get_ctx_name()))?;
             Ok(value)
         }
         DataType::Component => Ok(ctx.get_component_signal_id(access)?),

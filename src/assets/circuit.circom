@@ -82,6 +82,7 @@ template ShiftRight(k) {
 template Sign() {
     signal input in;
     signal output sign;
+    sign <== in < 0;
 }
 
 template div_relu(k) {
@@ -100,6 +101,30 @@ template div_relu(k) {
     //switcher.outR*0 === 0;
 
     out <== switcher.outL;
+}
+
+template test() {
+     signal input in[2];
+    signal output out[3];
+
+    component l0 = fc(2, 3);
+    signal input w0[3][2];
+    signal input b0[3];
+    for (var i = 0; i < 3; i++) {
+        for (var j = 0; j < 2; j++) {
+            l0.weights[i][j] <== w0[i][j];
+        }
+        l0.biases[i] <== b0[i];
+    }
+    // l0.weights <== w0;
+    // l0.biases <== b0;
+    for (var k = 0; k < 2; k++) {
+        l0.in[k] <== in[k];
+    }
+
+    for (var k = 0; k < 3; k++) {
+        out[k] <== l0.out[k];
+    }
 }
 
 template network() {
@@ -161,4 +186,5 @@ template network() {
     // out <== l2.out;
 }
 
-component main = network();
+component main = test();
+// component main =  network();

@@ -156,7 +156,7 @@ impl ArithmeticCircuit {
     }
 
     /// Adds a new constant variable to the circuit.
-    pub fn add_const(&mut self, value: u32) -> Result<(), CircuitError> {
+    pub fn add_const(&mut self, value: u32, name: String) -> Result<(), CircuitError> {
         // Ignore if the constant is already declared
         if self.contains_var(&value) {
             return Ok(());
@@ -164,7 +164,7 @@ impl ArithmeticCircuit {
         self.vars.insert(value, Some(value));
 
         // Create a new node for the constant
-        let node = Node::new(value, format!("{}", value));
+        let node = Node::new(value, name);
         debug!("New {:?}", node);
 
         self.nodes.push(node);
@@ -199,7 +199,9 @@ impl ArithmeticCircuit {
             AGateType::AGEq => todo!(),
             AGateType::AGt => todo!(),
             AGateType::ALEq => todo!(),
-            AGateType::ALt => todo!(),
+            AGateType::ALt => {
+                println!("{} = {} < {}", o_name, lh_name, rh_name);
+            },
             AGateType::AMul => {
                 println!("{} = {} * {}", o_name, lh_name, rh_name);
             },
