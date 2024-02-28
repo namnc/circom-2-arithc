@@ -5,7 +5,7 @@
 use crate::program::ProgramError;
 use circom_program_structure::ast::VariableType;
 use rand::{thread_rng, Rng};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Write};
 use thiserror::Error;
 
 pub const RETURN_VAR: &str = "function_return_value";
@@ -489,7 +489,19 @@ impl DataAccess {
     }
 
     pub fn access_str(&self) -> String {
-        format!("{:?} {:?}", self.get_name(), self.get_access())
+        let mut ret = String::new();
+        ret.write_str(self.get_name().as_str());
+        for sub in self.get_access() {
+            match sub {
+                SubAccess::Array(index) => {
+                    ret.write_str(format!("[{}]", index).as_str());
+                }
+                SubAccess::Component(name) => {
+                    ret.write_str(format!(".{}]", name).as_str());
+                }
+            }
+        }
+       ret
     }
 }
 

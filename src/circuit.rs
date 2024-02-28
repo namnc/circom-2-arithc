@@ -184,7 +184,7 @@ impl ArithmeticCircuit {
 
         match gate_type {
             AGateType::AAdd => {
-                println!("{:?} = {:?} + {:?}", o_name, lh_name, rh_name);
+                println!("{} = {} + {}", o_name, lh_name, rh_name);
             },
             AGateType::ADiv => todo!(),
             AGateType::AEq => todo!(),
@@ -193,12 +193,12 @@ impl ArithmeticCircuit {
             AGateType::ALEq => todo!(),
             AGateType::ALt => todo!(),
             AGateType::AMul => {
-                println!("{:?} = {:?} * {:?}", o_name, lh_name, rh_name);
+                println!("{} = {} * {}", o_name, lh_name, rh_name);
             },
             AGateType::ANeq => todo!(),
             AGateType::ANone => todo!(),
             AGateType::ASub => {
-                println!("{:?} = {:?} - {:?}", o_name, lh_name, rh_name);
+                println!("{} = {} - {}", o_name, lh_name, rh_name);
             },
         };
 
@@ -264,7 +264,7 @@ impl ArithmeticCircuit {
             .retain(|node| node.id != node_a.id && node.id != node_b.id);
         self.nodes.push(merged_node);
 
-        println!("{:?} = {:?}", a_name, b_name);
+        println!("{} = {}", a_name, b_name);
 
         Ok(())
     }
