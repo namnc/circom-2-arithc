@@ -291,7 +291,9 @@ fn handle_call(
     }
 
     // Process the function/template body
+    println!("================================ CALL {}", id);
     process_statements(ac, runtime, program_archive, &body)?;
+    println!("============================ END CALL {}", id);
 
     // Get return values
     let mut function_return: Option<u32> = None;

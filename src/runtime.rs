@@ -490,14 +490,14 @@ impl DataAccess {
 
     pub fn access_str(&self) -> String {
         let mut ret = String::new();
-        ret.write_str(self.get_name().as_str());
+        ret.write_str(self.get_name().as_str()).ok();
         for sub in self.get_access() {
             match sub {
                 SubAccess::Array(index) => {
-                    ret.write_str(format!("[{}]", index).as_str());
+                    ret.write_str(format!("[{}]", index).as_str()).ok();
                 }
                 SubAccess::Component(name) => {
-                    ret.write_str(format!(".{}]", name).as_str());
+                    ret.write_str(format!(".{}", name).as_str()).ok();
                 }
             }
         }

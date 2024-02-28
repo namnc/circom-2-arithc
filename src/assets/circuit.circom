@@ -103,65 +103,61 @@ template div_relu(k) {
 }
 
 template network() {
-    // var in_len = 2;
-    // var out_len = 3;
-    signal input in[1];
-    signal output out[2];
+    // var in_len = 3;
+    // var out_len = 5;
+    signal input in[3];
+    signal output out[5];
 
-    component l0 = fc(1, 2);
-    signal input w0[2][1];
-    signal input b0[2];
-    for (var i = 0; i < 2; i++) {
-        for (var j = 0; j < 1; j++) {
+    component l0 = fc(3, 5);
+    signal input w0[5][3];
+    signal input b0[5];
+    for (var i = 0; i < 5; i++) {
+        for (var j = 0; j < 3; j++) {
             l0.weights[i][j] <== w0[i][j];
         }
         l0.biases[i] <== b0[i];
     }
     // l0.weights <== w0;
     // l0.biases <== b0;
-    for (var k = 0; k < 1; k++) {
+    for (var k = 0; k < 3; k++) {
         l0.in[k] <== in[k];
     }
 
-    for (var k = 0; k < 2; k++) {
-        out[k] <== l0.out[k];
+    component l1 = fc(5, 7);
+    signal input w1[7][5];
+    signal input b1[7];
+    for (var i = 0; i < 7; i++) {
+        for (var j = 0; j < 5; j++) {
+            l1.weights[i][j] <== w1[i][j];
+        }
+        l1.biases[i] <== b1[i];
     }
+    // l1.weights <== w1;
+    // l1.biases <== b1;
+    for (var k = 0; k < 5; k++) {
+        l1.in[k] <== l0.out[k];
+    }
+    // l1.in <== l0.out;
 
-    // component l1 = fc(3, 4);
-    // signal input w1[4][3];
-    // signal input b1[4];
-    // for (var i = 0; i < 4; i++) {
-    //     for (var j = 0; j < 3; j++) {
-    //         l1.weights[i][j] <== w1[i][j];
-    //     }
-    //     l1.biases[i] <== b1[i];
-    // }
-    // // l1.weights <== w1;
-    // // l1.biases <== b1;
-    // for (var k = 0; k < 3; k++) {
-    //     l1.in[k] <== l0.out[k];
-    // }
-    // // l1.in <== l0.out;
+    component l2 = fc_no_relu(7, 5);
+    signal input w2[5][7];
+    signal input b2[5];
+    for (var i = 0; i < 5; i++) {
+        for (var j = 0; j < 7; j++) {
+            l2.weights[i][j] <== w2[i][j];
+        }
+        l2.biases[i] <== b2[i];
+    }
+    // l2.weights <== w2;
+    // l2.biases <== b2;
+    for (var k = 0; k < 7; k++) {
+        l2.in[k] <== l1.out[k];
+    }
+    // l2.in <== l1.out;
 
-    // component l2 = fc_no_relu(4, 3);
-    // signal input w2[3][4];
-    // signal input b2[3];
-    // for (var i = 0; i < 3; i++) {
-    //     for (var j = 0; j < 4; j++) {
-    //         l2.weights[i][j] <== w2[i][j];
-    //     }
-    //     l2.biases[i] <== b2[i];
-    // }
-    // // l2.weights <== w2;
-    // // l2.biases <== b2;
-    // for (var k = 0; k < 4; k++) {
-    //     l2.in[k] <== l1.out[k];
-    // }
-    // // l2.in <== l1.out;
-
-    // for (var k = 0; k < 3; k++) {
-    //     out[k] <== l2.out[k];
-    // }
+    for (var k = 0; k < 5; k++) {
+        out[k] <== l2.out[k];
+    }
     // out <== l2.out;
 }
 
