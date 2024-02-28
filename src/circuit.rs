@@ -51,16 +51,28 @@ pub struct Node {
     id: u32,
     signals: Vec<u32>,
     names: Vec<String>,
+    is_const: bool,
+    const_value: u32,
 }
 
 impl Node {
     /// Creates a new node.
-    pub fn new(signal_id: u32, signal_name: String) -> Self {
+    pub fn new(signal_id: u32, signal_name: String, is_const: bool, const_value: u32) -> Self {
         Self {
             id: generate_u32(),
             signals: vec![signal_id],
-            names: vec![signal_name]
+            names: vec![signal_name],
+            is_const,
+            const_value,
         }
+    }
+
+    pub fn is_const(&self) -> bool {
+        self.is_const
+    }
+
+    pub fn const_value(&self) -> u32 {
+        self.const_value
     }
 
     /// Adds a set of signals to the node.
@@ -80,10 +92,14 @@ impl Node {
 
     /// Merges the signals of the node with another node, creating a new node.
     pub fn merge(&self, merge_node: &Node) -> Self {
+        let ic = self.is_const() | merge_node.is_const();
+        let cv = self.const_value();
         let mut new_node = Node {
             id: generate_u32(),
             signals: Vec::new(),
             names: Vec::new(),
+            is_const: ic,
+            const_value: cv,
         };
 
         new_node.add_signals(self.get_signals(), self.get_signals_names());
@@ -148,7 +164,7 @@ impl ArithmeticCircuit {
         self.vars.insert(id, None);
 
         // Create a new node for the signal
-        let node = Node::new(id, name);
+        let node = Node::new(id, name, false, 0);
         debug!("New {:?}", node);
 
         self.nodes.push(node);
@@ -164,7 +180,7 @@ impl ArithmeticCircuit {
         self.vars.insert(value, Some(value));
 
         // Create a new node for the constant
-        let node = Node::new(value, name);
+        let node = Node::new(value, name, true, value);
         debug!("New {:?}", node);
 
         self.nodes.push(node);
