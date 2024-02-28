@@ -204,26 +204,7 @@ pub fn process_statement(
 
             Ok(())
         }
-        Statement::MultSubstitution { meta, lhe, op, rhe } => {
-            println!("Statement not implemented: MultSubstitution");
-            Ok(())
-        }
-        Statement::UnderscoreSubstitution { meta, op, rhe } => {
-            println!("Statement not implemented: UnderscoreSubstitution");
-            Ok(())
-        }
-        Statement::ConstraintEquality { meta, lhe, rhe } => {
-            println!("Statement not implemented: ConstraintEquality");
-            Ok(())
-        }
-        Statement::LogCall { meta, args } => {
-            println!("Statement not implemented: LogCall");
-            Ok(())
-        }
-        Statement::Assert { meta, arg } => {
-            println!("Statement not implemented: Assert");
-            Ok(())
-        }
+        _ => todo!()
     }
 }
 
@@ -254,54 +235,7 @@ pub fn process_expression(
         Expression::Variable { name, access, .. } => {
             build_access(ac, runtime, program_archive, name, access)
         }
-        Expression::PrefixOp {
-            meta,
-            prefix_op,
-            rhe,
-        } => {
-            println!("Expression not implemented:PrefixOp");
-            Ok(DataAccess::new("", vec![]))
-        }
-        Expression::InlineSwitchOp {
-            meta,
-            cond,
-            if_true,
-            if_false,
-        } => {
-            println!("Expression not implemented:InlineSwitchOp");
-            Ok(DataAccess::new("", vec![]))
-        }
-        Expression::ParallelOp { meta, rhe } => {
-            println!("Expression not implemented:ParallelOp");
-            Ok(DataAccess::new("", vec![]))
-        }
-        Expression::AnonymousComp {
-            meta,
-            id,
-            is_parallel,
-            params,
-            signals,
-            names,
-        } => {
-            println!("Expression not implemented:AnonymousComp");
-            Ok(DataAccess::new("", vec![]))
-        }
-        Expression::ArrayInLine { meta, values } => {
-            println!("Expression not implemented:ArrayInLine");
-            Ok(DataAccess::new("", vec![]))
-        }
-        Expression::Tuple { meta, values } => {
-            println!("Expression not implemented:Tuple");
-            Ok(DataAccess::new("", vec![]))
-        }
-        Expression::UniformArray {
-            meta,
-            value,
-            dimension,
-        } => {
-            println!("Expression not implemented: UniformArray");
-            Ok(DataAccess::new("", vec![]))
-        }
+        _ => todo!()
     }
 }
 

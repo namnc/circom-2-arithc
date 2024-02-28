@@ -5,7 +5,7 @@
 use crate::program::ProgramError;
 use circom_program_structure::ast::VariableType;
 use rand::{thread_rng, Rng};
-use std::{collections::{HashMap, HashSet, VecDeque}, fmt::format};
+use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;
 
 pub const RETURN_VAR: &str = "function_return_value";
