@@ -50,20 +50,23 @@ impl From<&ExpressionInfixOpcode> for AGateType {
 pub struct Node {
     id: u32,
     signals: Vec<u32>,
+    names: Vec<String>,
 }
 
 impl Node {
     /// Creates a new node.
-    pub fn new(signal_id: u32) -> Self {
+    pub fn new(signal_id: u32, signal_name: String) -> Self {
         Self {
             id: generate_u32(),
             signals: vec![signal_id],
+            names: vec![signal_name]
         }
     }
 
     /// Adds a set of signals to the node.
-    pub fn add_signals(&mut self, signals: Vec<u32>) {
+    pub fn add_signals(&mut self, signals: Vec<u32>, names: Vec<String>) {
         self.signals.extend(signals);
+        self.names.extend(names);
     }
 
     /// Gets the signals of the node.
@@ -71,15 +74,20 @@ impl Node {
         self.signals.clone()
     }
 
+    pub fn get_signals_names(&self) -> Vec<String> {
+        self.names.clone()
+    }
+
     /// Merges the signals of the node with another node, creating a new node.
     pub fn merge(&self, merge_node: &Node) -> Self {
         let mut new_node = Node {
             id: generate_u32(),
             signals: Vec::new(),
+            names: Vec::new(),
         };
 
-        new_node.add_signals(self.get_signals());
-        new_node.add_signals(merge_node.get_signals());
+        new_node.add_signals(self.get_signals(), self.get_signals_names());
+        new_node.add_signals(merge_node.get_signals(), merge_node.get_signals_names());
 
         new_node
     }
@@ -132,7 +140,7 @@ impl ArithmeticCircuit {
     }
 
     /// Adds a new signal variable to the circuit.
-    pub fn add_signal(&mut self, id: u32) -> Result<(), CircuitError> {
+    pub fn add_signal(&mut self, id: u32, name: String) -> Result<(), CircuitError> {
         // Check that the variable isn't already declared
         if self.contains_var(&id) {
             return Err(CircuitError::CircuitVariableAlreadyDeclared);
@@ -140,7 +148,7 @@ impl ArithmeticCircuit {
         self.vars.insert(id, None);
 
         // Create a new node for the signal
-        let node = Node::new(id);
+        let node = Node::new(id, name);
         debug!("New {:?}", node);
 
         self.nodes.push(node);
@@ -156,7 +164,7 @@ impl ArithmeticCircuit {
         self.vars.insert(value, Some(value));
 
         // Create a new node for the constant
-        let node = Node::new(value);
+        let node = Node::new(value, format!("{}", value));
         debug!("New {:?}", node);
 
         self.nodes.push(node);
