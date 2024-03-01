@@ -268,7 +268,24 @@ impl Context {
             .map(|signal| signal.clone())
     }
 
+    /// Gets a signal content at the specified index path.
+    pub fn get_signal_content(
+        &self,
+        access: &DataAccess,
+    ) -> Result<NestedValue<u32>, RuntimeError> {
+        let signal = self
+            .signals
+            .get(&access.name)
+            .ok_or(RuntimeError::ItemNotDeclared(format!(
+                "get_signal_content: {:?}",
+                access
+            )))?;
+
+        signal.get(&access_to_u32(access.get_access())?)
+    }
+
     /// Gets the id of the signal at the specified index path.
+    /// This will return an error if the index path doesn't point to a single value.
     pub fn get_signal_id(&self, access: &DataAccess) -> Result<u32, RuntimeError> {
         let signal = self
             .signals
@@ -356,7 +373,7 @@ impl Signal {
     }
 
     /// Retrieves the ID of the signal at the specified index path.
-    fn get(&self, index_path: &[u32]) -> Result<u32, RuntimeError> {
+    fn get(&self, index_path: &[u32]) -> Result<NestedValue<u32>, RuntimeError> {
         get_nested_value(&self.value, index_path)
     }
 }
@@ -417,7 +434,12 @@ impl Component {
 
     /// Retrieves the component signal map at the specified index path.
     fn get_map(&self, index_path: &[u32]) -> Result<HashMap<String, Signal>, RuntimeError> {
-        get_nested_value(&self.signal_map, index_path)
+        let nested_val = get_nested_value(&self.signal_map, index_path)?;
+
+        match nested_val {
+            NestedValue::Value(map) => Ok(map),
+            NestedValue::Array(_) => Err(RuntimeError::NotAValue),
+        }
     }
 
     /// Sets the signal map
@@ -426,7 +448,13 @@ impl Component {
         component_access: &[u32],
         map: HashMap<String, Signal>,
     ) -> Result<(), RuntimeError> {
-        let nested_map = get_mut_nested_value(&mut self.signal_map, component_access)?;
+        let nested_val = get_mut_nested_value(&mut self.signal_map, component_access)?;
+
+        let nested_map = match nested_val {
+            NestedValue::Value(map) => map,
+            NestedValue::Array(_) => return Err(RuntimeError::NotAValue),
+        };
+
         *nested_map = map;
 
         Ok(())
@@ -438,7 +466,13 @@ impl Component {
         component_access: &[u32],
         signal_access: &DataAccess,
     ) -> Result<u32, RuntimeError> {
-        let map = get_nested_value(&self.signal_map, component_access)?;
+        let nested_val = get_nested_value(&self.signal_map, component_access)?;
+
+        let map = match nested_val {
+            NestedValue::Value(map) => map,
+            NestedValue::Array(_) => return Err(RuntimeError::NotAValue),
+        };
+
         let signal = map
             .get(&signal_access.get_name())
             .ok_or(RuntimeError::ItemNotDeclared(format!(
@@ -446,7 +480,7 @@ impl Component {
                 signal_access
             )))?;
 
-        signal.get(&access_to_u32(signal_access.get_access())?)
+        signal.get_id(&access_to_u32(signal_access.get_access())?)
     }
 }
 
@@ -535,8 +569,9 @@ pub fn process_component_access(
 pub fn get_nested_value<T: Clone>(
     nested_value: &NestedValue<T>,
     index_path: &[u32],
-) -> Result<T, RuntimeError> {
+) -> Result<NestedValue<T>, RuntimeError> {
     let mut current_level = nested_value;
+
     for &index in index_path {
         match current_level {
             NestedValue::Array(values) => {
@@ -548,17 +583,14 @@ pub fn get_nested_value<T: Clone>(
         }
     }
 
-    match current_level {
-        NestedValue::Value(inner_value) => Ok(inner_value.clone()),
-        _ => Err(RuntimeError::NotAValue),
-    }
+    Ok(current_level.clone())
 }
 
 /// Generic function to navigate through NestedValue and return a mutable reference to the inner value.
 pub fn get_mut_nested_value<'a, T>(
     nested_value: &'a mut NestedValue<T>,
     index_path: &[u32],
-) -> Result<&'a mut T, RuntimeError> {
+) -> Result<&'a mut NestedValue<T>, RuntimeError> {
     let mut current_level = nested_value;
     for &index in index_path {
         current_level = match current_level {
@@ -569,10 +601,7 @@ pub fn get_mut_nested_value<'a, T>(
         };
     }
 
-    match current_level {
-        NestedValue::Value(inner_value) => Ok(inner_value),
-        _ => Err(RuntimeError::NotAValue),
-    }
+    Ok(current_level)
 }
 
 /// Converts a vector of u32 to a vector of SubAccess.

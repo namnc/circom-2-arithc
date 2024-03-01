@@ -40,6 +40,8 @@ pub enum ProgramError {
     CircuitError(CircuitError),
     #[error("Empty data item")]
     EmptyDataItem,
+    #[error("Expression not implemented")]
+    ExpressionNotImplemented,
     #[error("Input initialization error")]
     InputInitializationError,
     #[error("Invalid data type")]
@@ -58,6 +60,8 @@ pub enum ProgramError {
     ParsingError,
     #[error("Runtime error: {0}")]
     RuntimeError(RuntimeError),
+    #[error("Statement not implemented")]
+    StatementNotImplemented,
     #[error("Undefined function or template")]
     UndefinedFunctionOrTemplate,
 }
