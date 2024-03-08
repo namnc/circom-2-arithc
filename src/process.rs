@@ -5,8 +5,8 @@
 use crate::circuit::{AGateType, ArithmeticCircuit};
 use crate::program::ProgramError;
 use crate::runtime::{
-    generate_u32, increment_indices, u32_to_access, Context, DataAccess, DataType, Runtime, Signal,
-    SubAccess, RETURN_VAR,
+    generate_u32, increment_indices, u32_to_access, Context, DataAccess, DataType, NestedValue,
+    Runtime, Signal, SubAccess, RETURN_VAR,
 };
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
@@ -154,6 +154,8 @@ pub fn process_statement(
             let lh_access = build_access(ac, runtime, program_archive, var, access)?;
             let rh_access = process_expression(ac, runtime, program_archive, rhe)?;
 
+            // TODO: WRONG APPROACH. We need to handle assignments with data contents, not
+
             let ctx = runtime.current_context()?;
             match ctx.get_item_data_type(var)? {
                 DataType::Signal => {
@@ -166,24 +168,25 @@ pub fn process_statement(
                             ac.add_connection(gate_output_id, given_output_id)?;
                         }
                         Expression::Variable { .. } => {
-                            
+                            match ctx.get_signal_content(&lh_access)? {
+                                NestedValue::Array(signal_array) => {
+                                    // Iterate through signals and make the connections
+                                    
+                                }
+                                NestedValue::Value(signal_id) => {
+                                    let gate_output_id =
+                                        get_signal_for_access(ac, ctx, &rh_access)?;
 
-
-                            let given_output_id = ctx.get_signal_id(&lh_access)?;
-                            let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
-
-                            ac.add_connection(gate_output_id, given_output_id)?;
+                                    ac.add_connection(gate_output_id, signal_id)?;
+                                }
+                            }
                         }
+                        _ => {}
                     }
-
-                    // Connect the generated gate output to the given signal
-                    let given_output_id = ctx.get_signal_id(&lh_access)?;
-                    let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
-
-                    ac.add_connection(gate_output_id, given_output_id)?;
                 }
                 DataType::Variable => {
                     // Assign the evaluated right-hand side to the left-hand side
+
                     let value = ctx.get_variable_value(&rh_access)?;
                     ctx.set_variable(&lh_access, value)?;
                 }
@@ -195,6 +198,7 @@ pub fn process_statement(
                     }
                     AssignOp::AssignConstraintSignal => {
                         // Add connection
+                        // Same thing, match for array or single value, then iterate for array to make connections.
                         let component_signal = ctx.get_component_signal_id(&lh_access)?;
                         let assigned_signal = get_signal_for_access(ac, ctx, &rh_access)?;
 

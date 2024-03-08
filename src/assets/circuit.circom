@@ -9,7 +9,10 @@ template ComponentA () {
 
 template ComponentB() {
     signal input a_in[2][2];
+    signal output b_out[2][2];
     signal output out;
+
+    b_out <== a_in;
 
     component a = ComponentA();
     a.in <== a_in;

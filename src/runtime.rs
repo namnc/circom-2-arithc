@@ -244,6 +244,33 @@ impl Context {
         variable.set(&access_to_u32(access.get_access())?, value)
     }
 
+    /// Gets a variable whole content.
+    pub fn get_variable(&self, name: &str) -> Result<Variable, RuntimeError> {
+        self.variables
+            .get(name)
+            .ok_or(RuntimeError::ItemNotDeclared(format!(
+                "get_variable: {}",
+                name
+            )))
+            .map(|variable| variable.clone())
+    }
+
+    /// Gets a variable single or nested content.
+    pub fn get_variable_content(
+        &self,
+        access: &DataAccess,
+    ) -> Result<NestedValue<Option<u32>>, RuntimeError> {
+        let variable = self
+            .variables
+            .get(&access.name)
+            .ok_or(RuntimeError::ItemNotDeclared(format!(
+                "get_variable: {:?}",
+                access
+            )))?;
+
+        variable.get(&access_to_u32(access.get_access())?)
+    }
+
     /// Gets the content of a variable.
     pub fn get_variable_value(&self, access: &DataAccess) -> Result<Option<u32>, RuntimeError> {
         let variable = self
@@ -254,7 +281,7 @@ impl Context {
                 access
             )))?;
 
-        variable.get(&access_to_u32(access.get_access())?)
+        variable.get_value(&access_to_u32(access.get_access())?)
     }
 
     /// Gets a signal with all its dimensions.
@@ -295,7 +322,10 @@ impl Context {
                 access
             )))?;
 
-        signal.get(&access_to_u32(access.get_access())?)
+        match signal.get(&access_to_u32(access.get_access())?)? {
+            NestedValue::Value(id) => Ok(id),
+            NestedValue::Array(_) => Err(RuntimeError::NotAValue),
+        }
     }
 
     /// Gets a component.
@@ -372,9 +402,17 @@ impl Signal {
         }
     }
 
-    /// Retrieves the ID of the signal at the specified index path.
+    /// Retrieves the nested value at the specified index path.
     fn get(&self, index_path: &[u32]) -> Result<NestedValue<u32>, RuntimeError> {
         get_nested_value(&self.value, index_path)
+    }
+
+    // Retrieves the id of the signal at the specified index path.
+    fn get_id(&self, index_path: &[u32]) -> Result<u32, RuntimeError> {
+        match self.get(index_path)? {
+            NestedValue::Value(id) => Ok(id),
+            NestedValue::Array(_) => Err(RuntimeError::NotAValue),
+        }
     }
 }
 
@@ -402,13 +440,27 @@ impl Variable {
     /// Sets the content of the variable at the specified index path.
     fn set(&mut self, index_path: &[u32], val: Option<u32>) -> Result<(), RuntimeError> {
         let inner_value = get_mut_nested_value(&mut self.value, index_path)?;
-        *inner_value = val;
-        Ok(())
+
+        match inner_value {
+            NestedValue::Array(_) => Err(RuntimeError::NotAValue),
+            NestedValue::Value(_) => {
+                *inner_value = NestedValue::Value(val);
+                Ok(())
+            }
+        }
     }
 
     /// Retrieves the content of the variable at the specified index path.
-    fn get(&self, index_path: &[u32]) -> Result<Option<u32>, RuntimeError> {
+    fn get(&self, index_path: &[u32]) -> Result<NestedValue<Option<u32>>, RuntimeError> {
         get_nested_value(&self.value, index_path)
+    }
+
+    /// Retrieves the value of the variable at the specified index path.
+    fn get_value(&self, index_path: &[u32]) -> Result<Option<u32>, RuntimeError> {
+        match self.get(index_path)? {
+            NestedValue::Value(val) => Ok(val),
+            NestedValue::Array(_) => Err(RuntimeError::NotAValue),
+        }
     }
 }
 
