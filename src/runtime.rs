@@ -5,7 +5,10 @@
 use crate::program::ProgramError;
 use circom_program_structure::ast::VariableType;
 use rand::{thread_rng, Rng};
-use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Write};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    fmt::Write,
+};
 use thiserror::Error;
 
 pub const RETURN_VAR: &str = "function_return_value";
@@ -276,7 +279,7 @@ impl Context {
     }
 
     /// Gets the id of the signal at the specified index path.
-    pub fn get_signal_id(&self, access: &DataAccess) -> Result<u32, RuntimeError> {
+    pub fn get_signal_id(&self, access: &DataAccess) -> Result<u128, RuntimeError> {
         let signal = self
             .signals
             .get(&access.name)
@@ -305,7 +308,7 @@ impl Context {
     }
 
     /// Gets the id of a component's signal.
-    pub fn get_component_signal_id(&self, access: &DataAccess) -> Result<u32, RuntimeError> {
+    pub fn get_component_signal_id(&self, access: &DataAccess) -> Result<u128, RuntimeError> {
         let (component_access, signal_access) = process_component_access(access)?;
         let component =
             self.components
@@ -342,18 +345,18 @@ impl Context {
 /// Represents a signal that holds a single id or a nested structure of values with unique IDs.
 #[derive(Clone, Debug)]
 pub struct Signal {
-    value: NestedValue<u32>,
+    value: NestedValue<u128>,
 }
 
 impl Signal {
     /// Constructs a new Signal as a nested structure based on provided dimensions.
     fn new(dimensions: &[u32]) -> Self {
-        fn create_nested_signal(dimensions: &[u32]) -> NestedValue<u32> {
+        fn create_nested_signal(dimensions: &[u32]) -> NestedValue<u128> {
             if let Some((&first, rest)) = dimensions.split_first() {
                 let array = (0..first).map(|_| create_nested_signal(rest)).collect();
                 NestedValue::Array(array)
             } else {
-                NestedValue::Value(generate_u32())
+                NestedValue::Value(generate_u128())
             }
         }
 
@@ -363,7 +366,7 @@ impl Signal {
     }
 
     /// Retrieves the ID of the signal at the specified index path.
-    fn get(&self, index_path: &[u32]) -> Result<u32, RuntimeError> {
+    fn get(&self, index_path: &[u32]) -> Result<u128, RuntimeError> {
         get_nested_value(&self.value, index_path)
     }
 }
@@ -444,7 +447,7 @@ impl Component {
         &self,
         component_access: &[u32],
         signal_access: &DataAccess,
-    ) -> Result<u32, RuntimeError> {
+    ) -> Result<u128, RuntimeError> {
         let map = get_nested_value(&self.signal_map, component_access)?;
         let signal = map
             .get(&signal_access.get_name())
@@ -508,7 +511,7 @@ impl DataAccess {
                 }
             }
         }
-       ret
+        ret
     }
 }
 
@@ -644,6 +647,11 @@ pub fn increment_indices(indices: &mut Vec<u32>, limits: &[u32]) -> Result<bool,
 
 /// Generates a random u32.
 pub fn generate_u32() -> u32 {
+    thread_rng().gen()
+}
+
+/// Generates a random u128.
+pub fn generate_u128() -> u128 {
     thread_rng().gen()
 }
 

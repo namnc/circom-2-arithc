@@ -161,7 +161,7 @@ pub fn process_statement(
                     let given_output_id = ctx.get_signal_id(&lh_access)?;
                     let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
                     let a_name = lh_access.access_str(ctx.get_ctx_name());
-                    let b_name =  rh_access.access_str(ctx.get_ctx_name());
+                    let b_name = rh_access.access_str(ctx.get_ctx_name());
                     ac.add_connection(gate_output_id, given_output_id, a_name, b_name)?;
                 }
                 DataType::Variable => {
@@ -181,7 +181,7 @@ pub fn process_statement(
                         let assigned_signal = get_signal_for_access(ac, ctx, &rh_access)?;
 
                         let a_name = lh_access.access_str(ctx.get_ctx_name());
-                        let b_name =  rh_access.access_str(ctx.get_ctx_name());
+                        let b_name = rh_access.access_str(ctx.get_ctx_name());
 
                         ac.add_connection(assigned_signal, component_signal, a_name, b_name)?;
                     }
@@ -204,7 +204,7 @@ pub fn process_statement(
 
             Ok(())
         }
-        _ => todo!()
+        _ => todo!(),
     }
 }
 
@@ -235,7 +235,7 @@ pub fn process_expression(
         Expression::Variable { name, access, .. } => {
             build_access(ac, runtime, program_archive, name, access)
         }
-        _ => todo!()
+        _ => todo!(),
     }
 }
 
@@ -376,10 +376,8 @@ fn handle_infix_op(
     match op {
         ExpressionInfixOpcode::Lesser => {
             println!("DEBUG ALt");
-        },
-        _ => {
-
         }
+        _ => {}
     }
 
     // Handle cases where one or both inputs are signals
@@ -398,7 +396,9 @@ fn handle_infix_op(
     let rh_name = rhe_access.access_str(ctx.get_ctx_name());
     let o_name = output_signal.access_str(ctx.get_ctx_name());
 
-    ac.add_gate(gate_type, lhs_id, rhs_id, output_id, lh_name, rh_name, o_name)?;
+    ac.add_gate(
+        gate_type, lhs_id, rhs_id, output_id, lh_name, rh_name, o_name,
+    )?;
 
     Ok(output_signal)
 }
@@ -410,7 +410,7 @@ fn get_signal_for_access(
     ac: &mut ArithmeticCircuit,
     ctx: &Context,
     access: &DataAccess,
-) -> Result<u32, ProgramError> {
+) -> Result<u128, ProgramError> {
     match ctx.get_item_data_type(&access.get_name())? {
         DataType::Signal => Ok(ctx.get_signal_id(access)?),
         DataType::Variable => {
@@ -418,7 +418,7 @@ fn get_signal_for_access(
                 .get_variable_value(access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
             ac.add_const(value, access.access_str(ctx.get_ctx_name()))?;
-            Ok(value)
+            Ok(value as u128)
         }
         DataType::Component => Ok(ctx.get_component_signal_id(access)?),
     }

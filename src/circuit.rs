@@ -2,7 +2,7 @@
 //!
 //! This module defines the data structures used to represent the arithmetic circuit.
 
-use crate::{program::ProgramError, runtime::generate_u32};
+use crate::{program::ProgramError, runtime::generate_u128};
 use circom_program_structure::ast::ExpressionInfixOpcode;
 use log::debug;
 use mpz_circuits::GateType;
@@ -48,8 +48,8 @@ impl From<&ExpressionInfixOpcode> for AGateType {
 /// Represents a node in the circuit, with an identifier and a set of signals that it is connected to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
-    id: u32,
-    signals: Vec<u32>,
+    id: u128,
+    signals: Vec<u128>,
     names: Vec<String>,
     is_const: bool,
     const_value: u32,
@@ -57,9 +57,9 @@ pub struct Node {
 
 impl Node {
     /// Creates a new node.
-    pub fn new(signal_id: u32, signal_name: String, is_const: bool, const_value: u32) -> Self {
+    pub fn new(signal_id: u128, signal_name: String, is_const: bool, const_value: u32) -> Self {
         Self {
-            id: generate_u32(),
+            id: generate_u128(),
             signals: vec![signal_id],
             names: vec![signal_name],
             is_const,
@@ -76,13 +76,13 @@ impl Node {
     }
 
     /// Adds a set of signals to the node.
-    pub fn add_signals(&mut self, signals: Vec<u32>, names: Vec<String>) {
+    pub fn add_signals(&mut self, signals: Vec<u128>, names: Vec<String>) {
         self.signals.extend(signals);
         self.names.extend(names);
     }
 
     /// Gets the signals of the node.
-    pub fn get_signals(&self) -> Vec<u32> {
+    pub fn get_signals(&self) -> Vec<u128> {
         self.signals.clone()
     }
 
@@ -95,7 +95,7 @@ impl Node {
         let ic = self.is_const() | merge_node.is_const();
         let cv = self.const_value();
         let mut new_node = Node {
-            id: generate_u32(),
+            id: generate_u128(),
             signals: Vec::new(),
             names: Vec::new(),
             is_const: ic,
@@ -119,14 +119,20 @@ impl Node {
 pub struct ArithmeticGate {
     id: u32,
     gate_type: AGateType,
-    lh_input: u32,
-    rh_input: u32,
-    output: u32,
+    lh_input: u128,
+    rh_input: u128,
+    output: u128,
 }
 
 impl ArithmeticGate {
     /// Creates a new gate.
-    pub fn new(id: u32, gate_type: AGateType, lh_input: u32, rh_input: u32, output: u32) -> Self {
+    pub fn new(
+        id: u32,
+        gate_type: AGateType,
+        lh_input: u128,
+        rh_input: u128,
+        output: u128,
+    ) -> Self {
         Self {
             id,
             gate_type,
@@ -140,7 +146,7 @@ impl ArithmeticGate {
 /// Represents an arithmetic circuit, with a set of variables and gates.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ArithmeticCircuit {
-    vars: HashMap<u32, Option<u32>>,
+    vars: HashMap<u128, Option<u32>>,
     nodes: Vec<Node>,
     gates: Vec<ArithmeticGate>,
 }
@@ -156,7 +162,7 @@ impl ArithmeticCircuit {
     }
 
     /// Adds a new signal variable to the circuit.
-    pub fn add_signal(&mut self, id: u32, name: String) -> Result<(), CircuitError> {
+    pub fn add_signal(&mut self, id: u128, name: String) -> Result<(), CircuitError> {
         // Check that the variable isn't already declared
         if self.contains_var(&id) {
             return Err(CircuitError::CircuitVariableAlreadyDeclared);
@@ -174,13 +180,13 @@ impl ArithmeticCircuit {
     /// Adds a new constant variable to the circuit.
     pub fn add_const(&mut self, value: u32, name: String) -> Result<(), CircuitError> {
         // Ignore if the constant is already declared
-        if self.contains_var(&value) {
+        if self.contains_var(&(value as u128)) {
             return Ok(());
         }
-        self.vars.insert(value, Some(value));
+        self.vars.insert(value as u128, Some(value));
 
         // Create a new node for the constant
-        let node = Node::new(value, name, true, value);
+        let node = Node::new(value as u128, name, true, value);
         debug!("New {:?}", node);
 
         self.nodes.push(node);
@@ -191,12 +197,12 @@ impl ArithmeticCircuit {
     pub fn add_gate(
         &mut self,
         gate_type: AGateType,
-        lhs_id: u32,
-        rhs_id: u32,
-        output_id: u32,
+        lhs_id: u128,
+        rhs_id: u128,
+        output_id: u128,
         lh_name: String,
         rh_name: String,
-        o_name: String
+        o_name: String,
     ) -> Result<(), CircuitError> {
         // Check that the inputs are declared
         if !self.contains_var(&lhs_id)
@@ -209,7 +215,7 @@ impl ArithmeticCircuit {
         match gate_type {
             AGateType::AAdd => {
                 // println!("{} = {} + {}", o_name, lh_name, rh_name);
-            },
+            }
             AGateType::ADiv => todo!(),
             AGateType::AEq => todo!(),
             AGateType::AGEq => todo!(),
@@ -217,15 +223,15 @@ impl ArithmeticCircuit {
             AGateType::ALEq => todo!(),
             AGateType::ALt => {
                 // println!("{} = {} < {}", o_name, lh_name, rh_name);
-            },
+            }
             AGateType::AMul => {
                 // println!("{} = {} * {}", o_name, lh_name, rh_name);
-            },
+            }
             AGateType::ANeq => todo!(),
             AGateType::ANone => todo!(),
             AGateType::ASub => {
                 // println!("{} = {} - {}", o_name, lh_name, rh_name);
-            },
+            }
         };
 
         // Get the signal nodes
@@ -249,7 +255,13 @@ impl ArithmeticCircuit {
 
     /// Creates a connection between two signals in the circuit.
     /// This is done by finding the nodes that contain the signals and merging them.
-    pub fn add_connection(&mut self, a: u32, b: u32, a_name: String, b_name: String) -> Result<(), CircuitError> {
+    pub fn add_connection(
+        &mut self,
+        a: u128,
+        b: u128,
+        a_name: String,
+        b_name: String,
+    ) -> Result<(), CircuitError> {
         // Check that the endpoints are declared
         if !self.contains_var(&a) || !self.contains_var(&b) {
             return Err(CircuitError::VariableNotDeclared);
@@ -296,7 +308,7 @@ impl ArithmeticCircuit {
     }
 
     /// Returns the node containing the given signal.
-    fn get_signal_node(&self, signal_id: u32) -> Result<Node, CircuitError> {
+    fn get_signal_node(&self, signal_id: u128) -> Result<Node, CircuitError> {
         for node in &self.nodes {
             if node.signals.contains(&signal_id) {
                 return Ok(node.clone());
@@ -307,7 +319,7 @@ impl ArithmeticCircuit {
     }
 
     /// Checks if the variable exists
-    pub fn contains_var(&self, var: &u32) -> bool {
+    pub fn contains_var(&self, var: &u128) -> bool {
         self.vars.contains_key(var)
     }
 
