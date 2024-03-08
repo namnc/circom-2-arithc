@@ -14,6 +14,34 @@ template Switcher() {
     outR <==  R - aux;
 }
 
+template auction(n) {
+    signal input in[n];
+    signal signs[n-1];
+    signal maxidx[n-1];
+    signal maxprice[n-1];
+    signal output idx;
+    signal output price;
+    component sws[n-1];
+    component sws2[n-1];
+
+    for (var i = 0; i < n-1; i++) {
+        signs[i] <== in[i] < in[i+1];
+        sws[i] <== Switcher();
+        sws[i].sel <== signs[i];
+        sws[i].L <== in[i];
+        sws[i].R <== in[i+1];
+        maxprice[i] <== sws[i].outR;
+        sws2[i] <== Switcher();
+        sws2[i].sel <== signs[i];
+        sws2[i].L <== i;
+        sws2[i].R <== i+1;
+        maxidx[i] <== sws2[i].outR;
+    }
+
+    idx <== maxidx[n-1];
+    price <== maxprice[n-1];
+}
+
 
 template fc (width, height) {
     signal input in[width];
@@ -82,6 +110,7 @@ template ShiftRight(k) {
 template Sign() {
     signal input in;
     signal output sign;
+    sign <== in < 0;
 }
 
 template div_relu(k) {
@@ -100,6 +129,30 @@ template div_relu(k) {
     //switcher.outR*0 === 0;
 
     out <== switcher.outL;
+}
+
+template test() {
+     signal input in[2];
+    signal output out[3];
+
+    component l0 = fc(2, 3);
+    signal input w0[3][2];
+    signal input b0[3];
+    for (var i = 0; i < 3; i++) {
+        for (var j = 0; j < 2; j++) {
+            l0.weights[i][j] <== w0[i][j];
+        }
+        l0.biases[i] <== b0[i];
+    }
+    // l0.weights <== w0;
+    // l0.biases <== b0;
+    for (var k = 0; k < 2; k++) {
+        l0.in[k] <== in[k];
+    }
+
+    for (var k = 0; k < 3; k++) {
+        out[k] <== l0.out[k];
+    }
 }
 
 template network() {
@@ -196,4 +249,26 @@ template network() {
     // out <== l2.out;
 }
 
-component main = network();
+// template InnerProd () {  
+
+//    // Declaration of signals 
+//    signal input input_A[3];  
+//    signal input input_B[3];  
+//    signal output ip;
+
+//    signal sum[3];
+
+//    sum[0] <== input_A[0]*input_B[0];
+
+//    for (var i = 1; i < 3; i++) {
+//       sum[i] <== sum[i-1] + input_A[i] * input_B[i];
+//    }
+
+//    ip <== sum[2];
+// }
+
+// component main = InnerProd();
+
+// component main = test();
+component main =  network();
+

@@ -113,13 +113,13 @@ template network() {
     var out_len = 4;
 
     var l0_w = in_len;
-    var l0_h = 32; 
+    var l0_h = 5; 
 
     var l1_w = l0_h;
-    var l1_h = 64;
+    var l1_h = 7;
 
     var l2_w = l1_h;
-    var l2_h = 128;
+    var l2_h = 11;
 
     var l3_w = l2_h; 
     var l3_h = out_len;
