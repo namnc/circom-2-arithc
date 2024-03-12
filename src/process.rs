@@ -154,8 +154,6 @@ pub fn process_statement(
             let lh_access = build_access(ac, runtime, program_archive, var, access)?;
             let rh_access = process_expression(ac, runtime, program_archive, rhe)?;
 
-            // TODO: WRONG APPROACH. We need to handle assignments with data contents, not
-
             let ctx = runtime.current_context()?;
             match ctx.get_item_data_type(var)? {
                 DataType::Signal => {
@@ -169,9 +167,8 @@ pub fn process_statement(
                         }
                         Expression::Variable { .. } => {
                             match ctx.get_signal_content(&lh_access)? {
-                                NestedValue::Array(signal_array) => {
+                                NestedValue::Array(_) => {
                                     // Iterate through signals and make the connections
-                                    
                                 }
                                 NestedValue::Value(signal_id) => {
                                     let gate_output_id =
@@ -199,10 +196,18 @@ pub fn process_statement(
                     AssignOp::AssignConstraintSignal => {
                         // Add connection
                         // Same thing, match for array or single value, then iterate for array to make connections.
-                        let component_signal = ctx.get_component_signal_id(&lh_access)?;
-                        let assigned_signal = get_signal_for_access(ac, ctx, &rh_access)?;
+                        match ctx.get_component_signal_content(&lh_access)? {
+                            NestedValue::Array(_) => {
+                                // Iterate through signals and make the connections
 
-                        ac.add_connection(assigned_signal, component_signal)?;
+                            }
+                            NestedValue::Value(_) => {
+                                let component_signal = ctx.get_component_signal_id(&lh_access)?;
+                                let assigned_signal = get_signal_for_access(ac, ctx, &rh_access)?;
+
+                                ac.add_connection(assigned_signal, component_signal)?;
+                            }
+                        }
                     }
                     _ => return Err(ProgramError::OperationNotSupported),
                 },

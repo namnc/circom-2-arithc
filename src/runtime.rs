@@ -361,6 +361,26 @@ impl Context {
         )
     }
 
+    /// Gets the content of a component's signal.
+    pub fn get_component_signal_content(
+        &self,
+        access: &DataAccess,
+    ) -> Result<NestedValue<u32>, RuntimeError> {
+        let (component_access, signal_access) = process_component_access(access)?;
+        let component =
+            self.components
+                .get(&component_access.name)
+                .ok_or(RuntimeError::ItemNotDeclared(format!(
+                    "get_component_signal_id: {:?}",
+                    access
+                )))?;
+
+        component.get_signal_content(
+            &access_to_u32(component_access.get_access())?,
+            &signal_access,
+        )
+    }
+
     /// Sets a component's input/output signal map.
     pub fn set_component(
         &mut self,
@@ -510,6 +530,29 @@ impl Component {
         *nested_map = map;
 
         Ok(())
+    }
+
+    /// Returns the signal's content at the specified index path.
+    fn get_signal_content(
+        &self,
+        component_access: &[u32],
+        signal_access: &DataAccess,
+    ) -> Result<NestedValue<u32>, RuntimeError> {
+        let nested_val = get_nested_value(&self.signal_map, component_access)?;
+
+        let map = match nested_val {
+            NestedValue::Value(map) => map,
+            NestedValue::Array(_) => return Err(RuntimeError::NotAValue),
+        };
+
+        let signal = map
+            .get(&signal_access.get_name())
+            .ok_or(RuntimeError::ItemNotDeclared(format!(
+                "get_signal_id: {:?}",
+                signal_access
+            )))?;
+
+        signal.get(&access_to_u32(signal_access.get_access())?)
     }
 
     /// Returns the signal's ID at the specified index path.
