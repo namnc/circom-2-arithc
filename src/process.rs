@@ -37,16 +37,17 @@ pub fn process_statement(
     statement: &Statement,
 ) -> Result<(), ProgramError> {
     match statement {
-        Statement::Block { stmts, .. } => process_statements(ac, runtime, program_archive, stmts),
         Statement::InitializationBlock {
             initializations, ..
-        } => {
-            for stmt in initializations {
-                process_statement(ac, runtime, program_archive, stmt)?;
-            }
-
-            Ok(())
-        }
+        } => process_statements(ac, runtime, program_archive, initializations),
+        Statement::Block { stmts, .. } => process_statements(ac, runtime, program_archive, stmts),
+        Statement::Substitution {
+            var,
+            access,
+            rhe,
+            op,
+            ..
+        } => handle_substitution(ac, runtime, program_archive, var, access, rhe, op),
         Statement::Declaration {
             xtype,
             name,
@@ -95,27 +96,6 @@ pub fn process_statement(
 
             Ok(())
         }
-        Statement::While { cond, stmt, .. } => {
-            runtime.push_context(true)?;
-            loop {
-                let access = process_expression(ac, runtime, program_archive, cond)?;
-                let result = runtime
-                    .current_context()?
-                    .get_variable_value(&access)?
-                    .ok_or(ProgramError::EmptyDataItem)?;
-
-                if result == 0 {
-                    break;
-                }
-
-                runtime.push_context(true)?;
-                process_statement(ac, runtime, program_archive, stmt)?;
-                runtime.pop_context(true)?;
-            }
-            runtime.pop_context(true)?;
-
-            Ok(())
-        }
         Statement::IfThenElse {
             cond,
             if_case,
@@ -144,74 +124,24 @@ pub fn process_statement(
                 Ok(())
             }
         }
-        Statement::Substitution {
-            var,
-            access,
-            rhe,
-            op,
-            ..
-        } => {
-            let lh_access = build_access(ac, runtime, program_archive, var, access)?;
-            let rh_access = process_expression(ac, runtime, program_archive, rhe)?;
+        Statement::While { cond, stmt, .. } => {
+            runtime.push_context(true)?;
+            loop {
+                let access = process_expression(ac, runtime, program_archive, cond)?;
+                let result = runtime
+                    .current_context()?
+                    .get_variable_value(&access)?
+                    .ok_or(ProgramError::EmptyDataItem)?;
 
-            let ctx = runtime.current_context()?;
-            match ctx.get_item_data_type(var)? {
-                DataType::Signal => {
-                    match rhe {
-                        Expression::InfixOp { .. } => {
-                            // Connect the generated gate output to the given signal
-                            let given_output_id = ctx.get_signal_id(&lh_access)?;
-                            let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
-
-                            ac.add_connection(gate_output_id, given_output_id)?;
-                        }
-                        Expression::Variable { .. } => {
-                            match ctx.get_signal_content(&lh_access)? {
-                                NestedValue::Array(_) => {
-                                    // Iterate through signals and make the connections
-                                }
-                                NestedValue::Value(signal_id) => {
-                                    let gate_output_id =
-                                        get_signal_for_access(ac, ctx, &rh_access)?;
-
-                                    ac.add_connection(gate_output_id, signal_id)?;
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
+                if result == 0 {
+                    break;
                 }
-                DataType::Variable => {
-                    // Assign the evaluated right-hand side to the left-hand side
 
-                    let value = ctx.get_variable_value(&rh_access)?;
-                    ctx.set_variable(&lh_access, value)?;
-                }
-                DataType::Component => match op {
-                    AssignOp::AssignVar => {
-                        // Component assignment
-                        let signal_map = ctx.get_component_map(&rh_access)?;
-                        ctx.set_component(&lh_access, signal_map)?;
-                    }
-                    AssignOp::AssignConstraintSignal => {
-                        // Add connection
-                        // Same thing, match for array or single value, then iterate for array to make connections.
-                        match ctx.get_component_signal_content(&lh_access)? {
-                            NestedValue::Array(_) => {
-                                // Iterate through signals and make the connections
-
-                            }
-                            NestedValue::Value(_) => {
-                                let component_signal = ctx.get_component_signal_id(&lh_access)?;
-                                let assigned_signal = get_signal_for_access(ac, ctx, &rh_access)?;
-
-                                ac.add_connection(assigned_signal, component_signal)?;
-                            }
-                        }
-                    }
-                    _ => return Err(ProgramError::OperationNotSupported),
-                },
+                runtime.push_context(true)?;
+                process_statement(ac, runtime, program_archive, stmt)?;
+                runtime.pop_context(true)?;
             }
+            runtime.pop_context(true)?;
 
             Ok(())
         }
@@ -230,6 +160,89 @@ pub fn process_statement(
         }
         _ => Err(ProgramError::StatementNotImplemented),
     }
+}
+
+/// Handles a substitution statement
+fn handle_substitution(
+    ac: &mut ArithmeticCircuit,
+    runtime: &mut Runtime,
+    program_archive: &ProgramArchive,
+    var: &str,
+    access: &[Access],
+    rhe: &Expression,
+    op: &AssignOp,
+) -> Result<(), ProgramError> {
+    let lh_access = build_access(ac, runtime, program_archive, var, access)?;
+    let rh_access = process_expression(ac, runtime, program_archive, rhe)?;
+
+    let ctx = runtime.current_context()?;
+    match ctx.get_item_data_type(var)? {
+        DataType::Variable => {
+            // Assign the evaluated right-hand side to the left-hand side
+            let value = ctx.get_variable_value(&rh_access)?;
+            ctx.set_variable(&lh_access, value)?;
+        }
+        DataType::Component => match op {
+            AssignOp::AssignVar => {
+                // Component instantiation
+                let signal_map = ctx.get_component_map(&rh_access)?;
+                ctx.set_component(&lh_access, signal_map)?;
+            }
+            AssignOp::AssignConstraintSignal => {
+                // Component signal assignment
+                match ctx.get_component_signal_content(&lh_access)? {
+                    NestedValue::Array(signal) => {
+                        let assigned_signal_array =
+                            match get_signal_content_for_access(ctx, &rh_access)? {
+                                NestedValue::Array(array) => array,
+                                _ => return Err(ProgramError::InvalidDataType),
+                            };
+
+                        connect_signal_arrays(ac, &signal, &assigned_signal_array)?;
+                    }
+                    NestedValue::Value(_) => {
+                        let component_signal = ctx.get_component_signal_id(&lh_access)?;
+                        let assigned_signal = get_signal_for_access(ac, ctx, &rh_access)?;
+
+                        ac.add_connection(assigned_signal, component_signal)?;
+                    }
+                }
+            }
+            _ => return Err(ProgramError::OperationNotSupported),
+        },
+        DataType::Signal => {
+            match rhe {
+                Expression::InfixOp { .. } => {
+                    // Construct the corresponding circuit gate for the given operation
+                    let given_output_id = ctx.get_signal_id(&lh_access)?;
+                    let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
+
+                    // Connect the generated gate output to the actual signal
+                    ac.add_connection(gate_output_id, given_output_id)?;
+                }
+                Expression::Variable { .. } => match ctx.get_signal_content(&lh_access)? {
+                    // This corresponds to
+                    NestedValue::Array(signal) => {
+                        let assigned_signal_array =
+                            match get_signal_content_for_access(ctx, &rh_access)? {
+                                NestedValue::Array(array) => array,
+                                _ => return Err(ProgramError::InvalidDataType),
+                            };
+
+                        connect_signal_arrays(ac, &signal, &assigned_signal_array)?;
+                    }
+                    NestedValue::Value(signal_id) => {
+                        let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
+
+                        ac.add_connection(gate_output_id, signal_id)?;
+                    }
+                },
+                _ => {}
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Processes an expression and returns an access to the result.
@@ -432,8 +445,46 @@ fn get_signal_for_access(
     }
 }
 
+/// Returns the content of a signal for a given access
+fn get_signal_content_for_access(
+    ctx: &Context,
+    access: &DataAccess,
+) -> Result<NestedValue<u32>, ProgramError> {
+    match ctx.get_item_data_type(&access.get_name())? {
+        DataType::Signal => Ok(ctx.get_signal_content(access)?),
+        DataType::Component => Ok(ctx.get_component_signal_content(access)?),
+        _ => Err(ProgramError::InvalidDataType),
+    }
+}
+
+/// Connects two composed signals
+fn connect_signal_arrays(
+    ac: &mut ArithmeticCircuit,
+    a: &Vec<NestedValue<u32>>,
+    b: &Vec<NestedValue<u32>>,
+) -> Result<(), ProgramError> {
+    // Verify that the arrays have the same length
+    if a.len() != b.len() {
+        return Err(ProgramError::InvalidDataType);
+    }
+
+    for (a, b) in a.iter().zip(b.iter()) {
+        match (a, b) {
+            (NestedValue::Value(a), NestedValue::Value(b)) => {
+                ac.add_connection(*a, *b)?;
+            }
+            (NestedValue::Array(a), NestedValue::Array(b)) => {
+                connect_signal_arrays(ac, a, b)?;
+            }
+            _ => return Err(ProgramError::InvalidDataType),
+        }
+    }
+
+    Ok(())
+}
+
 /// Builds a DataAccess from an Access array
-pub fn build_access(
+fn build_access(
     ac: &mut ArithmeticCircuit,
     runtime: &mut Runtime,
     program_archive: &ProgramArchive,
@@ -462,7 +513,7 @@ pub fn build_access(
 }
 
 /// Executes an operation on two u32 values, performing the specified arithmetic or logical computation.
-pub fn execute_op(lhs: u32, rhs: u32, op: &ExpressionInfixOpcode) -> Result<u32, ProgramError> {
+fn execute_op(lhs: u32, rhs: u32, op: &ExpressionInfixOpcode) -> Result<u32, ProgramError> {
     let res = match op {
         ExpressionInfixOpcode::Mul => lhs * rhs,
         ExpressionInfixOpcode::Div => {
