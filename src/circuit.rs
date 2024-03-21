@@ -2,7 +2,7 @@
 //!
 //! This module defines the data structures used to represent the arithmetic circuit.
 
-use crate::{program::ProgramError, runtime::generate_u32};
+use crate::program::ProgramError;
 use circom_program_structure::ast::ExpressionInfixOpcode;
 use log::debug;
 use mpz_circuits::GateType;
@@ -54,9 +54,9 @@ pub struct Node {
 
 impl Node {
     /// Creates a new node.
-    pub fn new(signal_id: u32) -> Self {
+    pub fn new(id: u32, signal_id: u32) -> Self {
         Self {
-            id: generate_u32(),
+            id,
             signals: vec![signal_id],
         }
     }
@@ -72,9 +72,9 @@ impl Node {
     }
 
     /// Merges the signals of the node with another node, creating a new node.
-    pub fn merge(&self, merge_node: &Node) -> Self {
-        let mut new_node = Node {
-            id: generate_u32(),
+    pub fn merge(&self, merge_node: &Node, id: u32) -> Self {
+        let mut new_node = Self {
+            id,
             signals: Vec::new(),
         };
 
@@ -119,6 +119,7 @@ pub struct ArithmeticCircuit {
     vars: HashMap<u32, Option<u32>>,
     nodes: Vec<Node>,
     gates: Vec<ArithmeticGate>,
+    node_count: u32,
 }
 
 impl ArithmeticCircuit {
@@ -128,6 +129,7 @@ impl ArithmeticCircuit {
             vars: HashMap::new(),
             nodes: Vec::new(),
             gates: Vec::new(),
+            node_count: 0,
         }
     }
 
@@ -140,7 +142,7 @@ impl ArithmeticCircuit {
         self.vars.insert(id, None);
 
         // Create a new node for the signal
-        let node = Node::new(id);
+        let node = Node::new(self.get_node_id(), id);
         debug!("New {:?}", node);
 
         self.nodes.push(node);
@@ -156,7 +158,7 @@ impl ArithmeticCircuit {
         self.vars.insert(value, Some(value));
 
         // Create a new node for the constant
-        let node = Node::new(value);
+        let node = Node::new(self.get_node_id(), value);
         debug!("New {:?}", node);
 
         self.nodes.push(node);
@@ -221,7 +223,7 @@ impl ArithmeticCircuit {
         }
 
         // Merge the nodes
-        let merged_node = node_a.merge(&node_b);
+        let merged_node = node_a.merge(&node_b, self.get_node_id());
 
         // Update connections in gates to point to the new merged node
         self.gates.iter_mut().for_each(|gate| {
@@ -263,6 +265,12 @@ impl ArithmeticCircuit {
     /// Returns the number of gates in the circuit.
     pub fn gate_count(&self) -> u32 {
         self.gates.len() as u32
+    }
+
+    /// Generates a new node id
+    fn get_node_id(&mut self) -> u32 {
+        self.node_count += 1;
+        self.node_count
     }
 }
 
