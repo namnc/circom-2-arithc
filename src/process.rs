@@ -59,6 +59,7 @@ pub fn process_statement(
                 .map(|expression| process_expression(ac, runtime, program_archive, expression))
                 .collect::<Result<Vec<DataAccess>, ProgramError>>()?;
 
+            let signal_gen = runtime.get_signal_gen();
             let ctx = runtime.current_context()?;
             let dimensions: Vec<u32> = dim_access
                 .iter()
@@ -67,7 +68,7 @@ pub fn process_statement(
                         .ok_or(ProgramError::EmptyDataItem)
                 })
                 .collect::<Result<Vec<u32>, ProgramError>>()?;
-            ctx.declare_item(data_type.clone(), name, &dimensions)?;
+            ctx.declare_item(data_type.clone(), name, &dimensions, signal_gen)?;
 
             // If the declared item is a signal we should add it to the arithmetic circuit
             if data_type == DataType::Signal {
@@ -194,12 +195,13 @@ pub fn process_statement(
         Statement::Return { value, .. } => {
             let return_access = process_expression(ac, runtime, program_archive, value)?;
 
+            let signal_gen = runtime.get_signal_gen();
             let ctx = runtime.current_context()?;
             let return_value = ctx
                 .get_variable_value(&return_access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
 
-            ctx.declare_item(DataType::Variable, RETURN_VAR, &[])?;
+            ctx.declare_item(DataType::Variable, RETURN_VAR, &[], signal_gen)?;
             ctx.set_variable(&DataAccess::new(RETURN_VAR, vec![]), Some(return_value))?;
 
             Ok(())
@@ -221,9 +223,10 @@ pub fn process_expression(
             lhe, infix_op, rhe, ..
         } => handle_infix_op(ac, runtime, program_archive, infix_op, lhe, rhe),
         Expression::Number(_, value) => {
+            let signal_gen = runtime.get_signal_gen();
             let access = runtime
                 .current_context()?
-                .declare_random_item(DataType::Variable)?;
+                .declare_random_item(signal_gen, DataType::Variable)?;
 
             runtime.current_context()?.set_variable(
                 &access,
@@ -282,9 +285,10 @@ fn handle_call(
 
     // Set arguments in the new context
     for (arg_name, &arg_value) in arg_names.iter().zip(&arg_values) {
+        let signal_gen = runtime.get_signal_gen();
         runtime
             .current_context()?
-            .declare_item(DataType::Variable, arg_name, &[])?;
+            .declare_item(DataType::Variable, arg_name, &[], signal_gen)?;
         runtime
             .current_context()?
             .set_variable(&DataAccess::new(arg_name, vec![]), Some(arg_value))?;
@@ -321,15 +325,26 @@ fn handle_call(
 
     // Return to parent context
     runtime.pop_context(false)?;
+    let signal_gen = runtime.get_signal_gen();
     let ctx = runtime.current_context()?;
     let return_access =
         DataAccess::new(&format!("{}_{}_{}", id, RETURN_VAR, generate_u32()), vec![]);
 
     if is_function {
-        ctx.declare_item(DataType::Variable, &return_access.get_name(), &[])?;
+        ctx.declare_item(
+            DataType::Variable,
+            &return_access.get_name(),
+            &[],
+            signal_gen,
+        )?;
         ctx.set_variable(&return_access, function_return)?;
     } else {
-        ctx.declare_item(DataType::Component, &return_access.get_name(), &[])?;
+        ctx.declare_item(
+            DataType::Component,
+            &return_access.get_name(),
+            &[],
+            signal_gen,
+        )?;
         ctx.set_component(&return_access, component_return)?;
     }
 
@@ -351,6 +366,7 @@ fn handle_infix_op(
     let lhe_access = process_expression(ac, runtime, program_archive, lhe)?;
     let rhe_access = process_expression(ac, runtime, program_archive, rhe)?;
 
+    let signal_gen = runtime.get_signal_gen();
     let ctx = runtime.current_context()?;
 
     // Determine the data types of the left and right operands
@@ -367,7 +383,7 @@ fn handle_infix_op(
             .ok_or(ProgramError::EmptyDataItem)?;
 
         let op_res = execute_op(lhs_value, rhs_value, op)?;
-        let item_access = ctx.declare_random_item(DataType::Variable)?;
+        let item_access = ctx.declare_random_item(signal_gen, DataType::Variable)?;
         ctx.set_variable(&item_access, Some(op_res))?;
 
         return Ok(item_access);
@@ -388,7 +404,7 @@ fn handle_infix_op(
 
     // Construct the corresponding circuit gate
     let gate_type = AGateType::from(op);
-    let output_signal = ctx.declare_random_item(DataType::Signal)?;
+    let output_signal = ctx.declare_random_item(signal_gen, DataType::Signal)?;
     let output_id = ctx.get_signal_id(&output_signal)?;
 
     // Add output signal and gate to the circuit
