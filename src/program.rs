@@ -5,8 +5,8 @@
 use crate::{
     circom::{input::Input, parser::parse_project, type_analysis::analyse_project},
     circuit::{ArithmeticCircuit, CircuitError},
-    process::process_statements,
-    runtime::{Runtime, RuntimeError},
+    process::{process_expression, process_statements},
+    runtime::{DataAccess, DataType, Runtime, RuntimeError},
 };
 use circom_program_structure::ast::Expression;
 use std::io;
@@ -20,10 +20,39 @@ pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
 
     analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
 
-    if let Expression::Call { id, .. } = program_archive.get_main_expression() {
-        let statements = program_archive.get_template_data(id).get_body_as_vec();
+    match program_archive.get_main_expression() {
+        Expression::Call { id, args, .. } => {
+            let template_data = program_archive.get_template_data(id);
 
-        process_statements(&mut circuit, &mut runtime, &program_archive, statements)?;
+            // Get values
+            let mut values: Vec<Option<u32>> = Vec::new();
+            for expression in args {
+                let access =
+                    process_expression(&mut circuit, &mut runtime, &program_archive, expression)?;
+                let value = runtime.current_context()?.get_variable_value(&access)?;
+                values.push(value);
+            }
+
+            // Get and declare arguments
+            let names = template_data.get_name_of_params();
+            for (name, &value) in names.iter().zip(values.iter()) {
+                let signal_gen = runtime.get_signal_gen();
+                runtime.current_context()?.declare_item(
+                    DataType::Variable,
+                    name,
+                    &[],
+                    signal_gen,
+                )?;
+                runtime
+                    .current_context()?
+                    .set_variable(&DataAccess::new(name, Vec::new()), value)?;
+            }
+
+            // Process the main component
+            let statements = template_data.get_body_as_vec();
+            process_statements(&mut circuit, &mut runtime, &program_archive, statements)?;
+        }
+        _ => return Err(ProgramError::MainExpressionNotACall),
     }
 
     Ok(circuit)
@@ -50,6 +79,8 @@ pub enum ProgramError {
     IOError(#[from] io::Error),
     #[error("JSON serialization error: {0}")]
     JsonSerializationError(#[from] serde_json::Error),
+    #[error("Main expression not a call")]
+    MainExpressionNotACall,
     #[error("Operation error: {0}")]
     OperationError(String),
     #[error("Operation not supported")]
