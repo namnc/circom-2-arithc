@@ -5,7 +5,11 @@
 use crate::program::ProgramError;
 use circom_program_structure::ast::VariableType;
 use rand::{thread_rng, Rng};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet, VecDeque},
+    rc::Rc,
+};
 use thiserror::Error;
 
 pub const RETURN_VAR: &str = "function_return_value";
@@ -49,6 +53,7 @@ pub enum SubAccess {
 /// Manages a stack of execution contexts for a runtime environment.
 pub struct Runtime {
     contexts: VecDeque<Context>,
+    next_signal_id: Rc<RefCell<u32>>,
 }
 
 impl Default for Runtime {
@@ -62,6 +67,7 @@ impl Runtime {
     pub fn new() -> Self {
         Self {
             contexts: VecDeque::from([Context::new()]),
+            next_signal_id: Rc::new(RefCell::new(0)),
         }
     }
 
@@ -107,6 +113,19 @@ impl Runtime {
         self.contexts
             .front_mut()
             .ok_or(RuntimeError::EmptyContextStack)
+    }
+
+    /// Returns a clone of the Rc<RefCell<u32>> for next_signal_id.
+    pub fn get_signal_gen(&self) -> Rc<RefCell<u32>> {
+        Rc::clone(&self.next_signal_id)
+    }
+
+    /// Generates a new unique signal ID.
+    fn gen_signal(next_signal_id: Rc<RefCell<u32>>) -> u32 {
+        let mut id_ref = next_signal_id.borrow_mut();
+        let id = *id_ref;
+        *id_ref += 1;
+        id
     }
 }
 
@@ -177,6 +196,7 @@ impl Context {
         data_type: DataType,
         name: &str,
         dimensions: &[u32],
+        next_signal_id: Rc<RefCell<u32>>,
     ) -> Result<(), RuntimeError> {
         // Parse name
         let name = name.to_string();
@@ -188,7 +208,7 @@ impl Context {
 
         match data_type {
             DataType::Signal => {
-                let signal = Signal::new(dimensions);
+                let signal = Signal::new(dimensions, next_signal_id);
                 self.signals.insert(name, signal);
             }
             DataType::Variable => {
@@ -205,9 +225,13 @@ impl Context {
     }
 
     /// Declares a new item with a random name.
-    pub fn declare_random_item(&mut self, data_type: DataType) -> Result<DataAccess, RuntimeError> {
+    pub fn declare_random_item(
+        &mut self,
+        next_signal_id: Rc<RefCell<u32>>,
+        data_type: DataType,
+    ) -> Result<DataAccess, RuntimeError> {
         let name = format!("random_{}", generate_u32());
-        self.declare_item(data_type, &name, &[])?;
+        self.declare_item(data_type, &name, &[], next_signal_id)?;
         Ok(DataAccess::new(&name, vec![]))
     }
 
@@ -407,18 +431,25 @@ pub struct Signal {
 
 impl Signal {
     /// Constructs a new Signal as a nested structure based on provided dimensions.
-    fn new(dimensions: &[u32]) -> Self {
-        fn create_nested_signal(dimensions: &[u32]) -> NestedValue<u32> {
+    fn new(dimensions: &[u32], next_signal_id: Rc<RefCell<u32>>) -> Self {
+        fn create_nested_signal(
+            dimensions: &[u32],
+            next_signal_id: Rc<RefCell<u32>>,
+        ) -> NestedValue<u32> {
             if let Some((&first, rest)) = dimensions.split_first() {
-                let array = (0..first).map(|_| create_nested_signal(rest)).collect();
+                let array = (0..first)
+                    .map(|_| create_nested_signal(rest, next_signal_id.clone()))
+                    .collect();
                 NestedValue::Array(array)
             } else {
-                NestedValue::Value(generate_u32())
+                // Generate a new signal ID
+                let id = Runtime::gen_signal(next_signal_id);
+                NestedValue::Value(id)
             }
         }
 
         Self {
-            value: create_nested_signal(dimensions),
+            value: create_nested_signal(dimensions, next_signal_id),
         }
     }
 
