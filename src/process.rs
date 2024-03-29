@@ -13,7 +13,9 @@ use circom_program_structure::ast::{
     Access, AssignOp, Expression, ExpressionInfixOpcode, Statement,
 };
 use circom_program_structure::program_archive::ProgramArchive;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// Processes a sequence of statements.
 pub fn process_statements(
@@ -77,7 +79,7 @@ pub fn process_statement(
 
                 if dimensions.is_empty() {
                     let signal_id = ctx.get_signal_id(&signal_access)?;
-                    ac.add_signal(signal_id)?;
+                    ac.add_signal(signal_id, None)?;
                 } else {
                     let mut indices: Vec<u32> = vec![0; dimensions.len()];
 
@@ -85,7 +87,7 @@ pub fn process_statement(
                         // Set access and get signal id for the current indices
                         signal_access.set_access(u32_to_access(&indices));
                         let signal_id = ctx.get_signal_id(&signal_access)?;
-                        ac.add_signal(signal_id)?;
+                        ac.add_signal(signal_id, None)?;
 
                         // Increment indices
                         if !increment_indices(&mut indices, &dimensions)? {
@@ -177,6 +179,7 @@ fn handle_substitution(
     let lh_access = build_access(ac, runtime, program_archive, var, access)?;
     let rh_access = process_expression(ac, runtime, program_archive, rhe)?;
 
+    let signal_gen = runtime.get_signal_gen();
     let ctx = runtime.current_context()?;
     match ctx.get_item_data_type(var)? {
         DataType::Variable => {
@@ -204,7 +207,8 @@ fn handle_substitution(
                     }
                     NestedValue::Value(_) => {
                         let component_signal = ctx.get_component_signal_id(&lh_access)?;
-                        let assigned_signal = get_signal_for_access(ac, ctx, &rh_access)?;
+                        let assigned_signal =
+                            get_signal_for_access(ac, ctx, signal_gen, &rh_access)?;
 
                         ac.add_connection(assigned_signal, component_signal)?;
                     }
@@ -217,7 +221,7 @@ fn handle_substitution(
                 Expression::InfixOp { .. } => {
                     // Construct the corresponding circuit gate for the given operation
                     let given_output_id = ctx.get_signal_id(&lh_access)?;
-                    let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
+                    let gate_output_id = get_signal_for_access(ac, ctx, signal_gen, &rh_access)?;
 
                     // Connect the generated gate output to the actual signal
                     ac.add_connection(gate_output_id, given_output_id)?;
@@ -234,7 +238,8 @@ fn handle_substitution(
                         connect_signal_arrays(ac, &signal, &assigned_signal_array)?;
                     }
                     NestedValue::Value(signal_id) => {
-                        let gate_output_id = get_signal_for_access(ac, ctx, &rh_access)?;
+                        let gate_output_id =
+                            get_signal_for_access(ac, ctx, signal_gen, &rh_access)?;
 
                         ac.add_connection(gate_output_id, signal_id)?;
                     }
@@ -401,7 +406,7 @@ fn handle_infix_op(
     let lhe_access = process_expression(ac, runtime, program_archive, lhe)?;
     let rhe_access = process_expression(ac, runtime, program_archive, rhe)?;
 
-    let signal_gen = runtime.get_signal_gen();
+    let signal_gen: Rc<RefCell<u32>> = runtime.get_signal_gen();
     let ctx = runtime.current_context()?;
 
     // Determine the data types of the left and right operands
@@ -425,8 +430,8 @@ fn handle_infix_op(
     }
 
     // Handle cases where one or both inputs are signals
-    let lhs_id = get_signal_for_access(ac, ctx, &lhe_access)?;
-    let rhs_id = get_signal_for_access(ac, ctx, &rhe_access)?;
+    let lhs_id = get_signal_for_access(ac, ctx, signal_gen.clone(), &lhe_access)?;
+    let rhs_id = get_signal_for_access(ac, ctx, signal_gen.clone(), &rhe_access)?;
 
     // Construct the corresponding circuit gate
     let gate_type = AGateType::from(op);
@@ -434,7 +439,7 @@ fn handle_infix_op(
     let output_id = ctx.get_signal_id(&output_signal)?;
 
     // Add output signal and gate to the circuit
-    ac.add_signal(output_id)?;
+    ac.add_signal(output_id, None)?;
     ac.add_gate(gate_type, lhs_id, rhs_id, output_id)?;
 
     Ok(output_signal)
@@ -445,17 +450,29 @@ fn handle_infix_op(
 /// - If the access is a variable, it adds a constant variable to the circuit and returns the corresponding signal id.
 fn get_signal_for_access(
     ac: &mut ArithmeticCircuit,
-    ctx: &Context,
+    ctx: &mut Context,
+    signal_gen: Rc<RefCell<u32>>,
     access: &DataAccess,
 ) -> Result<u32, ProgramError> {
     match ctx.get_item_data_type(&access.get_name())? {
         DataType::Signal => Ok(ctx.get_signal_id(access)?),
         DataType::Variable => {
+            // Get variable value
             let value = ctx
                 .get_variable_value(access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
-            ac.add_const(value)?;
-            Ok(value)
+
+            let signal_access = DataAccess::new(&format!("const_signal_{}", value), vec![]);
+            // Try to get signal id if it exists
+            if let Ok(id) = ctx.get_signal_id(&signal_access) {
+                Ok(id)
+            } else {
+                // If it doesn't exist, declare it and add it to the circuit
+                ctx.declare_item(DataType::Signal, &signal_access.get_name(), &[], signal_gen)?;
+                let signal_id = ctx.get_signal_id(&signal_access)?;
+                ac.add_signal(signal_id, Some(value))?;
+                Ok(signal_id)
+            }
         }
         DataType::Component => Ok(ctx.get_component_signal_id(access)?),
     }

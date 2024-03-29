@@ -134,31 +134,15 @@ impl ArithmeticCircuit {
     }
 
     /// Adds a new signal variable to the circuit.
-    pub fn add_signal(&mut self, id: u32) -> Result<(), CircuitError> {
+    pub fn add_signal(&mut self, id: u32, value: Option<u32>) -> Result<(), CircuitError> {
         // Check that the variable isn't already declared
         if self.contains_var(&id) {
             return Err(CircuitError::CircuitVariableAlreadyDeclared);
         }
-        self.vars.insert(id, None);
+        self.vars.insert(id, value);
 
         // Create a new node for the signal
         let node = Node::new(self.get_node_id(), id);
-        debug!("New {:?}", node);
-
-        self.nodes.push(node);
-        Ok(())
-    }
-
-    /// Adds a new constant variable to the circuit.
-    pub fn add_const(&mut self, value: u32) -> Result<(), CircuitError> {
-        // Ignore if the constant is already declared
-        if self.contains_var(&value) {
-            return Ok(());
-        }
-        self.vars.insert(value, Some(value));
-
-        // Create a new node for the constant
-        let node = Node::new(self.get_node_id(), value);
         debug!("New {:?}", node);
 
         self.nodes.push(node);
