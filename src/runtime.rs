@@ -9,6 +9,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet, VecDeque},
     rc::Rc,
+    fmt::Write,
 };
 use thiserror::Error;
 
@@ -66,20 +67,20 @@ impl Runtime {
     /// Creates an empty runtime with no contexts.
     pub fn new() -> Self {
         Self {
-            contexts: VecDeque::from([Context::new()]),
+            contexts: VecDeque::from([Context::new("0".to_string())]),
             next_signal_id: Rc::new(RefCell::new(0)),
         }
     }
 
     /// Adds a new context onto the stack, optionally inheriting from the current context.
-    pub fn push_context(&mut self, inherit: bool) -> Result<(), RuntimeError> {
+    pub fn push_context(&mut self, inherit: bool, id: String) -> Result<(), RuntimeError> {
         let new_context = if inherit {
             match self.contexts.front() {
                 Some(parent_context) => Context::new_with_inheritance(parent_context),
                 None => return Err(RuntimeError::NoContextToInheritFrom),
             }
         } else {
-            Context::new()
+            Context::new(id)
         };
         self.contexts.push_front(new_context);
         Ok(())
@@ -133,6 +134,7 @@ impl Runtime {
 /// Handles a specific scope value tracking.
 #[derive(Clone)]
 pub struct Context {
+    ctx_name: String,
     names: HashSet<String>,
     variables: HashMap<String, Variable>,
     signals: HashMap<String, Signal>,
@@ -141,14 +143,15 @@ pub struct Context {
 
 impl Default for Context {
     fn default() -> Self {
-        Self::new()
+        Self::new("0".to_string())
     }
 }
 
 impl Context {
     /// Constructs a new Context.
-    pub fn new() -> Self {
+    pub fn new(ctx_name: String) -> Self {
         Self {
+            ctx_name,
             names: HashSet::new(),
             variables: HashMap::new(),
             signals: HashMap::new(),
@@ -159,11 +162,16 @@ impl Context {
     /// Returns a contexts that inherits from the current context.
     pub fn new_with_inheritance(&self) -> Self {
         Self {
+            ctx_name: self.ctx_name.clone(),
             names: self.names.clone(),
             variables: self.variables.clone(),
             signals: self.signals.clone(),
             components: self.components.clone(),
         }
+    }
+
+    pub fn get_ctx_name(&self) -> String {
+        self.ctx_name.clone()
     }
 
     /// Merges changes from the given context into this context.
@@ -646,6 +654,23 @@ impl DataAccess {
     /// Gets the sub access of the data item.
     pub fn get_access(&self) -> &Vec<SubAccess> {
         &self.access
+    }
+
+    /// Gets the access string for labeling of the data item.
+    pub fn access_str(&self, ctx_name: String) -> String {
+        let mut ret = String::from(format!("{}.", ctx_name));
+        ret.write_str(self.get_name().as_str()).ok();
+        for sub in self.get_access() {
+            match sub {
+                SubAccess::Array(index) => {
+                    ret.write_str(format!("[{}]", index).as_str()).ok();
+                }
+                SubAccess::Component(name) => {
+                    ret.write_str(format!(".{}", name).as_str()).ok();
+                }
+            }
+        }
+       ret
     }
 }
 

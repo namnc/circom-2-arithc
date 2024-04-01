@@ -50,20 +50,35 @@ impl From<&ExpressionInfixOpcode> for AGateType {
 pub struct Node {
     id: u32,
     signals: Vec<u32>,
+    names: Vec<String>,
+    is_const: bool,
+    const_value: u32
 }
 
 impl Node {
     /// Creates a new node.
-    pub fn new(id: u32, signal_id: u32) -> Self {
+    pub fn new(id: u32, signal_id: u32, signal_name: String, is_const: bool, const_value: u32) -> Self {
         Self {
             id,
             signals: vec![signal_id],
+            names: vec![signal_name],
+            is_const,
+            const_value
         }
     }
 
+    pub fn is_const(&self) -> bool {
+        self.is_const
+    }
+
+    pub fn const_value(&self) -> u32 {
+        self.const_value
+    }
+
     /// Adds a set of signals to the node.
-    pub fn add_signals(&mut self, signals: Vec<u32>) {
+    pub fn add_signals(&mut self, signals: Vec<u32>, names: Vec<String>) {
         self.signals.extend(signals);
+        self.names.extend(names);
     }
 
     /// Gets the signals of the node.
@@ -71,15 +86,25 @@ impl Node {
         self.signals.clone()
     }
 
+    /// Gets the signals name of the node.
+    pub fn get_signals_names(&self) -> Vec<String> {
+        self.names.clone()
+    }
+
     /// Merges the signals of the node with another node, creating a new node.
     pub fn merge(&self, merge_node: &Node, id: u32) -> Self {
+        let ic = self.is_const() | merge_node.is_const();
+        let cv = self.const_value();
         let mut new_node = Self {
             id,
             signals: Vec::new(),
+            names: Vec::new(),
+            is_const: ic,
+            const_value: cv
         };
 
-        new_node.add_signals(self.get_signals());
-        new_node.add_signals(merge_node.get_signals());
+        new_node.add_signals(self.get_signals(), self.get_signals_names());
+        new_node.add_signals(merge_node.get_signals(), merge_node.get_signals_names());
 
         new_node
     }
@@ -134,15 +159,22 @@ impl ArithmeticCircuit {
     }
 
     /// Adds a new signal variable to the circuit.
-    pub fn add_signal(&mut self, id: u32, value: Option<u32>) -> Result<(), CircuitError> {
+    pub fn add_signal(&mut self, id: u32, name: String, value: Option<u32>) -> Result<(), CircuitError> {
         // Check that the variable isn't already declared
         if self.contains_var(&id) {
             return Err(CircuitError::CircuitVariableAlreadyDeclared);
         }
         self.vars.insert(id, value);
 
+        let ic = value.is_some();
+        let mut cv = 0;
+        if ic {
+            cv = value.unwrap();
+        }
+        
+
         // Create a new node for the signal
-        let node = Node::new(self.get_node_id(), id);
+        let node = Node::new(self.get_node_id(), id, name, ic, cv);
         debug!("New {:?}", node);
 
         self.nodes.push(node);

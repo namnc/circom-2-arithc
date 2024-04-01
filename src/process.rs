@@ -79,7 +79,7 @@ pub fn process_statement(
 
                 if dimensions.is_empty() {
                     let signal_id = ctx.get_signal_id(&signal_access)?;
-                    ac.add_signal(signal_id, None)?;
+                    ac.add_signal(signal_id, signal_access.access_str(ctx.get_ctx_name()), None)?;
                 } else {
                     let mut indices: Vec<u32> = vec![0; dimensions.len()];
 
@@ -87,7 +87,7 @@ pub fn process_statement(
                         // Set access and get signal id for the current indices
                         signal_access.set_access(u32_to_access(&indices));
                         let signal_id = ctx.get_signal_id(&signal_access)?;
-                        ac.add_signal(signal_id, None)?;
+                        ac.add_signal(signal_id, signal_access.access_str(ctx.get_ctx_name()), None)?;
 
                         // Increment indices
                         if !increment_indices(&mut indices, &dimensions)? {
@@ -113,7 +113,7 @@ pub fn process_statement(
 
             if result == 0 {
                 if let Some(else_statement) = else_case {
-                    runtime.push_context(true)?;
+                    runtime.push_context(true, "IF_FALSE".to_string())?;
                     process_statement(ac, runtime, program_archive, else_statement)?;
                     runtime.pop_context(true)?;
                     Ok(())
@@ -121,14 +121,14 @@ pub fn process_statement(
                     Ok(())
                 }
             } else {
-                runtime.push_context(true)?;
+                runtime.push_context(true,  "IF_TRUE".to_string())?;
                 process_statement(ac, runtime, program_archive, if_case)?;
                 runtime.pop_context(true)?;
                 Ok(())
             }
         }
         Statement::While { cond, stmt, .. } => {
-            runtime.push_context(true)?;
+            runtime.push_context(true, "WHILE_PRE".to_string())?;
             loop {
                 let access = process_expression(ac, runtime, program_archive, cond)?;
                 let result = runtime
@@ -140,7 +140,7 @@ pub fn process_statement(
                     break;
                 }
 
-                runtime.push_context(true)?;
+                runtime.push_context(true, "WHILE_EXE".to_string())?;
                 process_statement(ac, runtime, program_archive, stmt)?;
                 runtime.pop_context(true)?;
             }
@@ -323,7 +323,7 @@ fn handle_call(
         .collect::<Result<Vec<u32>, ProgramError>>()?;
 
     // Create a new execution context
-    runtime.push_context(false)?;
+    runtime.push_context(false, id.to_string())?;
 
     // Set arguments in the new context
     for (arg_name, &arg_value) in arg_names.iter().zip(&arg_values) {
@@ -439,7 +439,7 @@ fn handle_infix_op(
     let output_id = ctx.get_signal_id(&output_signal)?;
 
     // Add output signal and gate to the circuit
-    ac.add_signal(output_id, None)?;
+    ac.add_signal(output_id, output_signal.access_str(ctx.get_ctx_name()), None)?;
     ac.add_gate(gate_type, lhs_id, rhs_id, output_id)?;
 
     Ok(output_signal)
@@ -470,7 +470,7 @@ fn get_signal_for_access(
                 // If it doesn't exist, declare it and add it to the circuit
                 ctx.declare_item(DataType::Signal, &signal_access.get_name(), &[], signal_gen)?;
                 let signal_id = ctx.get_signal_id(&signal_access)?;
-                ac.add_signal(signal_id, Some(value))?;
+                ac.add_signal(signal_id, signal_access.access_str(ctx.get_ctx_name()), Some(value))?;
                 Ok(signal_id)
             }
         }
