@@ -10,7 +10,20 @@
 
 This library enables the creation of arithmetic circuits from circom programs.
 
+Features supported:
+|   |   |   |   |   |
+|---|---|---|---|---|
+|   |   |   |   |   |
+|   |   |   |   |   |
+|   |   |   |   |   |
+
 We aim to support canonical circomlib.
+circomlib supported/modified:
+|   |   |   |   |   |
+|---|---|---|---|---|
+|   |   |   |   |   |
+|   |   |   |   |   |
+|   |   |   |   |   |
 
 Other important components such as circomlib-ml reside under apps.
 
