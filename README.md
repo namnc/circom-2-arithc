@@ -10,23 +10,37 @@
 
 This library enables the creation of arithmetic circuits from circom programs.
 
-## Features supported:
-|   |   |   |   |   |
-|---|---|---|---|---|
-|   |   |   |   |   |
-|   |   |   |   |   |
-|   |   |   |   |   |
+## Supported Circom Features
 
-## circomlib supported/modified:
-(We aim to support canonical circomlib.)
+| Category        | Type                     | Supported |
+| --------------- | ------------------------ | :-------: |
+| **Statements**  | `InitializationBlock`    |    ✅     |
+|                 | `Block`                  |    ✅     |
+|                 | `Substitution`           |    ✅     |
+|                 | `Declaration`            |    ✅     |
+|                 | `IfThenElse`             |    ✅     |
+|                 | `While`                  |    ✅     |
+|                 | `Return`                 |    ✅     |
+|                 | `MultSubstitution`       |    ❌     |
+|                 | `UnderscoreSubstitution` |    ❌     |
+|                 | `ConstraintEquality`     |    ❌     |
+|                 | `LogCall`                |    ❌     |
+|                 | `Assert`                 |    ❌     |
+| **Expressions** | `Call`                   |    ✅     |
+|                 | `InfixOp`                |    ✅     |
+|                 | `Number`                 |    ✅     |
+|                 | `Variable`               |    ✅     |
+|                 | `PrefixOp`               |    ❌     |
+|                 | `InlineSwitchOp`         |    ❌     |
+|                 | `ParallelOp`             |    ❌     |
+|                 | `AnonymousComp`          |    ❌     |
+|                 | `ArrayInLine`            |    ❌     |
+|                 | `Tuple`                  |    ❌     |
+|                 | `UniformArray`           |    ❌     |
 
-|   |   |   |   |   |
-|---|---|---|---|---|
-|   |   |   |   |   |
-|   |   |   |   |   |
-|   |   |   |   |   |
+## Circomlib
 
-Other important components such as circomlib-ml reside under apps.
+WIP
 
 ## Requirements
 
@@ -66,6 +80,7 @@ To run the program with specific input file path and output directory path, use 
 ```
 
 ## ZK/MPC/FHE backends:
+
 - [2PC-GC with mpz-bmr16](https://github.com/tkmct/mpz/tree/bmr16)
 - [MP-SPDZ MPC](https://github.com/mhchia/MP-SPDZ/tree/arith-executor)
 
