@@ -83,6 +83,7 @@ To run the program with specific input file path and output directory path, use 
 
 - [2PC-GC with mpz-bmr16](https://github.com/tkmct/mpz/tree/bmr16)
 - [MP-SPDZ MPC](https://github.com/mhchia/MP-SPDZ/tree/arith-executor)
+- [TFHE-rs](https://github.com/namnc/circom-thfe-rs)
 
 ## Contributing
 
