@@ -79,7 +79,11 @@ pub fn process_statement(
 
                 if dimensions.is_empty() {
                     let signal_id = ctx.get_signal_id(&signal_access)?;
-                    ac.add_signal(signal_id, signal_access.access_str(ctx.get_ctx_name()), None)?;
+                    ac.add_signal(
+                        signal_id,
+                        signal_access.access_str(ctx.get_ctx_name()),
+                        None,
+                    )?;
                 } else {
                     let mut indices: Vec<u32> = vec![0; dimensions.len()];
 
@@ -87,7 +91,11 @@ pub fn process_statement(
                         // Set access and get signal id for the current indices
                         signal_access.set_access(u32_to_access(&indices));
                         let signal_id = ctx.get_signal_id(&signal_access)?;
-                        ac.add_signal(signal_id, signal_access.access_str(ctx.get_ctx_name()), None)?;
+                        ac.add_signal(
+                            signal_id,
+                            signal_access.access_str(ctx.get_ctx_name()),
+                            None,
+                        )?;
 
                         // Increment indices
                         if !increment_indices(&mut indices, &dimensions)? {
@@ -121,7 +129,7 @@ pub fn process_statement(
                     Ok(())
                 }
             } else {
-                runtime.push_context(true,  "IF_TRUE".to_string())?;
+                runtime.push_context(true, "IF_TRUE".to_string())?;
                 process_statement(ac, runtime, program_archive, if_case)?;
                 runtime.pop_context(true)?;
                 Ok(())
@@ -439,7 +447,11 @@ fn handle_infix_op(
     let output_id = ctx.get_signal_id(&output_signal)?;
 
     // Add output signal and gate to the circuit
-    ac.add_signal(output_id, output_signal.access_str(ctx.get_ctx_name()), None)?;
+    ac.add_signal(
+        output_id,
+        output_signal.access_str(ctx.get_ctx_name()),
+        None,
+    )?;
     ac.add_gate(gate_type, lhs_id, rhs_id, output_id)?;
 
     Ok(output_signal)
@@ -470,7 +482,11 @@ fn get_signal_for_access(
                 // If it doesn't exist, declare it and add it to the circuit
                 ctx.declare_item(DataType::Signal, &signal_access.get_name(), &[], signal_gen)?;
                 let signal_id = ctx.get_signal_id(&signal_access)?;
-                ac.add_signal(signal_id, signal_access.access_str(ctx.get_ctx_name()), Some(value))?;
+                ac.add_signal(
+                    signal_id,
+                    signal_access.access_str(ctx.get_ctx_name()),
+                    Some(value),
+                )?;
                 Ok(signal_id)
             }
         }
@@ -493,8 +509,8 @@ fn get_signal_content_for_access(
 /// Connects two composed signals
 fn connect_signal_arrays(
     ac: &mut ArithmeticCircuit,
-    a: &Vec<NestedValue<u32>>,
-    b: &Vec<NestedValue<u32>>,
+    a: &[NestedValue<u32>],
+    b: &[NestedValue<u32>],
 ) -> Result<(), ProgramError> {
     // Verify that the arrays have the same length
     if a.len() != b.len() {
