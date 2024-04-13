@@ -8,8 +8,8 @@ use rand::{thread_rng, Rng};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet, VecDeque},
-    rc::Rc,
     fmt::Write,
+    rc::Rc,
 };
 use thiserror::Error;
 
@@ -284,7 +284,7 @@ impl Context {
                 "get_variable: {}",
                 name
             )))
-            .map(|variable| variable.clone())
+            .cloned()
     }
 
     /// Gets a variable single or nested content.
@@ -324,7 +324,7 @@ impl Context {
                 "get_signal: {}",
                 name
             )))
-            .map(|signal| signal.clone())
+            .cloned()
     }
 
     /// Gets a signal content at the specified index path.
@@ -658,7 +658,7 @@ impl DataAccess {
 
     /// Gets the access string for labeling of the data item.
     pub fn access_str(&self, ctx_name: String) -> String {
-        let mut ret = String::from(format!("{}.", ctx_name));
+        let mut ret = format!("{}.", ctx_name);
         ret.write_str(self.get_name().as_str()).ok();
         for sub in self.get_access() {
             match sub {
@@ -670,7 +670,7 @@ impl DataAccess {
                 }
             }
         }
-       ret
+        ret
     }
 }
 
@@ -779,7 +779,7 @@ pub fn access_to_u32(sub_accesses: &[SubAccess]) -> Result<Vec<u32>, RuntimeErro
 ///
 /// * `indices` - A vector representing the current position in a multi-dimensional array.
 /// * `limits` - A vector representing the limits of each dimension of the array.
-pub fn increment_indices(indices: &mut Vec<u32>, limits: &[u32]) -> Result<bool, RuntimeError> {
+pub fn increment_indices(indices: &mut [u32], limits: &[u32]) -> Result<bool, RuntimeError> {
     if indices.len() != limits.len() {
         return Err(RuntimeError::AccessError);
     }

@@ -5,8 +5,6 @@
 use crate::program::ProgramError;
 use circom_program_structure::ast::ExpressionInfixOpcode;
 use log::debug;
-use mpz_circuits::GateType;
-use regex::Captures;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -45,139 +43,137 @@ impl From<&ExpressionInfixOpcode> for AGateType {
     }
 }
 
-/// Represents a node in the circuit, with an identifier and a set of signals that it is connected to.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Represents a signal in the circuit, with a name and an optional value.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Signal {
+    name: String,
+    value: Option<u32>,
+}
+
+impl Signal {
+    /// Creates a new signal.
+    pub fn new(name: String, value: Option<u32>) -> Self {
+        Self { name, value }
+    }
+}
+
+/// Represents a node in the circuit, a collection of signals.
+/// The `is_const` and `is_out` fields saves us some iterations over the signals and gates.
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct Node {
-    id: u32,
-    signals: Vec<u32>,
-    names: Vec<String>,
     is_const: bool,
-    const_value: u32
+    is_out: bool,
+    signals: Vec<u32>,
 }
 
 impl Node {
-    /// Creates a new node.
-    pub fn new(id: u32, signal_id: u32, signal_name: String, is_const: bool, const_value: u32) -> Self {
+    /// Creates a new empty node.
+    pub fn new() -> Self {
         Self {
-            id,
-            signals: vec![signal_id],
-            names: vec![signal_name],
-            is_const,
-            const_value
+            signals: Vec::new(),
+            is_const: false,
+            is_out: false,
         }
     }
 
-    pub fn is_const(&self) -> bool {
-        self.is_const
-    }
-
-    pub fn const_value(&self) -> u32 {
-        self.const_value
+    /// Creates a new node with an initial signal.
+    pub fn new_with_signal(signal_id: u32, is_const: bool, is_out: bool) -> Self {
+        Self {
+            signals: vec![signal_id],
+            is_const,
+            is_out,
+        }
     }
 
     /// Adds a set of signals to the node.
-    pub fn add_signals(&mut self, signals: Vec<u32>, names: Vec<String>) {
+    pub fn add_signals(&mut self, signals: &Vec<u32>) {
         self.signals.extend(signals);
-        self.names.extend(names);
+    }
+
+    /// Checks if the node contains a signal.
+    pub fn contains_signal(&self, signal_id: &u32) -> bool {
+        self.signals.contains(signal_id)
     }
 
     /// Gets the signals of the node.
-    pub fn get_signals(&self) -> Vec<u32> {
-        self.signals.clone()
+    pub fn get_signals(&self) -> &Vec<u32> {
+        &self.signals
     }
 
-    /// Gets the signals name of the node.
-    pub fn get_signals_names(&self) -> Vec<String> {
-        self.names.clone()
+    /// Sets the node as an output node.
+    pub fn set_output(&mut self, is_out: bool) {
+        self.is_out = is_out;
     }
 
-    /// Merges the signals of the node with another node, creating a new node.
-    pub fn merge(&self, merge_node: &Node, id: u32) -> Self {
-        let ic = self.is_const() | merge_node.is_const();
-        let cv = self.const_value();
-        let mut new_node = Self {
-            id,
-            signals: Vec::new(),
-            names: Vec::new(),
-            is_const: ic,
-            const_value: cv
-        };
-
-        new_node.add_signals(self.get_signals(), self.get_signals_names());
-        new_node.add_signals(merge_node.get_signals(), merge_node.get_signals_names());
-
-        new_node
-    }
-
-    /// Checks if the Node contains an output signal
-    pub fn has_output(&self, circuit: &ArithmeticCircuit) -> bool {
-        circuit.gates.iter().any(|gate| gate.output == self.id)
+    /// Sets the node as a constant node.
+    pub fn set_const(&mut self, is_const: bool) {
+        self.is_const = is_const;
     }
 }
 
 /// Represents a circuit gate, with a left-hand input, right-hand input, and output node identifiers.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ArithmeticGate {
-    id: u32,
-    gate_type: AGateType,
-    lh_input: u32,
-    rh_input: u32,
-    output: u32,
+    op: AGateType,
+    lh_in: u32,
+    rh_in: u32,
+    out: u32,
 }
 
 impl ArithmeticGate {
     /// Creates a new gate.
-    pub fn new(id: u32, gate_type: AGateType, lh_input: u32, rh_input: u32, output: u32) -> Self {
+    pub fn new(op: AGateType, lh_in: u32, rh_in: u32, out: u32) -> Self {
         Self {
-            id,
-            gate_type,
-            lh_input,
-            rh_input,
-            output,
+            op,
+            lh_in,
+            rh_in,
+            out,
         }
     }
 }
 
 /// Represents an arithmetic circuit, with a set of variables and gates.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ArithmeticCircuit {
-    vars: HashMap<u32, Option<u32>>,
-    nodes: Vec<Node>,
-    gates: Vec<ArithmeticGate>,
     node_count: u32,
+    signals: HashMap<u32, Signal>,
+    nodes: HashMap<u32, Node>,
+    gates: Vec<ArithmeticGate>,
 }
 
 impl ArithmeticCircuit {
     /// Creates a new arithmetic circuit.
     pub fn new() -> ArithmeticCircuit {
         ArithmeticCircuit {
-            vars: HashMap::new(),
-            nodes: Vec::new(),
-            gates: Vec::new(),
             node_count: 0,
+            signals: HashMap::new(),
+            nodes: HashMap::new(),
+            gates: Vec::new(),
         }
     }
 
-    /// Adds a new signal variable to the circuit.
-    pub fn add_signal(&mut self, id: u32, name: String, value: Option<u32>) -> Result<(), CircuitError> {
-        // Check that the variable isn't already declared
-        if self.contains_var(&id) {
-            return Err(CircuitError::CircuitVariableAlreadyDeclared);
+    /// Adds a new signal to the circuit.
+    pub fn add_signal(
+        &mut self,
+        id: u32,
+        name: String,
+        value: Option<u32>,
+    ) -> Result<(), CircuitError> {
+        // Check that the signal isn't already declared
+        if self.signals.contains_key(&id) {
+            return Err(CircuitError::SignalAlreadyDeclared);
         }
-        self.vars.insert(id, value);
 
-        let ic = value.is_some();
-        let mut cv = 0;
-        if ic {
-            cv = value.unwrap();
-        }
-        
+        // Create a new signal
+        let signal = Signal::new(name, value);
+        self.signals.insert(id, signal);
 
-        // Create a new node for the signal
-        let node = Node::new(self.get_node_id(), id, name, ic, cv);
-        debug!("New {:?}", node);
+        // Create a new node
+        let node = Node::new_with_signal(id, false, value.is_some());
+        debug!("{:?}", node);
+        let node_id = self.get_node_id();
+        self.nodes.insert(node_id, node);
 
-        self.nodes.push(node);
         Ok(())
     }
 
@@ -185,165 +181,135 @@ impl ArithmeticCircuit {
     pub fn add_gate(
         &mut self,
         gate_type: AGateType,
-        lhs_id: u32,
-        rhs_id: u32,
-        output_id: u32,
+        lhs_signal_id: u32,
+        rhs_signal_id: u32,
+        output_signal_id: u32,
     ) -> Result<(), CircuitError> {
-        // Check that the inputs are declared
-        if !self.contains_var(&lhs_id)
-            || !self.contains_var(&rhs_id)
-            || !self.contains_var(&output_id)
-        {
-            return Err(CircuitError::VariableNotDeclared);
-        }
+        // Get the signal node ids
+        let node_ids = {
+            let mut nodes: [u32; 3] = [0; 3];
 
-        // Get the signal nodes
-        let lhs_node = self.get_signal_node(lhs_id)?;
-        let rhs_node = self.get_signal_node(rhs_id)?;
-        let output_node = self.get_signal_node(output_id)?;
+            for (&id, node) in self.nodes.iter() {
+                if node.contains_signal(&lhs_signal_id) {
+                    nodes[0] = id;
+                }
+                if node.contains_signal(&rhs_signal_id) {
+                    nodes[1] = id;
+                }
+                if node.contains_signal(&output_signal_id) {
+                    nodes[2] = id;
+                }
+            }
+
+            nodes
+        };
+
+        // Set the output node as an output node
+        self.nodes.get_mut(&node_ids[2]).unwrap().set_output(true);
 
         // Create gate
-        let gate = ArithmeticGate::new(
-            self.gate_count(),
-            gate_type,
-            lhs_node.id,
-            rhs_node.id,
-            output_node.id,
-        );
-        debug!("New {:?} ", gate);
-
+        let gate = ArithmeticGate::new(gate_type, node_ids[0], node_ids[1], node_ids[2]);
+        debug!("{:?}", gate);
         self.gates.push(gate);
+
         Ok(())
     }
 
     /// Creates a connection between two signals in the circuit.
-    /// This is done by finding the nodes that contain the signals and merging them.
+    /// This is finding the nodes that contain these signals and merging them.
     pub fn add_connection(&mut self, a: u32, b: u32) -> Result<(), CircuitError> {
-        // Check that the endpoints are declared
-        if !self.contains_var(&a) || !self.contains_var(&b) {
-            return Err(CircuitError::VariableNotDeclared);
-        }
+        // Get the signal node ids
+        let n = Node::new();
+        let nodes = {
+            let mut nodes: [(u32, &Node); 2] = [(0, &n); 2];
 
-        // Get the signal nodes
-        let node_a = self.get_signal_node(a)?;
-        let node_b = self.get_signal_node(b)?;
+            for (&id, node) in self.nodes.iter() {
+                if node.contains_signal(&a) {
+                    nodes[0] = (id, node);
+                }
+                if node.contains_signal(&b) {
+                    nodes[1] = (id, node);
+                }
+            }
 
-        // If both endpoints are in the same node, no action is needed
-        if node_a.id == node_b.id {
+            nodes
+        };
+
+        let (node_a_id, node_a) = nodes[0];
+        let (node_b_id, node_b) = nodes[1];
+
+        // If both signals are in the same node, no action is needed
+        if node_a_id == node_b_id {
             return Ok(());
         }
 
-        // Check if both nodes are used as outputs in any gate
-        if node_a.has_output(self) && node_b.has_output(self) {
+        // Check for output and constant nodes
+        if node_a.is_out && node_b.is_out {
             return Err(CircuitError::CannotMergeOutputNodes);
         }
 
-        // Merge the nodes
-        let merged_node = node_a.merge(&node_b, self.get_node_id());
+        if node_a.is_const && node_b.is_const {
+            return Err(CircuitError::CannotMergeConstantNodes);
+        }
+
+        // Merge the nodes into a new node
+        let mut merged_node = Node::new();
+
+        // Set the new node as an output and constant
+        merged_node.set_output(node_a.is_out || node_b.is_out);
+        merged_node.set_const(node_a.is_const || node_b.is_const);
+
+        merged_node.add_signals(node_a.get_signals());
+        merged_node.add_signals(node_b.get_signals());
+
+        let merged_node_id = self.get_node_id();
 
         // Update connections in gates to point to the new merged node
         self.gates.iter_mut().for_each(|gate| {
-            if gate.lh_input == node_a.id || gate.lh_input == node_b.id {
-                gate.lh_input = merged_node.id;
+            if gate.lh_in == node_a_id || gate.lh_in == node_b_id {
+                gate.lh_in = merged_node_id;
             }
-            if gate.rh_input == node_a.id || gate.rh_input == node_b.id {
-                gate.rh_input = merged_node.id;
+            if gate.rh_in == node_a_id || gate.rh_in == node_b_id {
+                gate.rh_in = merged_node_id;
             }
-            if gate.output == node_a.id || gate.output == node_b.id {
-                gate.output = merged_node.id;
+            if gate.out == node_a_id || gate.out == node_b_id {
+                gate.out = merged_node_id;
             }
         });
 
-        // Remove the old nodes and add the new merged node
-        self.nodes
-            .retain(|node| node.id != node_a.id && node.id != node_b.id);
-        self.nodes.push(merged_node);
+        // Remove the old nodes and insert the new merged node
+        self.nodes.remove(&node_a_id);
+        self.nodes.remove(&node_b_id);
+        self.nodes.insert(merged_node_id, merged_node);
 
         Ok(())
     }
 
-    /// Returns the node containing the given signal.
-    fn get_signal_node(&self, signal_id: u32) -> Result<Node, CircuitError> {
-        for node in &self.nodes {
-            if node.signals.contains(&signal_id) {
-                return Ok(node.clone());
-            }
-        }
-
-        Err(CircuitError::NodeNotFound)
-    }
-
-    /// Checks if the variable exists
-    pub fn contains_var(&self, var: &u32) -> bool {
-        self.vars.contains_key(var)
-    }
-
-    /// Returns the number of gates in the circuit.
-    pub fn gate_count(&self) -> u32 {
-        self.gates.len() as u32
-    }
-
-    /// Generates a new node id
+    /// Returns a node id and increments the count.
     fn get_node_id(&mut self) -> u32 {
         self.node_count += 1;
         self.node_count
     }
 }
 
-#[allow(dead_code)]
-/// Represents a gate in its raw, unchecked form, used during parsing.
-pub struct UncheckedGate {
-    xref: usize,
-    yref: Option<usize>,
-    zref: usize,
-    gate_type: GateType,
-}
-
-impl UncheckedGate {
-    #[allow(dead_code)]
-    pub fn parse(captures: Captures) -> Result<Self, CircuitError> {
-        let xref: usize = captures.name("xref").unwrap().as_str().parse()?;
-        let yref: Option<usize> = captures
-            .name("yref")
-            .map(|yref| yref.as_str().parse())
-            .transpose()?;
-        let zref: usize = captures.name("zref").unwrap().as_str().parse()?;
-        let gate_type = captures.name("gate").unwrap().as_str();
-
-        let gate_type = match gate_type {
-            "XOR" => GateType::Xor,
-            "AND" => GateType::And,
-            "INV" => GateType::Inv,
-            _ => return Err(CircuitError::UnsupportedGateType(gate_type.to_string())),
-        };
-
-        Ok(Self {
-            xref,
-            yref,
-            zref,
-            gate_type,
-        })
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum CircuitError {
+    #[error("Cannot merge constant nodes")]
+    CannotMergeConstantNodes,
     #[error("Cannot merge output nodes")]
     CannotMergeOutputNodes,
-    #[error("Circuit variable already declared")]
-    CircuitVariableAlreadyDeclared,
     #[error("Constant value already set for variable")]
     ConstantValueAlreadySet,
+    #[error("Signal is not connected to any node")]
+    DisconnectedSignal,
     #[error(transparent)]
     IOError(#[from] std::io::Error),
     #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
-    #[error("Node not found")]
-    NodeNotFound,
+    #[error("Signal already declared")]
+    SignalAlreadyDeclared,
     #[error("unsupported gate type: {0}")]
     UnsupportedGateType(String),
-    #[error("Variable not declared")]
-    VariableNotDeclared,
 }
 
 impl From<CircuitError> for ProgramError {
