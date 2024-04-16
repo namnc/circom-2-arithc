@@ -59,7 +59,7 @@ cargo build --release
 - Run the compilation
 
 ```
-cargo run
+cargo run --release
 ```
 
 ## Configuration
