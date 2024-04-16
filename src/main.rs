@@ -12,7 +12,7 @@ use std::{
 };
 
 fn main() -> Result<(), ProgramError> {
-    dotenv().expect("Failed to initialize environment");
+    optional_dotenv();
     init_from_env("LOG_LEVEL=info");
 
     let output_path = PathBuf::from(view().value_of("output").unwrap());
@@ -31,4 +31,23 @@ fn main() -> Result<(), ProgramError> {
     File::create(output_file_path)?.write_all(circuit_json.as_bytes())?;
 
     Ok(())
+}
+
+fn optional_dotenv() -> () {
+    let env_error = match dotenv() {
+        Ok(_) => None,
+        Err(e) => match &e {
+            dotenv::Error::Io(io_error) => match io_error.kind() {
+                // Allow missing .env file
+                std::io::ErrorKind::NotFound => Some(e),
+
+                _ => Some(e),
+            },
+            _ => Some(e),
+        }
+    };
+
+    if let Some(env_error) = env_error {
+        panic!("Failed to initialize environment: {}", env_error);
+    }
 }
