@@ -55,6 +55,8 @@ pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
         _ => return Err(ProgramError::MainExpressionNotACall),
     }
 
+    circuit.get_io_signals()?;
+
     Ok(circuit)
 }
 

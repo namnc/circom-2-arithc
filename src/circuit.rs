@@ -285,6 +285,38 @@ impl ArithmeticCircuit {
         Ok(())
     }
 
+    /// Get input and output signals of the circuit.
+    pub fn get_io_signals(&self) -> Result<(Vec<u32>, Vec<u32>), CircuitError> {
+        // Traverse all nodes and split them into input and output nodes
+        let mut input_nodes: Vec<u32> = Vec::new();
+        let mut output_nodes: Vec<u32> = Vec::new();
+
+        for node in self.nodes.values() {
+            if node.is_out {
+                output_nodes.push(node.get_signals()[0]);
+            } else {
+                input_nodes.push(node.get_signals()[0]);
+            }
+        }
+
+        // Traverse gates and remove output nodes that are input nodes for other gates
+        for gate in self.gates.iter() {
+            for (index, &output_node) in output_nodes.clone().iter().enumerate() {
+                if gate.lh_in == output_node {
+                    output_nodes.remove(index);
+                }
+                if gate.rh_in == output_node {
+                    output_nodes.remove(index);
+                }
+            }
+        }
+
+        println!("Input nodes: {:?}", input_nodes);
+        println!("Output nodes: {:?}", output_nodes);
+
+        Ok((Vec::new(), Vec::new()))
+    }
+
     /// Returns a node id and increments the count.
     fn get_node_id(&mut self) -> u32 {
         self.node_count += 1;
