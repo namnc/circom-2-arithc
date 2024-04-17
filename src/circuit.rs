@@ -285,36 +285,35 @@ impl ArithmeticCircuit {
         Ok(())
     }
 
-    /// Get input and output signals of the circuit.
-    pub fn get_io_signals(&self) -> Result<(Vec<u32>, Vec<u32>), CircuitError> {
-        // Traverse all nodes and split them into input and output nodes
-        let mut input_nodes: Vec<u32> = Vec::new();
-        let mut output_nodes: Vec<u32> = Vec::new();
-
-        for node in self.nodes.values() {
+    /// Get input and output nodes of the circuit.
+    pub fn generate_circuit_report(&self) -> Result<CircuitReport, CircuitError> {
+        // Split nodes into input and output using for_each for conciseness
+        let mut input_nodes = Vec::new();
+        let mut output_nodes = Vec::new();
+        self.nodes.iter().for_each(|(&id, node)| {
             if node.is_out {
-                output_nodes.push(node.get_signals()[0]);
+                output_nodes.push(id);
             } else {
-                input_nodes.push(node.get_signals()[0]);
+                input_nodes.push(id);
             }
-        }
+        });
 
-        // Traverse gates and remove output nodes that are input nodes for other gates
-        for gate in self.gates.iter() {
-            for (index, &output_node) in output_nodes.clone().iter().enumerate() {
-                if gate.lh_in == output_node {
-                    output_nodes.remove(index);
-                }
-                if gate.rh_in == output_node {
-                    output_nodes.remove(index);
-                }
-            }
-        }
+        // Filter output nodes that are inputs to gates
+        output_nodes.retain(|&id| {
+            self.gates
+                .iter()
+                .all(|gate| gate.lh_in != id && gate.rh_in != id)
+        });
 
-        println!("Input nodes: {:?}", input_nodes);
-        println!("Output nodes: {:?}", output_nodes);
+        // Generate reports
+        let input_signal_reports = generate_signal_reports(input_nodes, &self.nodes, &self.signals);
+        let output_signal_reports =
+            generate_signal_reports(output_nodes, &self.nodes, &self.signals);
 
-        Ok((Vec::new(), Vec::new()))
+        Ok(CircuitReport {
+            inputs: input_signal_reports,
+            outputs: output_signal_reports,
+        })
     }
 
     /// Returns a node id and increments the count.
@@ -322,6 +321,56 @@ impl ArithmeticCircuit {
         self.node_count += 1;
         self.node_count
     }
+}
+
+/// Represents a signal report, with a signal id, names, and value.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SignalReport {
+    id: u32,
+    names: Vec<String>,
+    value: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CircuitReport {
+    inputs: Vec<SignalReport>,
+    outputs: Vec<SignalReport>,
+}
+
+/// Helper function to generate signal reports for a set of nodes.
+fn generate_signal_reports(
+    mut nodes: Vec<u32>,
+    node_map: &HashMap<u32, Node>,
+    signal_map: &HashMap<u32, Signal>,
+) -> Vec<SignalReport> {
+    nodes.sort_unstable();
+    nodes
+        .iter()
+        .map(|&id| {
+            let signals = node_map
+                .get(&id)
+                .expect("Node ID not found in node map")
+                .get_signals();
+
+            let (names, value) = signals.iter().fold((Vec::new(), None), |mut acc, &sig_id| {
+                let signal = signal_map
+                    .get(&sig_id)
+                    .expect("Signal ID not found in signal map");
+
+                // Filter out random signal names
+                if !signal.name.contains("random_") {
+                    acc.0.push(signal.name.clone());
+                }
+
+                if signal.value.is_some() {
+                    acc.1 = signal.value;
+                }
+                acc
+            });
+
+            SignalReport { id, names, value }
+        })
+        .collect()
 }
 
 #[derive(Debug, Error)]

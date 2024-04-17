@@ -26,9 +26,14 @@ fn main() -> Result<(), ProgramError> {
         .ok_or(ProgramError::OutputDirectoryCreationError)?
         .to_path_buf();
 
-    let circuit_json = to_string(&build_circuit(&input)?)?;
+    let circuit = build_circuit(&input)?;
+    let report = circuit.generate_circuit_report()?;
+
     let output_file_path = Input::build_output(&output_dir, &input.out_wasm_name, "json");
-    File::create(output_file_path)?.write_all(circuit_json.as_bytes())?;
+    File::create(output_file_path)?.write_all(to_string(&circuit)?.as_bytes())?;
+
+    let report_file_path = PathBuf::from("./output/report.json");
+    File::create(report_file_path)?.write_all(to_string(&report)?.as_bytes())?;
 
     Ok(())
 }
