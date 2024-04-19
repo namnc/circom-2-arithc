@@ -68,7 +68,6 @@ The CLI provides options to specify both input and output file paths, allowing f
 
 ### Command Line Arguments
 
-- `--input`: Specifies the path to the input circom program file. By default, the program looks for `circuit.circom` in the `assets` directory.
 - `--output`: Specifies the path to the output directory where the generated arithmetic circuit files will be stored. By default, it's saved in the `./output` directory.
 
 #### Example
@@ -76,7 +75,7 @@ The CLI provides options to specify both input and output file paths, allowing f
 To run the program with specific input file path and output directory path, use the following command format:
 
 ```bash
-./target/release/circom --input ./input-path/circuit.circom --output ./output-path/
+./target/release/circom --output ./output-path/
 ```
 
 ## ZK/MPC/FHE backends:

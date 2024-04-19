@@ -19,7 +19,8 @@ fn main() -> Result<(), ProgramError> {
 
     fs::create_dir_all(output_path).map_err(|_| ProgramError::OutputDirectoryCreationError)?;
 
-    let input = Input::new().map_err(|_| ProgramError::InputInitializationError)?;
+    let input = Input::new(PathBuf::from("./src/assets/circuit.circom"))
+        .map_err(|_| ProgramError::InputInitializationError)?;
     let output_dir = input
         .out_r1cs
         .parent()
