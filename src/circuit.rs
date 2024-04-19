@@ -7,7 +7,7 @@ use bmr16_mpz::{
     arithmetic::{
         circuit::ArithmeticCircuit as MpzCircuit,
         ops::{add, cmul, mul, sub},
-        types::{CircInput, CrtRepr},
+        types::CrtRepr,
         ArithCircuitError as MpzCircuitError,
     },
     ArithmeticCircuitBuilder,
@@ -294,7 +294,7 @@ impl ArithmeticCircuit {
         Ok(())
     }
 
-    /// Get input and output nodes of the circuit.
+    /// Generates a report of the circuit, with input and output signals.
     pub fn generate_circuit_report(&self) -> Result<CircuitReport, CircuitError> {
         // Split nodes into input and output using for_each for conciseness
         let mut input_nodes = Vec::new();
@@ -325,114 +325,92 @@ impl ArithmeticCircuit {
         })
     }
 
-    // Builds an arithmetic circuit using the mpz circuit builder.
+    /// Builds an arithmetic circuit using the mpz circuit builder.
     pub fn build_mpz_circuit(&self, report: &CircuitReport) -> Result<MpzCircuit, CircuitError> {
         let builder = ArithmeticCircuitBuilder::new();
 
-        // Create input signals
-        let mut inputs: HashMap<u32, CircInput> = HashMap::new();
-        for signal in &report.inputs {
-            let input = builder.add_input::<u32>(signal.names[0].clone())?;
+        // Initialize CRT signals map with the circuit inputs
+        let mut crt_signals: HashMap<u32, CrtRepr> =
+            report
+                .inputs
+                .iter()
+                .try_fold(HashMap::new(), |mut acc, signal| {
+                    let input = builder
+                        .add_input::<u32>(signal.names[0].to_string())
+                        .map_err(|e| CircuitError::MPZCircuitError(e))?;
+                    acc.insert(signal.id, input.repr);
+                    Ok::<_, CircuitError>(acc)
+                })?;
 
-            inputs.insert(signal.id, input);
-        }
+        // Initialize a vec for indices of gates that need processing
+        let mut to_process = std::collections::VecDeque::new();
+        to_process.extend(0..self.gates.len());
 
-        // Create intermediate and output signals
-        let mut signals: HashMap<u32, CrtRepr> = HashMap::new();
-        let mut pending_gates = self.gates.clone();
+        while let Some(index) = to_process.pop_front() {
+            let gate = &self.gates[index];
 
-        while !pending_gates.is_empty() {
-            let mut to_remove = Vec::new();
-
-            for (index, gate) in pending_gates.iter().enumerate() {
-                // Attempt to get inputs for the gate
-                let lh_in = if inputs.get(&gate.lh_in).is_none() {
-                    if signals.get(&gate.rh_in).is_none() {
-                        continue;
-                    } else {
-                        signals.get(&gate.rh_in).unwrap()
+            if let (Some(lh_in_repr), Some(rh_in_repr)) =
+                (crt_signals.get(&gate.lh_in), crt_signals.get(&gate.rh_in))
+            {
+                let result_repr = match gate.op {
+                    AGateType::AAdd => {
+                        add(&mut builder.state().borrow_mut(), lh_in_repr, rh_in_repr)
+                            .map_err(|e| e.into())
                     }
-                } else {
-                    &inputs.get(&gate.lh_in).unwrap().repr
-                };
+                    AGateType::AMul => {
+                        // Get the constant value from one of the signals if available
+                        let constant_value = self
+                            .signals
+                            .get(&gate.lh_in)
+                            .and_then(|signal| signal.value.map(|v| v as u64))
+                            .or_else(|| {
+                                self.signals
+                                    .get(&gate.rh_in)
+                                    .and_then(|signal| signal.value.map(|v| v as u64))
+                            });
 
-                let rh_in = if inputs.get(&gate.rh_in).is_none() {
-                    if signals.get(&gate.rh_in).is_none() {
-                        continue;
-                    } else {
-                        signals.get(&gate.rh_in).unwrap()
-                    }
-                } else {
-                    &inputs.get(&gate.rh_in).unwrap().repr
-                };
-
-                // Check if any of these is a constant signal
-                let is_const = self.nodes.get(&gate.lh_in).unwrap().is_const
-                    || self.nodes.get(&gate.rh_in).unwrap().is_const;
-
-                let output_gate = match gate.op {
-                    AGateType::AAdd => add(&mut builder.state().borrow_mut(), lh_in, rh_in),
-                    AGateType::AMul if is_const => {
-                        let constant_value: u64 = if self.nodes.get(&gate.lh_in).unwrap().is_const {
-                            // Check all signals for the constant value until it is found
-                            let mut constant_value: u64 = 0;
-                            for signal in self.nodes.get(&gate.lh_in).unwrap().get_signals() {
-                                if let Some(value) = self.signals.get(signal).unwrap().value {
-                                    constant_value = value as u64;
-                                    break;
-                                }
-                            }
-                            constant_value
+                        // Perform multiplication depending on whether one input is a constant
+                        if let Some(value) = constant_value {
+                            Ok::<_, CircuitError>(cmul(
+                                &mut builder.state().borrow_mut(),
+                                lh_in_repr,
+                                value,
+                            ))
                         } else {
-                            // Check all signals for the constant value until it is found
-                            let mut constant_value: u64 = 0;
-                            for signal in self.nodes.get(&gate.rh_in).unwrap().get_signals() {
-                                if let Some(value) = self.signals.get(signal).unwrap().value {
-                                    constant_value = value as u64;
-                                    break;
-                                }
-                            }
-                            constant_value
-                        };
-                        Ok(cmul(
-                            &mut builder.state().borrow_mut(),
-                            lh_in,
-                            constant_value,
-                        ))
+                            mul(&mut builder.state().borrow_mut(), lh_in_repr, rh_in_repr)
+                                .map_err(|e| e.into())
+                        }
                     }
-                    AGateType::AMul => mul(&mut builder.state().borrow_mut(), lh_in, rh_in),
-                    AGateType::ASub => sub(&mut builder.state().borrow_mut(), lh_in, rh_in),
+                    AGateType::ASub => {
+                        sub(&mut builder.state().borrow_mut(), lh_in_repr, rh_in_repr)
+                            .map_err(|e| e.into())
+                    }
                     _ => {
                         return Err(CircuitError::UnsupportedGateType(format!(
                             "{:?} not supported by MPZ",
                             gate.op
                         )))
                     }
-                };
+                }?;
 
-                if let Ok(out) = output_gate {
-                    signals.insert(gate.out, out);
-                    to_remove.push(index);
-                }
-            }
-
-            // Sort indices in reverse order to safely remove gates from the vector without affecting the positions of unprocessed elements
-            to_remove.sort_unstable();
-            to_remove.reverse();
-            for index in to_remove {
-                pending_gates.remove(index);
+                crt_signals.insert(gate.out, result_repr);
+            } else {
+                // Not ready to process, push back for later attempt.
+                to_process.push_back(index);
             }
         }
 
         // Add output signals
         for signal in &report.outputs {
-            let output = signals.get(&signal.id).unwrap();
-            builder.add_output(output);
+            let output_repr = crt_signals
+                .get(&signal.id)
+                .ok_or_else(|| CircuitError::UnprocessedNode)?;
+            builder.add_output(output_repr);
         }
 
-        Ok(builder
+        builder
             .build()
-            .map_err(|_| CircuitError::MPZCircuitBuilderError)?)
+            .map_err(|_| CircuitError::MPZCircuitBuilderError)
     }
 
     /// Returns a node id and increments the count.
@@ -514,6 +492,8 @@ pub enum CircuitError {
     SignalAlreadyDeclared,
     #[error("unsupported gate type: {0}")]
     UnsupportedGateType(String),
+    #[error("Unprocessed node")]
+    UnprocessedNode,
 }
 
 impl From<CircuitError> for ProgramError {
