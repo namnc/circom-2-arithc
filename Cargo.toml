@@ -35,4 +35,3 @@ bmr16-mpz = { git = "https://github.com/tkmct/mpz", package = "mpz-circuits"}
 [[bin]]
 name="circom"
 path="./src/main.rs"
-
