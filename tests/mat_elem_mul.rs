@@ -9,5 +9,5 @@ fn matrix_element_multiplication() {
 
     let circuit_input = vec![2, 2, 2, 2, 2, 2, 2, 2];
     let res = mpz_circuit.evaluate(&circuit_input).unwrap();
-    assert_eq!(res, vec![4, 4, 4, 6]);
+    assert_eq!(res, vec![4, 4, 4, 4]);
 }
