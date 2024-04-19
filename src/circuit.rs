@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 /// Types of gates that can be used in an arithmetic circuit.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum AGateType {
     AAdd,
     ADiv,
@@ -121,7 +121,7 @@ impl Node {
 }
 
 /// Represents a circuit gate, with a left-hand input, right-hand input, and output node identifiers.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ArithmeticGate {
     op: AGateType,
     lh_in: u32,
