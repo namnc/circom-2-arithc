@@ -17,9 +17,10 @@ fn main() -> Result<(), ProgramError> {
 
     let output_path = PathBuf::from(view().value_of("output").unwrap());
 
-    fs::create_dir_all(output_path).map_err(|_| ProgramError::OutputDirectoryCreationError)?;
+    fs::create_dir_all(output_path.clone())
+        .map_err(|_| ProgramError::OutputDirectoryCreationError)?;
 
-    let input = Input::new(PathBuf::from("./src/assets/circuit.circom"))
+    let input = Input::new(PathBuf::from("./src/assets/circuit.circom"), output_path)
         .map_err(|_| ProgramError::InputInitializationError)?;
     let output_dir = input
         .out_r1cs

@@ -337,7 +337,7 @@ impl ArithmeticCircuit {
                 .try_fold(HashMap::new(), |mut acc, signal| {
                     let input = builder
                         .add_input::<u32>(signal.names[0].to_string())
-                        .map_err(|e| CircuitError::MPZCircuitError(e))?;
+                        .map_err(CircuitError::MPZCircuitError)?;
                     acc.insert(signal.id, input.repr);
                     Ok::<_, CircuitError>(acc)
                 })?;

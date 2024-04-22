@@ -62,21 +62,7 @@ cargo build --release
 cargo run
 ```
 
-## Configuration
-
-The CLI provides options to specify both input and output file paths, allowing flexibility in how you manage your circom program files and the resulting arithmetic circuits.
-
-### Command Line Arguments
-
-- `--output`: Specifies the path to the output directory where the generated arithmetic circuit files will be stored. By default, it's saved in the `./output` directory.
-
-#### Example
-
-To run the program with specific input file path and output directory path, use the following command format:
-
-```bash
-./target/release/circom --output ./output-path/
-```
+The compiled circuit and circuit report can be found in the `./output` directory.
 
 ## ZK/MPC/FHE backends:
 
