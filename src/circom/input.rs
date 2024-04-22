@@ -47,10 +47,9 @@ const SYM: &str = "sym";
 const JSON: &str = "json";
 
 impl Input {
-    pub fn new(input: PathBuf, output: PathBuf) -> Result<Input, ()> {
+    pub fn new(input: PathBuf, output_path: PathBuf) -> Result<Input, ()> {
         let matches = input_processing::view();
         let mut file_name = input.file_stem().unwrap().to_str().unwrap().to_string();
-        let output_path = input_processing::get_output_path(&matches)?;
 
         let c_flag = input_processing::get_c(&matches);
 
@@ -65,7 +64,7 @@ impl Input {
         Result::Ok(Input {
             //field: P_BN128,
             input_program: input,
-            out_r1cs: output,
+            out_r1cs: Input::build_output(&output_path, &file_name, R1CS),
             out_wat_code: Input::build_output(&output_js_path, &file_name, WAT),
             out_wasm_code: Input::build_output(&output_js_path, &file_name, WASM),
             out_js_folder: output_js_path.clone(),
