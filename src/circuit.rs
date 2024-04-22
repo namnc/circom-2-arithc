@@ -294,9 +294,9 @@ impl ArithmeticCircuit {
         Ok(())
     }
 
-    /// Generates a report of the circuit, with input and output signals.
+    /// Generates a circuit report with input and output signals information.
     pub fn generate_circuit_report(&self) -> Result<CircuitReport, CircuitError> {
-        // Split nodes into input and output using for_each for conciseness
+        // Split input and output nodes
         let mut input_nodes = Vec::new();
         let mut output_nodes = Vec::new();
         self.nodes.iter().for_each(|(&id, node)| {
@@ -307,22 +307,22 @@ impl ArithmeticCircuit {
             }
         });
 
-        // Filter output nodes that are inputs to gates
+        // Remove output nodes that are inputs to gates
         output_nodes.retain(|&id| {
             self.gates
                 .iter()
                 .all(|gate| gate.lh_in != id && gate.rh_in != id)
         });
 
-        // Generate reports
-        let input_signal_reports = generate_signal_reports(input_nodes, &self.nodes, &self.signals);
-        let output_signal_reports =
-            generate_signal_reports(output_nodes, &self.nodes, &self.signals);
+        // Sort
+        input_nodes.sort_unstable();
+        output_nodes.sort_unstable();
 
-        Ok(CircuitReport {
-            inputs: input_signal_reports,
-            outputs: output_signal_reports,
-        })
+        // Generate reports
+        let inputs = self.generate_signal_reports(&input_nodes);
+        let outputs = self.generate_signal_reports(&output_nodes);
+
+        Ok(CircuitReport { inputs, outputs })
     }
 
     /// Builds an arithmetic circuit using the mpz circuit builder.
@@ -418,56 +418,52 @@ impl ArithmeticCircuit {
         self.node_count += 1;
         self.node_count
     }
+
+    /// Generates signal reports for a set of node IDs.
+    fn generate_signal_reports(&self, nodes: &[u32]) -> Vec<SignalReport> {
+        nodes
+            .iter()
+            .map(|&id| {
+                let signals = self
+                    .nodes
+                    .get(&id)
+                    .expect("Node ID not found in node map")
+                    .get_signals();
+
+                let (names, value) = signals.iter().fold((Vec::new(), None), |mut acc, &sig_id| {
+                    let signal = self
+                        .signals
+                        .get(&sig_id)
+                        .expect("Signal ID not found in signal map");
+
+                    if !signal.name.contains("random_") {
+                        acc.0.push(signal.name.clone());
+                    }
+                    if signal.value.is_some() {
+                        acc.1 = signal.value;
+                    }
+                    acc
+                });
+
+                SignalReport { id, names, value }
+            })
+            .collect()
+    }
 }
 
-/// Represents a signal report, with a signal id, names, and value.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SignalReport {
-    id: u32,
-    names: Vec<String>,
-    value: Option<u32>,
-}
-
+/// The full circuit report, containing input and output signals information.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CircuitReport {
     inputs: Vec<SignalReport>,
     outputs: Vec<SignalReport>,
 }
 
-/// Helper function to generate signal reports for a set of nodes.
-fn generate_signal_reports(
-    mut nodes: Vec<u32>,
-    node_map: &HashMap<u32, Node>,
-    signal_map: &HashMap<u32, Signal>,
-) -> Vec<SignalReport> {
-    nodes.sort_unstable();
-    nodes
-        .iter()
-        .map(|&id| {
-            let signals = node_map
-                .get(&id)
-                .expect("Node ID not found in node map")
-                .get_signals();
-
-            let (names, value) = signals.iter().fold((Vec::new(), None), |mut acc, &sig_id| {
-                let signal = signal_map
-                    .get(&sig_id)
-                    .expect("Signal ID not found in signal map");
-
-                // Filter out random signal names
-                if !signal.name.contains("random_") {
-                    acc.0.push(signal.name.clone());
-                }
-
-                if signal.value.is_some() {
-                    acc.1 = signal.value;
-                }
-                acc
-            });
-
-            SignalReport { id, names, value }
-        })
-        .collect()
+/// A single node report, with a list of signal names and an optional value.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SignalReport {
+    id: u32,
+    names: Vec<String>,
+    value: Option<u32>,
 }
 
 #[derive(Debug, Error)]
