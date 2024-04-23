@@ -30,8 +30,8 @@ circom-type_analysis =  { git = "https://github.com/iden3/circom", package = "ty
 
 # MPZ
 mpz-circuits =  { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits"}
+bmr16-mpz = { git = "https://github.com/tkmct/mpz", package = "mpz-circuits"}
 
 [[bin]]
 name="circom"
 path="./src/main.rs"
-

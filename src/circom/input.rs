@@ -36,6 +36,7 @@ pub struct Input {
     pub link_libraries : Vec<PathBuf>
 }
 
+#[allow(dead_code)]
 const R1CS: &str = "r1cs";
 const WAT: &str = "wat";
 const WASM: &str = "wasm";
@@ -46,11 +47,9 @@ const SYM: &str = "sym";
 const JSON: &str = "json";
 
 impl Input {
-    pub fn new() -> Result<Input, ()> {
+    pub fn new(input: PathBuf, output_path: PathBuf) -> Result<Input, ()> {
         let matches = input_processing::view();
-        let input = input_processing::get_input(&matches)?;
         let mut file_name = input.file_stem().unwrap().to_str().unwrap().to_string();
-        let output_path = input_processing::get_output_path(&matches)?;
 
         let c_flag = input_processing::get_c(&matches);
 
@@ -347,13 +346,6 @@ pub mod input_processing {
             .version(VERSION)
             .author("IDEN3")
             .about("Compiler for the circom programming language")
-            .arg(
-                Arg::with_name("input")
-                    .long("input")
-                    .multiple(false)
-                    .default_value("./src/assets/circuit.circom")
-                    .help("Path to a circuit with a main component"),
-            )
             .arg(
                 Arg::with_name("no_simplification")
                     .long("O0")

@@ -3,6 +3,15 @@
 //! This module defines the data structures used to represent the arithmetic circuit.
 
 use crate::program::ProgramError;
+use bmr16_mpz::{
+    arithmetic::{
+        circuit::ArithmeticCircuit as MpzCircuit,
+        ops::{add, cmul, mul, sub},
+        types::CrtRepr,
+        ArithCircuitError as MpzCircuitError,
+    },
+    ArithmeticCircuitBuilder,
+};
 use circom_program_structure::ast::ExpressionInfixOpcode;
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -285,11 +294,176 @@ impl ArithmeticCircuit {
         Ok(())
     }
 
+    /// Generates a circuit report with input and output signals information.
+    pub fn generate_circuit_report(&self) -> Result<CircuitReport, CircuitError> {
+        // Split input and output nodes
+        let mut input_nodes = Vec::new();
+        let mut output_nodes = Vec::new();
+        self.nodes.iter().for_each(|(&id, node)| {
+            if node.is_out {
+                output_nodes.push(id);
+            } else {
+                input_nodes.push(id);
+            }
+        });
+
+        // Remove output nodes that are inputs to gates
+        output_nodes.retain(|&id| {
+            self.gates
+                .iter()
+                .all(|gate| gate.lh_in != id && gate.rh_in != id)
+        });
+
+        // Sort
+        input_nodes.sort_unstable();
+        output_nodes.sort_unstable();
+
+        // Generate reports
+        let inputs = self.generate_signal_reports(&input_nodes);
+        let outputs = self.generate_signal_reports(&output_nodes);
+
+        Ok(CircuitReport { inputs, outputs })
+    }
+
+    /// Builds an arithmetic circuit using the mpz circuit builder.
+    pub fn build_mpz_circuit(&self, report: &CircuitReport) -> Result<MpzCircuit, CircuitError> {
+        let builder = ArithmeticCircuitBuilder::new();
+
+        // Initialize CRT signals map with the circuit inputs
+        let mut crt_signals: HashMap<u32, CrtRepr> =
+            report
+                .inputs
+                .iter()
+                .try_fold(HashMap::new(), |mut acc, signal| {
+                    let input = builder
+                        .add_input::<u32>(signal.names[0].to_string())
+                        .map_err(CircuitError::MPZCircuitError)?;
+                    acc.insert(signal.id, input.repr);
+                    Ok::<_, CircuitError>(acc)
+                })?;
+
+        // Initialize a vec for indices of gates that need processing
+        let mut to_process = std::collections::VecDeque::new();
+        to_process.extend(0..self.gates.len());
+
+        while let Some(index) = to_process.pop_front() {
+            let gate = &self.gates[index];
+
+            if let (Some(lh_in_repr), Some(rh_in_repr)) =
+                (crt_signals.get(&gate.lh_in), crt_signals.get(&gate.rh_in))
+            {
+                let result_repr = match gate.op {
+                    AGateType::AAdd => {
+                        add(&mut builder.state().borrow_mut(), lh_in_repr, rh_in_repr)
+                            .map_err(|e| e.into())
+                    }
+                    AGateType::AMul => {
+                        // Get the constant value from one of the signals if available
+                        let constant_value = self
+                            .signals
+                            .get(&gate.lh_in)
+                            .and_then(|signal| signal.value.map(|v| v as u64))
+                            .or_else(|| {
+                                self.signals
+                                    .get(&gate.rh_in)
+                                    .and_then(|signal| signal.value.map(|v| v as u64))
+                            });
+
+                        // Perform multiplication depending on whether one input is a constant
+                        if let Some(value) = constant_value {
+                            Ok::<_, CircuitError>(cmul(
+                                &mut builder.state().borrow_mut(),
+                                lh_in_repr,
+                                value,
+                            ))
+                        } else {
+                            mul(&mut builder.state().borrow_mut(), lh_in_repr, rh_in_repr)
+                                .map_err(|e| e.into())
+                        }
+                    }
+                    AGateType::ASub => {
+                        sub(&mut builder.state().borrow_mut(), lh_in_repr, rh_in_repr)
+                            .map_err(|e| e.into())
+                    }
+                    _ => {
+                        return Err(CircuitError::UnsupportedGateType(format!(
+                            "{:?} not supported by MPZ",
+                            gate.op
+                        )))
+                    }
+                }?;
+
+                crt_signals.insert(gate.out, result_repr);
+            } else {
+                // Not ready to process, push back for later attempt.
+                to_process.push_back(index);
+            }
+        }
+
+        // Add output signals
+        for signal in &report.outputs {
+            let output_repr = crt_signals
+                .get(&signal.id)
+                .ok_or_else(|| CircuitError::UnprocessedNode)?;
+            builder.add_output(output_repr);
+        }
+
+        builder
+            .build()
+            .map_err(|_| CircuitError::MPZCircuitBuilderError)
+    }
+
     /// Returns a node id and increments the count.
     fn get_node_id(&mut self) -> u32 {
         self.node_count += 1;
         self.node_count
     }
+
+    /// Generates signal reports for a set of node IDs.
+    fn generate_signal_reports(&self, nodes: &[u32]) -> Vec<SignalReport> {
+        nodes
+            .iter()
+            .map(|&id| {
+                let signals = self
+                    .nodes
+                    .get(&id)
+                    .expect("Node ID not found in node map")
+                    .get_signals();
+
+                let (names, value) = signals.iter().fold((Vec::new(), None), |mut acc, &sig_id| {
+                    let signal = self
+                        .signals
+                        .get(&sig_id)
+                        .expect("Signal ID not found in signal map");
+
+                    if !signal.name.contains("random_") {
+                        acc.0.push(signal.name.clone());
+                    }
+                    if signal.value.is_some() {
+                        acc.1 = signal.value;
+                    }
+                    acc
+                });
+
+                SignalReport { id, names, value }
+            })
+            .collect()
+    }
+}
+
+/// The full circuit report, containing input and output signals information.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CircuitReport {
+    inputs: Vec<SignalReport>,
+    outputs: Vec<SignalReport>,
+}
+
+/// A single node report, with a list of signal names and an optional value.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SignalReport {
+    id: u32,
+    names: Vec<String>,
+    value: Option<u32>,
 }
 
 #[derive(Debug, Error)]
@@ -304,16 +478,28 @@ pub enum CircuitError {
     DisconnectedSignal,
     #[error(transparent)]
     IOError(#[from] std::io::Error),
+    #[error("MPZ arithmetic circuit error: {0}")]
+    MPZCircuitError(MpzCircuitError),
+    #[error("MPZ arithmetic circuit builder error")]
+    MPZCircuitBuilderError,
     #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("Signal already declared")]
     SignalAlreadyDeclared,
     #[error("unsupported gate type: {0}")]
     UnsupportedGateType(String),
+    #[error("Unprocessed node")]
+    UnprocessedNode,
 }
 
 impl From<CircuitError> for ProgramError {
     fn from(e: CircuitError) -> Self {
         ProgramError::CircuitError(e)
+    }
+}
+
+impl From<MpzCircuitError> for CircuitError {
+    fn from(e: MpzCircuitError) -> Self {
+        CircuitError::MPZCircuitError(e)
     }
 }
