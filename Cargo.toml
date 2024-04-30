@@ -13,7 +13,7 @@ rand = "0.8.5"
 regex = "1.10.3"
 serde_json = "1.0"
 serde = { version = "1.0.196", features = ["derive"] } 
-thiserror = "1.0.56"
+thiserror = "1.0.59"
 
 # DSL
 circom-circom_algebra =  { git = "https://github.com/iden3/circom", package = "circom_algebra"}
@@ -29,8 +29,9 @@ circom-program_structure =  { git = "https://github.com/iden3/circom", package =
 circom-type_analysis =  { git = "https://github.com/iden3/circom", package = "type_analysis"}
 
 # MPZ
-mpz-circuits =  { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits"}
-bmr16-mpz = { git = "https://github.com/tkmct/mpz", package = "mpz-circuits"}
+mpz-circuits =  { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits" }
+bmr16-mpz = { git = "https://github.com/tkmct/mpz", package = "mpz-circuits" }
+sim-circuit = { git = "https://github.com/brech1/sim-circuit" }
 
 [[bin]]
 name="circom"
