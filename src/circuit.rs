@@ -15,6 +15,7 @@ use bmr16_mpz::{
 use circom_program_structure::ast::ExpressionInfixOpcode;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use sim_circuit::circuit::{Circuit as SimCircuit, Gate as SimGate, Node as SimNode, Operation};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -30,7 +31,6 @@ pub enum AGateType {
     ALt,
     AMul,
     ANeq,
-    ANone,
     ASub,
 }
 
@@ -47,7 +47,24 @@ impl From<&ExpressionInfixOpcode> for AGateType {
             ExpressionInfixOpcode::Mul => AGateType::AMul,
             ExpressionInfixOpcode::NotEq => AGateType::ANeq,
             ExpressionInfixOpcode::Sub => AGateType::ASub,
-            _ => AGateType::ANone,
+            _ => unimplemented!("Unsupported opcode"),
+        }
+    }
+}
+
+impl From<&AGateType> for Operation {
+    fn from(gate: &AGateType) -> Self {
+        match gate {
+            AGateType::AAdd => Operation::Add,
+            AGateType::ASub => Operation::Subtract,
+            AGateType::AMul => Operation::Multiply,
+            AGateType::ADiv => Operation::Divide,
+            AGateType::AEq => Operation::Equals,
+            AGateType::ANeq => Operation::NotEquals,
+            AGateType::ALt => Operation::LessThan,
+            AGateType::ALEq => Operation::LessOrEqual,
+            AGateType::AGt => Operation::GreaterThan,
+            AGateType::AGEq => Operation::GreaterOrEqual,
         }
     }
 }
@@ -251,7 +268,6 @@ impl ArithmeticCircuit {
         if node_a_id == node_b_id {
             return Ok(());
         }
-
         // Check for output and constant nodes
         if node_a.is_out && node_b.is_out {
             return Err(CircuitError::CannotMergeOutputNodes);
@@ -411,6 +427,33 @@ impl ArithmeticCircuit {
         builder
             .build()
             .map_err(|_| CircuitError::MPZCircuitBuilderError)
+    }
+
+    /// Builds a sim circuit instance.
+    pub fn build_sim_circuit(&self) -> Result<SimCircuit, CircuitError> {
+        let mut sim_circuit = SimCircuit::new();
+
+        // Add nodes
+        for (&id, node) in &self.nodes {
+            let mut new_node = SimNode::new();
+            if let Some(value) = node
+                .signals
+                .first()
+                .and_then(|&sig_id| self.signals.get(&sig_id).and_then(|sig| sig.value))
+            {
+                new_node.set_value(value);
+            }
+            sim_circuit.add_node(id, new_node);
+        }
+
+        // Add gates
+        for gate in &self.gates {
+            let operation = Operation::from(&gate.op);
+            let sim_gate = SimGate::new(operation, gate.lh_in, gate.rh_in, gate.out);
+            sim_circuit.add_gate(sim_gate);
+        }
+
+        Ok(sim_circuit)
     }
 
     /// Returns a node id and increments the count.
