@@ -59,7 +59,7 @@ cargo build --release
 - Run the compilation
 
 ```
-cargo run
+cargo run --release
 ```
 
 The compiled circuit and circuit report can be found in the `./output` directory.

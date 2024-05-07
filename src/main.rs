@@ -3,7 +3,7 @@ use circom_2_arithc::{
     program::{build_circuit, ProgramError},
 };
 use dotenv::dotenv;
-use env_logger::init_from_env;
+use env_logger::{init_from_env, Env};
 use serde_json::to_string;
 use std::{
     fs::{self, File},
@@ -12,8 +12,8 @@ use std::{
 };
 
 fn main() -> Result<(), ProgramError> {
-    dotenv().expect("Failed to initialize environment");
-    init_from_env("LOG_LEVEL=info");
+    dotenv().ok();
+    init_from_env(Env::default().filter_or("LOG_LEVEL", "info"));
 
     let output_path = PathBuf::from(view().value_of("output").unwrap());
 
