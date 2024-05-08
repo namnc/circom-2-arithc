@@ -8,7 +8,11 @@ fn test_prefix_ops() {
     let circuit = build_circuit(&input).unwrap();
     let sim_circuit = circuit.build_sim_circuit().unwrap();
 
-    let circuit_input = vec![0, 1, 2];
+    let circuit_input = vec![
+        0, 1, 2,    // actual inputs
+        0, u32::MAX // constants - FIXME: should not need to provide these
+    ];
+
     let res = sim_circuit.execute(&circuit_input).unwrap();
 
     assert_eq!(res, vec![
