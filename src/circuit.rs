@@ -32,6 +32,7 @@ pub enum AGateType {
     AMul,
     ANeq,
     ASub,
+    AXor,
 }
 
 impl From<&ExpressionInfixOpcode> for AGateType {
@@ -47,6 +48,7 @@ impl From<&ExpressionInfixOpcode> for AGateType {
             ExpressionInfixOpcode::Mul => AGateType::AMul,
             ExpressionInfixOpcode::NotEq => AGateType::ANeq,
             ExpressionInfixOpcode::Sub => AGateType::ASub,
+            ExpressionInfixOpcode::BitXor => AGateType::AXor,
             _ => unimplemented!("Unsupported opcode"),
         }
     }
@@ -65,6 +67,7 @@ impl From<&AGateType> for Operation {
             AGateType::ALEq => Operation::LessOrEqual,
             AGateType::AGt => Operation::GreaterThan,
             AGateType::AGEq => Operation::GreaterOrEqual,
+            AGateType::AXor => Operation::XorBitwise,
         }
     }
 }
