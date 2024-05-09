@@ -4,7 +4,7 @@
 
 use crate::{
     circom::{input::Input, parser::parse_project, type_analysis::analyse_project},
-    circuit::{ArithmeticCircuit, CircuitError},
+    circuit::{AGateType, ArithmeticCircuit, CircuitError},
     process::{process_expression, process_statements},
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
 };
@@ -54,6 +54,26 @@ pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
         }
         _ => return Err(ProgramError::MainExpressionNotACall),
     }
+
+    Ok(circuit)
+}
+
+pub fn build_circuit_pure(
+    main: &str,
+    _read_file: impl Fn(&str) -> String
+) -> Result<ArithmeticCircuit, ProgramError> {
+    if main == "(make_error)" {
+        return Err(ProgramError::OperationError("testing error".into()));
+    }
+
+    let mut circuit = ArithmeticCircuit::new();
+
+    circuit.add_signal(0, "a".into(), None)?;
+    circuit.add_signal(1, "b".into(), None)?;
+
+    circuit.add_signal(2, "c".into(), None)?;
+
+    circuit.add_gate(AGateType::AAdd, 0, 1, 2)?;
 
     Ok(circuit)
 }
