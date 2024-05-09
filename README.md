@@ -30,7 +30,7 @@ This library enables the creation of arithmetic circuits from circom programs.
 |                 | `InfixOp`                |    ✅     |
 |                 | `Number`                 |    ✅     |
 |                 | `Variable`               |    ✅     |
-|                 | `PrefixOp`               |    ❌     |
+|                 | `PrefixOp`               |    ✅     |
 |                 | `InlineSwitchOp`         |    ❌     |
 |                 | `ParallelOp`             |    ❌     |
 |                 | `AnonymousComp`          |    ❌     |

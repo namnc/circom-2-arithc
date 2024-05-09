@@ -10,7 +10,7 @@ use crate::runtime::{
 };
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
-    Access, AssignOp, Expression, ExpressionInfixOpcode, Statement,
+    Access, AssignOp, Expression, ExpressionInfixOpcode, ExpressionPrefixOpcode, Statement
 };
 use circom_program_structure::program_archive::ProgramArchive;
 use std::cell::RefCell;
@@ -272,6 +272,9 @@ pub fn process_expression(
         Expression::InfixOp {
             lhe, infix_op, rhe, ..
         } => handle_infix_op(ac, runtime, program_archive, infix_op, lhe, rhe),
+        Expression::PrefixOp {
+            prefix_op, rhe, ..
+        } => handle_prefix_op(ac, runtime, program_archive, prefix_op, rhe),
         Expression::Number(_, value) => {
             let signal_gen = runtime.get_signal_gen();
             let access = runtime
@@ -457,6 +460,60 @@ fn handle_infix_op(
     Ok(output_signal)
 }
 
+/// Handles a prefix operation.
+/// - If input is a variable, it directly computes the operation.
+/// - If input is a signal, it handles it like an infix op against a constant.
+/// Returns the access to a variable containing the result of the operation or the signal of the output gate.
+fn handle_prefix_op(
+    ac: &mut ArithmeticCircuit,
+    runtime: &mut Runtime,
+    program_archive: &ProgramArchive,
+    op: &ExpressionPrefixOpcode,
+    rhe: &Expression,
+) -> Result<DataAccess, ProgramError> {
+    let rhe_access = process_expression(ac, runtime, program_archive, rhe)?;
+
+    let signal_gen: Rc<RefCell<u32>> = runtime.get_signal_gen();
+    let ctx = runtime.current_context()?;
+
+    // Determine the data type of the operand
+    let rhs_data_type = ctx.get_item_data_type(&rhe_access.get_name())?;
+
+    // Handle the variable case
+    if rhs_data_type == DataType::Variable {
+        let rhs_value = ctx
+            .get_variable_value(&rhe_access)?
+            .ok_or(ProgramError::EmptyDataItem)?;
+
+        let op_res = execute_prefix_op(op, rhs_value)?;
+        let item_access = ctx.declare_random_item(signal_gen, DataType::Variable)?;
+        ctx.set_variable(&item_access, Some(op_res))?;
+
+        return Ok(item_access);
+    }
+
+    let (lhs_value, infix_op) = to_equivalent_infix(op);
+    let lhs_id = make_constant(ac, ctx, signal_gen.clone(), lhs_value)?;
+
+    // Handle signal input
+    let rhs_id = get_signal_for_access(ac, ctx, signal_gen.clone(), &rhe_access)?;
+
+    // Construct the corresponding circuit gate
+    let gate_type = AGateType::from(&infix_op);
+    let output_signal = ctx.declare_random_item(signal_gen, DataType::Signal)?;
+    let output_id = ctx.get_signal_id(&output_signal)?;
+
+    // Add output signal and gate to the circuit
+    ac.add_signal(
+        output_id,
+        output_signal.access_str(ctx.get_ctx_name()),
+        None,
+    )?;
+    ac.add_gate(gate_type, lhs_id, rhs_id, output_id)?;
+
+    Ok(output_signal)
+}
+
 /// Returns a signal id for a given access
 /// - If the access is a signal or a component, it returns the corresponding signal id.
 /// - If the access is a variable, it adds a constant variable to the circuit and returns the corresponding signal id.
@@ -474,23 +531,32 @@ fn get_signal_for_access(
                 .get_variable_value(access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
 
-            let signal_access = DataAccess::new(&format!("const_signal_{}", value), vec![]);
-            // Try to get signal id if it exists
-            if let Ok(id) = ctx.get_signal_id(&signal_access) {
-                Ok(id)
-            } else {
-                // If it doesn't exist, declare it and add it to the circuit
-                ctx.declare_item(DataType::Signal, &signal_access.get_name(), &[], signal_gen)?;
-                let signal_id = ctx.get_signal_id(&signal_access)?;
-                ac.add_signal(
-                    signal_id,
-                    signal_access.access_str(ctx.get_ctx_name()),
-                    Some(value),
-                )?;
-                Ok(signal_id)
-            }
+            make_constant(ac, ctx, signal_gen, value)
         }
         DataType::Component => Ok(ctx.get_component_signal_id(access)?),
+    }
+}
+
+fn make_constant(
+    ac: &mut ArithmeticCircuit,
+    ctx: &mut Context,
+    signal_gen: Rc<RefCell<u32>>,
+    value: u32,
+) -> Result<u32, ProgramError> {
+    let signal_access = DataAccess::new(&format!("const_signal_{}", value), vec![]);
+    // Try to get signal id if it exists
+    if let Ok(id) = ctx.get_signal_id(&signal_access) {
+        Ok(id)
+    } else {
+        // If it doesn't exist, declare it and add it to the circuit
+        ctx.declare_item(DataType::Signal, &signal_access.get_name(), &[], signal_gen)?;
+        let signal_id = ctx.get_signal_id(&signal_access)?;
+        ac.add_signal(
+            signal_id,
+            signal_access.access_str(ctx.get_ctx_name()),
+            Some(value),
+        )?;
+        Ok(signal_id)
     }
 }
 
@@ -655,4 +721,18 @@ fn execute_op(lhs: u32, rhs: u32, op: &ExpressionInfixOpcode) -> Result<u32, Pro
     };
 
     Ok(res)
+}
+
+/// Executes a prefix operation on a u32 value, performing the specified arithmetic or logical computation.
+fn execute_prefix_op(op: &ExpressionPrefixOpcode, rhs: u32) -> Result<u32, ProgramError> {
+    let (lhs_value, infix_op) = to_equivalent_infix(op);
+    execute_op(lhs_value, rhs, &infix_op)
+}
+
+fn to_equivalent_infix(op: &ExpressionPrefixOpcode) -> (u32, ExpressionInfixOpcode) {
+    match op {
+        ExpressionPrefixOpcode::Sub => (0, ExpressionInfixOpcode::Sub),
+        ExpressionPrefixOpcode::BoolNot => (0, ExpressionInfixOpcode::Eq),
+        ExpressionPrefixOpcode::Complement => (u32::MAX, ExpressionInfixOpcode::BitXor),
+    }
 }
