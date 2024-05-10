@@ -1,5 +1,6 @@
 use circom_2_arithc::{circom::input::Input, program::build_circuit};
 use circom_vfs_utils::normalize_physical_path;
+use vfs::PhysicalFS;
 
 const TEST_FILE_PATH: &str = "./tests/circuits/sum.circom";
 
@@ -10,8 +11,8 @@ fn test_sum() {
         &normalize_physical_path("."),
         None,
     );
-    let circuit = build_circuit(&input).unwrap();
-    let mut sim_circuit = circuit.build_sim_circuit().unwrap();
+    let circuit = build_circuit(&PhysicalFS::new("/"), &input).unwrap();
+    let sim_circuit = circuit.build_sim_circuit().unwrap();
 
     let circuit_input = vec![1, 2];
     let res = sim_circuit.execute(&circuit_input).unwrap();

@@ -4,21 +4,20 @@
 
 use crate::{
     circom::{input::Input, parser::parse_project, type_analysis::analyse_project},
-    circuit::{AGateType, ArithmeticCircuit, CircuitError},
+    circuit::{ArithmeticCircuit, CircuitError},
     process::{process_expression, process_statements},
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
 };
 use circom_program_structure::ast::Expression;
-use vfs::PhysicalFS;
+use vfs::FileSystem;
 use std::io;
 use thiserror::Error;
 
 /// Parses a given Circom program and constructs an arithmetic circuit from it.
-pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
+pub fn build_circuit(fs: &dyn FileSystem, input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
     let mut circuit = ArithmeticCircuit::new();
     let mut runtime = Runtime::new();
-    let fs = PhysicalFS::new("/");
-    let mut program_archive = parse_project(&fs, input).map_err(|_| ProgramError::ParsingError)?;
+    let mut program_archive = parse_project(fs, input).map_err(|_| ProgramError::ParsingError)?;
 
     analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
 
@@ -56,26 +55,6 @@ pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
         }
         _ => return Err(ProgramError::MainExpressionNotACall),
     }
-
-    Ok(circuit)
-}
-
-pub fn build_circuit_pure(
-    main: &str,
-    _read_file: impl Fn(&str) -> String
-) -> Result<ArithmeticCircuit, ProgramError> {
-    if main == "(make_error)" {
-        return Err(ProgramError::OperationError("testing error".into()));
-    }
-
-    let mut circuit = ArithmeticCircuit::new();
-
-    circuit.add_signal(0, "a".into(), None)?;
-    circuit.add_signal(1, "b".into(), None)?;
-
-    circuit.add_signal(2, "c".into(), None)?;
-
-    circuit.add_gate(AGateType::AAdd, 0, 1, 2)?;
 
     Ok(circuit)
 }

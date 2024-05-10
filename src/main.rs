@@ -6,6 +6,7 @@ use circom_vfs_utils::normalize_physical_path;
 use dotenv::dotenv;
 use env_logger::{init_from_env, Env};
 use serde_json::to_string;
+use vfs::PhysicalFS;
 use std::{
     fs::{self, File},
     io::Write,
@@ -31,7 +32,7 @@ fn main() -> Result<(), ProgramError> {
         .parent()
         .ok_or(ProgramError::OutputDirectoryCreationError)?;
 
-    let circuit = build_circuit(&input)?;
+    let circuit = build_circuit(&PhysicalFS::new("/"), &input)?;
     let report = circuit.generate_circuit_report()?;
 
     let output_file_path = Input::build_output(&output_dir, &input.out_wasm_name, "json");
