@@ -1,10 +1,15 @@
 use circom_2_arithc::{circom::input::Input, program::build_circuit};
+use circom_vfs_utils::normalize_physical_path;
 
 const TEST_FILE_PATH: &str = "./tests/circuits/prefixOps.circom";
 
 #[test]
 fn test_prefix_ops() {
-    let input = Input::new(TEST_FILE_PATH.into(), "./".into()).unwrap();
+    let input = Input::new_pure(
+        &normalize_physical_path(TEST_FILE_PATH),
+        &normalize_physical_path("."),
+        None,
+    );
     let circuit = build_circuit(&input).unwrap();
     let sim_circuit = circuit.build_sim_circuit().unwrap();
 

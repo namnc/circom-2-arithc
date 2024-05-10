@@ -21,10 +21,11 @@ fn main() -> Result<(), ProgramError> {
         .map_err(|_| ProgramError::OutputDirectoryCreationError)?;
 
     let input = Input::new(
-        normalize_physical_path("src/assets/circuit.circom").into(),
-        output_path.into(),
+        &normalize_physical_path("src/assets/circuit.circom"),
+        &output_path,
     )
         .map_err(|_| ProgramError::InputInitializationError)?;
+
     let output_dir = input
         .out_r1cs
         .parent()
