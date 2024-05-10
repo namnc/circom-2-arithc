@@ -2,7 +2,7 @@ use circom_2_arithc::{
     circom::input::{input_processing::view, Input},
     program::{build_circuit, ProgramError},
 };
-use circom_vfs_utils::{canonicalize_physical_path, SimplePath};
+use circom_vfs_utils::normalize_physical_path;
 use dotenv::dotenv;
 use env_logger::{init_from_env, Env};
 use serde_json::to_string;
@@ -15,16 +15,15 @@ fn main() -> Result<(), ProgramError> {
     dotenv().ok();
     init_from_env(Env::default().filter_or("LOG_LEVEL", "info"));
 
-    let mut output_path = SimplePath::new(&canonicalize_physical_path("."));
-    output_path.push(view().value_of("output").unwrap());
+    let output_path = normalize_physical_path(view().value_of("output").unwrap());
 
-    fs::create_dir_all(output_path.to_string())
+    fs::create_dir_all(&output_path)
         .map_err(|_| ProgramError::OutputDirectoryCreationError)?;
 
-    let mut main = SimplePath::new(&canonicalize_physical_path("."));
-    main.push("src/assets/circuit.circom");
-
-    let input = Input::new(main, output_path)
+    let input = Input::new(
+        normalize_physical_path("src/assets/circuit.circom").into(),
+        output_path.into(),
+    )
         .map_err(|_| ProgramError::InputInitializationError)?;
     let output_dir = input
         .out_r1cs
@@ -37,9 +36,7 @@ fn main() -> Result<(), ProgramError> {
     let output_file_path = Input::build_output(&output_dir, &input.out_wasm_name, "json");
     File::create(output_file_path.to_string())?.write_all(to_string(&circuit)?.as_bytes())?;
 
-    let mut report_file_path = SimplePath::new(&canonicalize_physical_path("."));
-    report_file_path.push("output/report.json");
-    File::create(report_file_path.to_string())?.write_all(to_string(&report)?.as_bytes())?;
+    File::create("output/report.json")?.write_all(to_string(&report)?.as_bytes())?;
 
     Ok(())
 }
