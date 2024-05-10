@@ -5,7 +5,7 @@ const TEST_FILE_PATH: &str = "./tests/circuits/prefixOps.circom";
 
 #[test]
 fn test_prefix_ops() {
-    let input = Input::new_pure(
+    let input = Input::new(
         &normalize_physical_path(TEST_FILE_PATH),
         &normalize_physical_path("."),
         None,

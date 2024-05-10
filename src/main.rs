@@ -1,5 +1,5 @@
 use circom_2_arithc::{
-    circom::input::{input_processing::view, Input},
+    circom::input::{input_processing::{self, view}, Input},
     program::{build_circuit, ProgramError},
 };
 use circom_vfs_utils::normalize_physical_path;
@@ -20,7 +20,7 @@ fn main() -> Result<(), ProgramError> {
     fs::create_dir_all(&output_path)
         .map_err(|_| ProgramError::OutputDirectoryCreationError)?;
 
-    let input = Input::new(
+    let input = input_processing::generate_input(
         &normalize_physical_path("src/assets/circuit.circom"),
         &output_path,
     )

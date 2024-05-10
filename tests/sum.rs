@@ -5,7 +5,7 @@ const TEST_FILE_PATH: &str = "./tests/circuits/sum.circom";
 
 #[test]
 fn test_sum() {
-    let input = Input::new_pure(
+    let input = Input::new(
         &normalize_physical_path(TEST_FILE_PATH),
         &normalize_physical_path("."),
         None,

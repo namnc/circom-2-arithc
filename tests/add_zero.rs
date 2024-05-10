@@ -5,7 +5,7 @@ const TEST_FILE_PATH: &str = "./tests/circuits/addZero.circom";
 
 #[test]
 fn test_add_zero() {
-    let input = Input::new_pure(
+    let input = Input::new(
         &normalize_physical_path(TEST_FILE_PATH),
         &normalize_physical_path("."),
         None,

@@ -37,47 +37,13 @@ pub struct Input {
 }
 
 impl Input {
-    pub fn new(input_file: &str, output_dir: &str) -> Result<Input, ()> {
-        use input_processing::SimplificationStyle;
-        let matches = input_processing::view();
-        let mut file_name = SimplePath::new(input_file).file_stem().unwrap();
-
-        let c_flag = input_processing::get_c(&matches);
-
-        if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit"){
-            println!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name);
-            file_name = format!("{}_c", file_name)
-        };
-
-        let mut input = Input::new_pure(input_file, output_dir, Some(file_name));
-
-        let o_style = input_processing::get_simplification_style(&matches)?;
-
-        input.wat_flag = input_processing::get_wat(&matches);
-        input.wasm_flag = input_processing::get_wasm(&matches);
-        input.c_flag = c_flag;
-        input.r1cs_flag = input_processing::get_r1cs(&matches);
-        input.sym_flag = input_processing::get_sym(&matches);
-        input.main_inputs_flag = input_processing::get_main_inputs_log(&matches);
-        input.json_constraint_flag = input_processing::get_json_constraints(&matches);
-        input.json_substitution_flag = input_processing::get_json_substitutions(&matches);
-        input.print_ir_flag = input_processing::get_ir(&matches);
-        input.no_rounds = if let SimplificationStyle::O2(r) = o_style { r } else { 0 };
-        input.fast_flag = o_style == SimplificationStyle::O0;
-        input.reduced_simplification_flag = o_style == SimplificationStyle::O1;
-        input.parallel_simplification_flag = input_processing::get_parallel_simplification(&matches);
-        input.inspect_constraints_flag = input_processing::get_inspect_constraints(&matches);
-        input.flag_old_heuristics = input_processing::get_flag_old_heuristics(&matches);
-        input.flag_verbose = input_processing::get_flag_verbose(&matches);
-        input.prime = input_processing::get_prime(&matches)?;
-        input.link_libraries = input_processing::get_link_libraries(&matches);
-
-        Ok(input)
-    }
-
-    pub fn new_pure(input_file: &str, output_dir: &str, override_file_name: Option<String>) -> Input {
+    pub fn new(
+        input_file: &str,
+        output_dir: &str,
+        override_file_name: Option<&str>
+    ) -> Input {
         let file_name = match override_file_name {
-            Some(f) => f,
+            Some(f) => f.to_string(),
             None => SimplePath::new(input_file).file_stem().unwrap(),
         };
 
@@ -223,6 +189,45 @@ pub mod input_processing {
     use circom_vfs_utils::{canonicalize_physical_path, SimplePath};
     use clap::{App, Arg, ArgMatches};
     use crate::circom::compilation::VERSION;
+
+    use super::Input;
+
+    pub fn generate_input(input_file: &str, output_dir: &str) -> Result<Input, ()> {
+        let matches = view();
+        let mut file_name = SimplePath::new(input_file).file_stem().unwrap();
+
+        let c_flag = get_c(&matches);
+
+        if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit"){
+            println!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name);
+            file_name = format!("{}_c", file_name)
+        };
+
+        let mut input = Input::new(input_file, output_dir, Some(&file_name));
+
+        let o_style = get_simplification_style(&matches)?;
+
+        input.wat_flag = get_wat(&matches);
+        input.wasm_flag = get_wasm(&matches);
+        input.c_flag = c_flag;
+        input.r1cs_flag = get_r1cs(&matches);
+        input.sym_flag = get_sym(&matches);
+        input.main_inputs_flag = get_main_inputs_log(&matches);
+        input.json_constraint_flag = get_json_constraints(&matches);
+        input.json_substitution_flag = get_json_substitutions(&matches);
+        input.print_ir_flag = get_ir(&matches);
+        input.no_rounds = if let SimplificationStyle::O2(r) = o_style { r } else { 0 };
+        input.fast_flag = o_style == SimplificationStyle::O0;
+        input.reduced_simplification_flag = o_style == SimplificationStyle::O1;
+        input.parallel_simplification_flag = get_parallel_simplification(&matches);
+        input.inspect_constraints_flag = get_inspect_constraints(&matches);
+        input.flag_old_heuristics = get_flag_old_heuristics(&matches);
+        input.flag_verbose = get_flag_verbose(&matches);
+        input.prime = get_prime(&matches)?;
+        input.link_libraries = get_link_libraries(&matches);
+
+        Ok(input)
+    }
 
     pub fn get_input(matches: &ArgMatches) -> Result<SimplePath, ()> {
         let route = canonicalize_physical_path(matches.value_of("input").unwrap());
