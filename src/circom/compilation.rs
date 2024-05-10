@@ -1,8 +1,11 @@
 use circom_compiler::compiler_interface::{self, Config, VCP};
+use vfs::FileSystem;
 
 pub const VERSION: &str = "2.0.0";
 
 pub struct CompilerConfig {
+    pub fs: Box<dyn FileSystem>,
+    pub cwd: String,
     pub js_folder: String,
     pub wasm_name: String,
     pub wat_file: String,
@@ -21,6 +24,8 @@ pub struct CompilerConfig {
 
 pub fn compile(config: CompilerConfig) -> Result<(), ()> {
     compiler_interface::run_compiler(
+        config.fs.as_ref(),
+        &config.cwd,
         config.vcp,
         Config {
             debug_output: config.debug_output,

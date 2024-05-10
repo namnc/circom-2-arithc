@@ -9,6 +9,7 @@ use crate::{
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
 };
 use circom_program_structure::ast::Expression;
+use vfs::PhysicalFS;
 use std::io;
 use thiserror::Error;
 
@@ -16,7 +17,8 @@ use thiserror::Error;
 pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
     let mut circuit = ArithmeticCircuit::new();
     let mut runtime = Runtime::new();
-    let mut program_archive = parse_project(input).map_err(|_| ProgramError::ParsingError)?;
+    let fs = PhysicalFS::new("/");
+    let mut program_archive = parse_project(&fs, input).map_err(|_| ProgramError::ParsingError)?;
 
     analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
 

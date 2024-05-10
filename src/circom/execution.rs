@@ -1,6 +1,7 @@
 use circom_compiler::compiler_interface::VCP;
 use circom_constraint_generation::{build_circuit, BuildConfig};
 use circom_program_structure::program_archive::ProgramArchive;
+use vfs::FileSystem;
 
 pub struct ExecutionConfig {
     pub r1cs: String,
@@ -22,6 +23,7 @@ pub struct ExecutionConfig {
 }
 
 pub fn execute_project(
+    fs: &dyn FileSystem,
     program_archive: ProgramArchive,
     config: ExecutionConfig,
 ) -> Result<VCP, ()> {
@@ -38,7 +40,7 @@ pub fn execute_project(
         prime: config.prime,
     };
 
-    let (_, vcp) = build_circuit(program_archive, build_config)?;
+    let (_, vcp) = build_circuit(fs, program_archive, build_config)?;
 
     Result::Ok(vcp)
 }
