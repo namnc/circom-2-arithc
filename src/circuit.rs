@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use sim_circuit::circuit::{Circuit as SimCircuit, Gate as SimGate, Node as SimNode, Operation};
 use std::collections::HashMap;
 use thiserror::Error;
+use sim_circuit::circuit::CircuitError as SimCircuitError;
 
 /// Types of gates that can be used in an arithmetic circuit.
 #[derive(Debug, Serialize, Deserialize)]
@@ -446,14 +447,14 @@ impl ArithmeticCircuit {
             {
                 new_node.set_value(value);
             }
-            sim_circuit.add_node(id, new_node);
+            sim_circuit.add_node(id, new_node)?;
         }
 
         // Add gates
         for gate in &self.gates {
             let operation = Operation::from(&gate.op);
             let sim_gate = SimGate::new(operation, gate.lh_in, gate.rh_in, gate.out);
-            sim_circuit.add_gate(sim_gate);
+            sim_circuit.add_gate(sim_gate)?;
         }
 
         Ok(sim_circuit)
@@ -528,6 +529,8 @@ pub enum CircuitError {
     MPZCircuitError(MpzCircuitError),
     #[error("MPZ arithmetic circuit builder error")]
     MPZCircuitBuilderError,
+    #[error("Circuit simulation error")]
+    SimCircuitError(SimCircuitError),
     #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("Signal already declared")]
@@ -547,5 +550,11 @@ impl From<CircuitError> for ProgramError {
 impl From<MpzCircuitError> for CircuitError {
     fn from(e: MpzCircuitError) -> Self {
         CircuitError::MPZCircuitError(e)
+    }
+}
+
+impl From<SimCircuitError> for CircuitError {
+    fn from(e: SimCircuitError) -> Self {
+        CircuitError::SimCircuitError(e)
     }
 }
