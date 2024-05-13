@@ -27,13 +27,12 @@ circom-dag =  { git = "https://github.com/voltrevo/circom", branch = "virtual-fs
 circom-parser =  { git = "https://github.com/voltrevo/circom", branch = "virtual-fs", package = "parser"}
 circom-program_structure =  { git = "https://github.com/voltrevo/circom", branch = "virtual-fs", package = "program_structure"}
 circom-type_analysis =  { git = "https://github.com/voltrevo/circom", branch = "virtual-fs", package = "type_analysis"}
-circom-vfs_utils =  { git = "https://github.com/voltrevo/circom", branch = "virtual-fs", package = "vfs_utils"}
+circom-virtual_fs =  { git = "https://github.com/voltrevo/circom", branch = "virtual-fs", package = "virtual_fs"}
 
 # MPZ
 mpz-circuits =  { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits" }
 bmr16-mpz = { git = "https://github.com/tkmct/mpz", package = "mpz-circuits" }
 sim-circuit = { git = "https://github.com/brech1/sim-circuit" }
-vfs = "0.12.0"
 
 [[bin]]
 name="circom"

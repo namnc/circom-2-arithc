@@ -1,9 +1,9 @@
 use super::{compilation::VERSION, input::Input};
 use circom_parser::run_parser;
 use circom_program_structure::{error_definition::Report, program_archive::ProgramArchive};
-use vfs::FileSystem;
+use circom_virtual_fs::FileSystem;
 
-pub fn parse_project(fs: &dyn FileSystem, input_info: &Input) -> Result<ProgramArchive, ()> {
+pub fn parse_project(fs: &mut dyn FileSystem, input_info: &Input) -> Result<ProgramArchive, ()> {
     let initial_file = input_info.input_file().to_string();
     let result_program_archive = run_parser(
         fs,

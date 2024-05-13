@@ -9,12 +9,12 @@ use crate::{
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
 };
 use circom_program_structure::ast::Expression;
-use vfs::FileSystem;
+use circom_virtual_fs::FileSystem;
 use std::io;
 use thiserror::Error;
 
 /// Parses a given Circom program and constructs an arithmetic circuit from it.
-pub fn build_circuit(fs: &dyn FileSystem, input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
+pub fn build_circuit(fs: &mut dyn FileSystem, input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
     let mut circuit = ArithmeticCircuit::new();
     let mut runtime = Runtime::new();
     let mut program_archive = parse_project(fs, input).map_err(|_| ProgramError::ParsingError)?;
@@ -78,6 +78,8 @@ pub enum ProgramError {
     InvalidDataType,
     #[error("IO error: {0}")]
     IOError(#[from] io::Error),
+    #[error("Fs error: {0}")]
+    FsError(#[from] circom_virtual_fs::FsError),
     #[error("JSON serialization error: {0}")]
     JsonSerializationError(#[from] serde_json::Error),
     #[error("Main expression not a call")]

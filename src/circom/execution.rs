@@ -1,7 +1,7 @@
+use circom_virtual_fs::FileSystem;
 use circom_compiler::compiler_interface::VCP;
 use circom_constraint_generation::{build_circuit, BuildConfig};
 use circom_program_structure::program_archive::ProgramArchive;
-use vfs::FileSystem;
 
 pub struct ExecutionConfig {
     pub r1cs: String,
@@ -23,7 +23,7 @@ pub struct ExecutionConfig {
 }
 
 pub fn execute_project(
-    fs: &dyn FileSystem,
+    fs: &mut dyn FileSystem,
     program_archive: ProgramArchive,
     config: ExecutionConfig,
 ) -> Result<VCP, ()> {
