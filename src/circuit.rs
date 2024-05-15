@@ -34,6 +34,15 @@ pub enum AGateType {
     ANeq,
     ASub,
     AXor,
+    APow,
+    AIntDiv,
+    AMod,
+    AShiftL,
+    AShiftR,
+    ABoolOr,
+    ABoolAnd,
+    ABitOr,
+    ABitAnd,
 }
 
 impl From<&ExpressionInfixOpcode> for AGateType {
@@ -43,21 +52,21 @@ impl From<&ExpressionInfixOpcode> for AGateType {
             ExpressionInfixOpcode::Div => AGateType::ADiv,
             ExpressionInfixOpcode::Add => AGateType::AAdd,
             ExpressionInfixOpcode::Sub => AGateType::ASub,
-            ExpressionInfixOpcode::Pow => todo!(),
-            ExpressionInfixOpcode::IntDiv => todo!(),
-            ExpressionInfixOpcode::Mod => todo!(),
-            ExpressionInfixOpcode::ShiftL => todo!(),
-            ExpressionInfixOpcode::ShiftR => todo!(),
+            ExpressionInfixOpcode::Pow => AGateType::APow,
+            ExpressionInfixOpcode::IntDiv => AGateType::AIntDiv,
+            ExpressionInfixOpcode::Mod => AGateType::AMod,
+            ExpressionInfixOpcode::ShiftL => AGateType::AShiftL,
+            ExpressionInfixOpcode::ShiftR => AGateType::AShiftR,
             ExpressionInfixOpcode::LesserEq => AGateType::ALEq,
             ExpressionInfixOpcode::GreaterEq => AGateType::AGEq,
             ExpressionInfixOpcode::Lesser => AGateType::ALt,
             ExpressionInfixOpcode::Greater => AGateType::AGt,
             ExpressionInfixOpcode::Eq => AGateType::AEq,
             ExpressionInfixOpcode::NotEq => AGateType::ANeq,
-            ExpressionInfixOpcode::BoolOr => todo!(),
-            ExpressionInfixOpcode::BoolAnd => todo!(),
-            ExpressionInfixOpcode::BitOr => todo!(),
-            ExpressionInfixOpcode::BitAnd => todo!(),
+            ExpressionInfixOpcode::BoolOr => AGateType::ABoolOr,
+            ExpressionInfixOpcode::BoolAnd => AGateType::ABoolAnd,
+            ExpressionInfixOpcode::BitOr => AGateType::ABitOr,
+            ExpressionInfixOpcode::BitAnd => AGateType::ABitAnd,
             ExpressionInfixOpcode::BitXor => AGateType::AXor,
         }
     }
@@ -77,6 +86,16 @@ impl From<&AGateType> for Operation {
             AGateType::AGt => Operation::GreaterThan,
             AGateType::AGEq => Operation::GreaterOrEqual,
             AGateType::AXor => Operation::XorBitwise,
+            AGateType::APow => Operation::Exponentiate,
+            AGateType::AIntDiv => Operation::IntegerDivide,
+            AGateType::AMod => Operation::Modulus,
+            AGateType::AShiftL => Operation::ShiftLeft,
+            AGateType::AShiftR => Operation::ShiftRight,
+            AGateType::ABoolOr => Operation::Or,
+            AGateType::ABoolAnd => Operation::And,
+            AGateType::ABitOr => Operation::OrBitwise,
+            AGateType::ABitAnd => Operation::AndBitwise,
+            
         }
     }
 }
