@@ -39,18 +39,26 @@ pub enum AGateType {
 impl From<&ExpressionInfixOpcode> for AGateType {
     fn from(opcode: &ExpressionInfixOpcode) -> Self {
         match opcode {
-            ExpressionInfixOpcode::Add => AGateType::AAdd,
+            ExpressionInfixOpcode::Mul => AGateType::AMul,
             ExpressionInfixOpcode::Div => AGateType::ADiv,
-            ExpressionInfixOpcode::Eq => AGateType::AEq,
-            ExpressionInfixOpcode::Greater => AGateType::AGt,
+            ExpressionInfixOpcode::Add => AGateType::AAdd,
+            ExpressionInfixOpcode::Sub => AGateType::ASub,
+            ExpressionInfixOpcode::Pow => todo!(),
+            ExpressionInfixOpcode::IntDiv => todo!(),
+            ExpressionInfixOpcode::Mod => todo!(),
+            ExpressionInfixOpcode::ShiftL => todo!(),
+            ExpressionInfixOpcode::ShiftR => todo!(),
+            ExpressionInfixOpcode::LesserEq => AGateType::ALEq,
             ExpressionInfixOpcode::GreaterEq => AGateType::AGEq,
             ExpressionInfixOpcode::Lesser => AGateType::ALt,
-            ExpressionInfixOpcode::LesserEq => AGateType::ALEq,
-            ExpressionInfixOpcode::Mul => AGateType::AMul,
+            ExpressionInfixOpcode::Greater => AGateType::AGt,
+            ExpressionInfixOpcode::Eq => AGateType::AEq,
             ExpressionInfixOpcode::NotEq => AGateType::ANeq,
-            ExpressionInfixOpcode::Sub => AGateType::ASub,
+            ExpressionInfixOpcode::BoolOr => todo!(),
+            ExpressionInfixOpcode::BoolAnd => todo!(),
+            ExpressionInfixOpcode::BitOr => todo!(),
+            ExpressionInfixOpcode::BitAnd => todo!(),
             ExpressionInfixOpcode::BitXor => AGateType::AXor,
-            _ => unimplemented!("Unsupported opcode"),
         }
     }
 }
