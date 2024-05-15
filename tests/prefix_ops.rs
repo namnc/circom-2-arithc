@@ -4,7 +4,7 @@ const TEST_FILE_PATH: &str = "./tests/circuits/prefixOps.circom";
 
 #[test]
 fn test_prefix_ops() {
-    let input = Input::new(TEST_FILE_PATH.into(), "./".into()).unwrap();
+    let input = Input::new(TEST_FILE_PATH, "./", None);
     let circuit = build_circuit(&input).unwrap();
     let sim_circuit = circuit.build_sim_circuit().unwrap();
 

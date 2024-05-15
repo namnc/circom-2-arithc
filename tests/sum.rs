@@ -4,7 +4,7 @@ const TEST_FILE_PATH: &str = "./tests/circuits/sum.circom";
 
 #[test]
 fn test_sum() {
-    let input = Input::new(TEST_FILE_PATH.into(), "./".into()).unwrap();
+    let input = Input::new(TEST_FILE_PATH, "./", None);
     let circuit = build_circuit(&input).unwrap();
     let sim_circuit = circuit.build_sim_circuit().unwrap();
 
