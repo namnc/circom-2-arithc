@@ -166,6 +166,8 @@ impl ArithmeticGate {
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ArithmeticCircuit {
     node_count: u32,
+    inputs: HashMap<u32, String>,
+    outputs: HashMap<u32, String>,
     signals: HashMap<u32, Signal>,
     nodes: HashMap<u32, Node>,
     gates: Vec<ArithmeticGate>,
@@ -176,10 +178,20 @@ impl ArithmeticCircuit {
     pub fn new() -> ArithmeticCircuit {
         ArithmeticCircuit {
             node_count: 0,
+            inputs: HashMap::new(),
+            outputs: HashMap::new(),
             signals: HashMap::new(),
             nodes: HashMap::new(),
             gates: Vec::new(),
         }
+    }
+
+    pub fn add_inputs(&mut self, inputs: HashMap<u32, String>) {
+        self.inputs.extend(inputs);
+    }
+
+    pub fn add_outputs(&mut self, outputs: HashMap<u32, String>) {
+        self.outputs.extend(outputs);
     }
 
     /// Adds a new signal to the circuit.
@@ -205,6 +217,16 @@ impl ArithmeticCircuit {
         self.nodes.insert(node_id, node);
 
         Ok(())
+    }
+
+    pub fn get_signals(&self, filter: String) -> HashMap<u32, String> {
+        let mut ret = HashMap::new();
+        for (signal_id, signal) in self.signals.iter() {
+            if signal.name.starts_with(filter.as_str()) {
+                ret.insert(*signal_id, signal.name.to_string());
+            }
+        }
+        ret
     }
 
     /// Adds a new gate to the circuit.
