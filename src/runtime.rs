@@ -245,11 +245,11 @@ impl Context {
 
     /// Returns the data type of an item.
     pub fn get_item_data_type(&self, name: &str) -> Result<DataType, RuntimeError> {
-        if self.variables.get(name).is_some() {
+        if self.variables.contains_key(name) {
             Ok(DataType::Variable)
-        } else if self.signals.get(name).is_some() {
+        } else if self.signals.contains_key(name) {
             Ok(DataType::Signal)
-        } else if self.components.get(name).is_some() {
+        } else if self.components.contains_key(name) {
             Ok(DataType::Component)
         } else {
             Err(RuntimeError::ItemNotDeclared(format!(
@@ -699,7 +699,7 @@ pub fn process_component_access(
                     // We shouldn't have more than one signal in a sub access.
                     return Err(RuntimeError::AccessError);
                 }
-                signal_name = name.clone();
+                signal_name.clone_from(name);
                 has_signal = true;
             }
         }
