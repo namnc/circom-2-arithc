@@ -95,7 +95,6 @@ impl From<&AGateType> for Operation {
             AGateType::ABoolAnd => Operation::And,
             AGateType::ABitOr => Operation::OrBitwise,
             AGateType::ABitAnd => Operation::AndBitwise,
-            
         }
     }
 }

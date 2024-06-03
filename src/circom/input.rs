@@ -36,21 +36,22 @@ pub struct Input {
 }
 
 impl Input {
-    pub fn new(
-        input_file: &str,
-        output_dir: &str,
-        override_file_name: Option<&str>
-    ) -> Input {
+    pub fn new(input_file: &str, output_dir: &str, override_file_name: Option<&str>) -> Input {
         let file_name = match override_file_name {
             Some(f) => f.to_string(),
-            None => Path::new(input_file).file_stem().unwrap().to_string_lossy().to_string(),
+            None => Path::new(input_file)
+                .file_stem()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
         };
 
         Input {
             input_program: input_file.into(),
             out_r1cs: format!("{}/{}.r1cs", output_dir, file_name).into(),
             out_json_constraints: format!("{}/{}_constraints.json", output_dir, file_name).into(),
-            out_json_substitutions: format!("{}/{}_substitutions.json", output_dir, file_name).into(),
+            out_json_substitutions: format!("{}/{}_substitutions.json", output_dir, file_name)
+                .into(),
             out_wat_code: format!("{}/{}_js/{}.wat", output_dir, file_name, file_name).into(),
             out_wasm_code: format!("{}/{}_js/{}.wasm", output_dir, file_name, file_name).into(),
             out_wasm_name: file_name.clone(),
@@ -187,18 +188,22 @@ impl Input {
 pub mod input_processing {
     use std::path::{Path, PathBuf};
 
-    use clap::{App, Arg, ArgMatches};
     use crate::circom::compilation::VERSION;
+    use clap::{App, Arg, ArgMatches};
 
     use super::Input;
 
     pub fn generate_input(input_file: PathBuf, output_dir: PathBuf) -> Result<Input, ()> {
         let matches = view();
-        let mut file_name = input_file.file_stem().unwrap().to_string_lossy().to_string();
+        let mut file_name = input_file
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
 
         let c_flag = get_c(&matches);
 
-        if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit"){
+        if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit") {
             println!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name);
             file_name = format!("{}_c", file_name)
         };
@@ -220,7 +225,11 @@ pub mod input_processing {
         input.json_constraint_flag = get_json_constraints(&matches);
         input.json_substitution_flag = get_json_substitutions(&matches);
         input.print_ir_flag = get_ir(&matches);
-        input.no_rounds = if let SimplificationStyle::O2(r) = o_style { r } else { 0 };
+        input.no_rounds = if let SimplificationStyle::O2(r) = o_style {
+            r
+        } else {
+            0
+        };
         input.fast_flag = o_style == SimplificationStyle::O0;
         input.reduced_simplification_flag = o_style == SimplificationStyle::O1;
         input.parallel_simplification_flag = get_parallel_simplification(&matches);

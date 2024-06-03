@@ -1,5 +1,8 @@
 use circom_2_arithc::{
-    circom::input::{input_processing::{generate_input, view}, Input},
+    circom::input::{
+        input_processing::{generate_input, view},
+        Input,
+    },
     program::{build_circuit, ProgramError},
 };
 use dotenv::dotenv;
