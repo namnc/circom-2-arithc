@@ -10,7 +10,7 @@ use crate::runtime::{
 };
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
-    Access, AssignOp, Expression, ExpressionInfixOpcode, ExpressionPrefixOpcode, Statement
+    Access, AssignOp, Expression, ExpressionInfixOpcode, ExpressionPrefixOpcode, Statement,
 };
 use circom_program_structure::program_archive::ProgramArchive;
 use std::cell::RefCell;
@@ -272,9 +272,9 @@ pub fn process_expression(
         Expression::InfixOp {
             lhe, infix_op, rhe, ..
         } => handle_infix_op(ac, runtime, program_archive, infix_op, lhe, rhe),
-        Expression::PrefixOp {
-            prefix_op, rhe, ..
-        } => handle_prefix_op(ac, runtime, program_archive, prefix_op, rhe),
+        Expression::PrefixOp { prefix_op, rhe, .. } => {
+            handle_prefix_op(ac, runtime, program_archive, prefix_op, rhe)
+        }
         Expression::Number(_, value) => {
             let signal_gen = runtime.get_signal_gen();
             let access = runtime

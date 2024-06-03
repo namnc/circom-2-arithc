@@ -15,10 +15,10 @@ use bmr16_mpz::{
 use circom_program_structure::ast::ExpressionInfixOpcode;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use sim_circuit::circuit::CircuitError as SimCircuitError;
 use sim_circuit::circuit::{Circuit as SimCircuit, Gate as SimGate, Node as SimNode, Operation};
 use std::collections::HashMap;
 use thiserror::Error;
-use sim_circuit::circuit::CircuitError as SimCircuitError;
 
 /// Types of gates that can be used in an arithmetic circuit.
 #[derive(Debug, Serialize, Deserialize)]
