@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use input_processing::SimplificationStyle;
+use std::path::{Path, PathBuf};
 
 pub struct Input {
     pub input_program: PathBuf,
@@ -33,7 +33,7 @@ pub struct Input {
     pub no_rounds: usize,
     pub flag_verbose: bool,
     pub prime: String,
-    pub link_libraries : Vec<PathBuf>
+    pub link_libraries: Vec<PathBuf>,
 }
 
 #[allow(dead_code)]
@@ -53,7 +53,7 @@ impl Input {
 
         let c_flag = input_processing::get_c(&matches);
 
-        if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit"){
+        if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit") {
             println!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name);
             file_name = format!("{}_c", file_name)
         };
@@ -84,7 +84,7 @@ impl Input {
                 &format!("{}_substitutions", file_name),
                 JSON,
             ),
-            wat_flag:input_processing::get_wat(&matches),
+            wat_flag: input_processing::get_wat(&matches),
             wasm_flag: input_processing::get_wasm(&matches),
             c_flag,
             r1cs_flag: input_processing::get_r1cs(&matches),
@@ -93,28 +93,32 @@ impl Input {
             json_constraint_flag: input_processing::get_json_constraints(&matches),
             json_substitution_flag: input_processing::get_json_substitutions(&matches),
             print_ir_flag: input_processing::get_ir(&matches),
-            no_rounds: if let SimplificationStyle::O2(r) = o_style { r } else { 0 },
+            no_rounds: if let SimplificationStyle::O2(r) = o_style {
+                r
+            } else {
+                0
+            },
             fast_flag: o_style == SimplificationStyle::O0,
             reduced_simplification_flag: o_style == SimplificationStyle::O1,
             parallel_simplification_flag: input_processing::get_parallel_simplification(&matches),
             inspect_constraints_flag: input_processing::get_inspect_constraints(&matches),
             flag_old_heuristics: input_processing::get_flag_old_heuristics(&matches),
-            flag_verbose: input_processing::get_flag_verbose(&matches), 
+            flag_verbose: input_processing::get_flag_verbose(&matches),
             prime: input_processing::get_prime(&matches)?,
-            link_libraries
+            link_libraries,
         })
     }
 
     fn build_folder(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
         let mut file = output_path.to_path_buf();
-        let folder_name = format!("{}_{}",filename,ext);
+        let folder_name = format!("{}_{}", filename, ext);
         file.push(folder_name);
         file
     }
-    
+
     pub fn build_output(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
         let mut file = output_path.to_path_buf();
-        file.push(format!("{}.{}",filename,ext));
+        file.push(format!("{}.{}", filename, ext));
         file
     }
 
@@ -211,7 +215,7 @@ impl Input {
     pub fn no_rounds(&self) -> usize {
         self.no_rounds
     }
-    pub fn prime(&self) -> String{
+    pub fn prime(&self) -> String {
         self.prime.clone()
     }
 }
@@ -227,7 +231,11 @@ pub mod input_processing {
         if route.is_file() {
             Result::Ok(route)
         } else {
-            let route = if route.to_str().is_some() { ": ".to_owned() + route.to_str().unwrap()} else { "".to_owned() };
+            let route = if route.to_str().is_some() {
+                ": ".to_owned() + route.to_str().unwrap()
+            } else {
+                "".to_owned()
+            };
             Result::Err(eprintln!("Input file does not exist {}", route))
         }
     }
@@ -242,9 +250,12 @@ pub mod input_processing {
     }
 
     #[derive(Copy, Clone, Eq, PartialEq)]
-    pub enum SimplificationStyle { O0, O1, O2(usize) }
+    pub enum SimplificationStyle {
+        O0,
+        O1,
+        O2(usize),
+    }
     pub fn get_simplification_style(matches: &ArgMatches) -> Result<SimplificationStyle, ()> {
-
         let o_0 = matches.is_present("no_simplification");
         let o_1 = matches.is_present("reduced_simplification");
         let o_2 = matches.is_present("full_simplification");
@@ -252,15 +263,20 @@ pub mod input_processing {
         match (o_0, o_1, o_2round, o_2) {
             (true, _, _, _) => Ok(SimplificationStyle::O0),
             (_, true, _, _) => Ok(SimplificationStyle::O1),
-            (_, _, true,  _) => {
+            (_, _, true, _) => {
                 let o_2_argument = matches.value_of("simplification_rounds").unwrap();
                 let rounds_r = o_2_argument.parse::<usize>();
-                if let Result::Ok(no_rounds) = rounds_r { 
-                    if no_rounds == 0 { Ok(SimplificationStyle::O1) }
-                    else {Ok(SimplificationStyle::O2(no_rounds))}} 
-                else {  Result::Err(log::error!("invalid number of rounds")) }
-            },
-            
+                if let Result::Ok(no_rounds) = rounds_r {
+                    if no_rounds == 0 {
+                        Ok(SimplificationStyle::O1)
+                    } else {
+                        Ok(SimplificationStyle::O2(no_rounds))
+                    }
+                } else {
+                    Result::Err(log::error!("invalid number of rounds"))
+                }
+            }
+
             (false, false, false, true) => Ok(SimplificationStyle::O2(usize::MAX)),
             (false, false, false, false) => Ok(SimplificationStyle::O2(usize::MAX)),
         }
@@ -317,26 +333,23 @@ pub mod input_processing {
         matches.is_present("flag_old_heuristics")
     }
     pub fn get_prime(matches: &ArgMatches) -> Result<String, ()> {
-        
-        match matches.is_present("prime"){
-            true => 
-               {
-                   let prime_value = matches.value_of("prime").unwrap();
-                   if prime_value == "bn128"
-                      || prime_value == "bls12381"
-                      || prime_value == "goldilocks"
-                      || prime_value == "grumpkin"
-                      || prime_value == "pallas"
-                      || prime_value == "vesta"
-                      || prime_value == "secq256r1"
-                      {
-                        Ok(String::from(matches.value_of("prime").unwrap()))
-                    }
-                    else{
-                        Result::Err(log::error!("Invalid prime number"))
-                    }
-               }
-               
+        match matches.is_present("prime") {
+            true => {
+                let prime_value = matches.value_of("prime").unwrap();
+                if prime_value == "bn128"
+                    || prime_value == "bls12381"
+                    || prime_value == "goldilocks"
+                    || prime_value == "grumpkin"
+                    || prime_value == "pallas"
+                    || prime_value == "vesta"
+                    || prime_value == "secq256r1"
+                {
+                    Ok(String::from(matches.value_of("prime").unwrap()))
+                } else {
+                    Result::Err(log::error!("Invalid prime number"))
+                }
+            }
+
             false => Ok(String::from("bn128")),
         }
     }
@@ -449,8 +462,8 @@ pub mod input_processing {
                 .short("l")
                 .takes_value(true)
                 .multiple(true)
-                .number_of_values(1)   
-                .display_order(330) 
+                .number_of_values(1)
+                .display_order(330)
                 .help("Adds directory to library search path"),
             )
             .arg(
