@@ -1,5 +1,8 @@
 use circom_2_arithc::{
-    circom::input::{input_processing::view, Input},
+    circom::input::{
+        input_processing::{generate_input, view},
+        Input,
+    },
     program::{build_circuit, ProgramError},
 };
 use dotenv::dotenv;
@@ -20,7 +23,7 @@ fn main() -> Result<(), ProgramError> {
     fs::create_dir_all(output_path.clone())
         .map_err(|_| ProgramError::OutputDirectoryCreationError)?;
 
-    let input = Input::new(PathBuf::from("./src/assets/circuit.circom"), output_path)
+    let input = generate_input(PathBuf::from("./src/assets/circuit.circom"), output_path)
         .map_err(|_| ProgramError::InputInitializationError)?;
     let output_dir = input
         .out_r1cs

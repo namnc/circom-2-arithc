@@ -1,4 +1,3 @@
-use input_processing::SimplificationStyle;
 use std::path::{Path, PathBuf};
 
 pub struct Input {
@@ -36,84 +35,51 @@ pub struct Input {
     pub link_libraries: Vec<PathBuf>,
 }
 
-#[allow(dead_code)]
-const R1CS: &str = "r1cs";
-const WAT: &str = "wat";
-const WASM: &str = "wasm";
-const CPP: &str = "cpp";
-const JS: &str = "js";
-const DAT: &str = "dat";
-const SYM: &str = "sym";
-const JSON: &str = "json";
-
 impl Input {
-    pub fn new(input: PathBuf, output_path: PathBuf) -> Result<Input, ()> {
-        let matches = input_processing::view();
-        let mut file_name = input.file_stem().unwrap().to_str().unwrap().to_string();
-
-        let c_flag = input_processing::get_c(&matches);
-
-        if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit") {
-            println!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name);
-            file_name = format!("{}_c", file_name)
+    pub fn new(input_file: &str, output_dir: &str, override_file_name: Option<&str>) -> Input {
+        let file_name = match override_file_name {
+            Some(f) => f.to_string(),
+            None => Path::new(input_file)
+                .file_stem()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
         };
-        let output_c_path = Input::build_folder(&output_path, &file_name, CPP);
-        let output_js_path = Input::build_folder(&output_path, &file_name, JS);
-        let o_style = input_processing::get_simplification_style(&matches)?;
-        let link_libraries = input_processing::get_link_libraries(&matches);
-        Result::Ok(Input {
-            //field: P_BN128,
-            input_program: input,
-            out_r1cs: Input::build_output(&output_path, &file_name, R1CS),
-            out_wat_code: Input::build_output(&output_js_path, &file_name, WAT),
-            out_wasm_code: Input::build_output(&output_js_path, &file_name, WASM),
-            out_js_folder: output_js_path.clone(),
-            out_wasm_name: file_name.clone(),
-            out_c_folder: output_c_path.clone(),
-            out_c_run_name: file_name.clone(),
-            out_c_code: Input::build_output(&output_c_path, &file_name, CPP),
-            out_c_dat: Input::build_output(&output_c_path, &file_name, DAT),
-            out_sym: Input::build_output(&output_path, &file_name, SYM),
-            out_json_constraints: Input::build_output(
-                &output_path,
-                &format!("{}_constraints", file_name),
-                JSON,
-            ),
-            out_json_substitutions: Input::build_output(
-                &output_path,
-                &format!("{}_substitutions", file_name),
-                JSON,
-            ),
-            wat_flag: input_processing::get_wat(&matches),
-            wasm_flag: input_processing::get_wasm(&matches),
-            c_flag,
-            r1cs_flag: input_processing::get_r1cs(&matches),
-            sym_flag: input_processing::get_sym(&matches),
-            main_inputs_flag: input_processing::get_main_inputs_log(&matches),
-            json_constraint_flag: input_processing::get_json_constraints(&matches),
-            json_substitution_flag: input_processing::get_json_substitutions(&matches),
-            print_ir_flag: input_processing::get_ir(&matches),
-            no_rounds: if let SimplificationStyle::O2(r) = o_style {
-                r
-            } else {
-                0
-            },
-            fast_flag: o_style == SimplificationStyle::O0,
-            reduced_simplification_flag: o_style == SimplificationStyle::O1,
-            parallel_simplification_flag: input_processing::get_parallel_simplification(&matches),
-            inspect_constraints_flag: input_processing::get_inspect_constraints(&matches),
-            flag_old_heuristics: input_processing::get_flag_old_heuristics(&matches),
-            flag_verbose: input_processing::get_flag_verbose(&matches),
-            prime: input_processing::get_prime(&matches)?,
-            link_libraries,
-        })
-    }
 
-    fn build_folder(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
-        let mut file = output_path.to_path_buf();
-        let folder_name = format!("{}_{}", filename, ext);
-        file.push(folder_name);
-        file
+        Input {
+            input_program: input_file.into(),
+            out_r1cs: format!("{}/{}.r1cs", output_dir, file_name).into(),
+            out_json_constraints: format!("{}/{}_constraints.json", output_dir, file_name).into(),
+            out_json_substitutions: format!("{}/{}_substitutions.json", output_dir, file_name)
+                .into(),
+            out_wat_code: format!("{}/{}_js/{}.wat", output_dir, file_name, file_name).into(),
+            out_wasm_code: format!("{}/{}_js/{}.wasm", output_dir, file_name, file_name).into(),
+            out_wasm_name: file_name.clone(),
+            out_js_folder: format!("{}/{}_js", output_dir, file_name).into(),
+            out_c_run_name: file_name.clone(),
+            out_c_folder: format!("{}/{}_cpp", output_dir, file_name).into(),
+            out_c_code: format!("{}/{}_cpp/{}.cpp", output_dir, file_name, file_name).into(),
+            out_c_dat: format!("{}/{}_cpp/{}.dat", output_dir, file_name, file_name).into(),
+            out_sym: format!("{}/{}.sym", output_dir, file_name).into(),
+            c_flag: false,
+            wasm_flag: false,
+            wat_flag: false,
+            r1cs_flag: false,
+            sym_flag: false,
+            json_constraint_flag: false,
+            json_substitution_flag: false,
+            main_inputs_flag: false,
+            print_ir_flag: false,
+            fast_flag: false,
+            reduced_simplification_flag: false,
+            parallel_simplification_flag: false,
+            flag_old_heuristics: false,
+            inspect_constraints_flag: false,
+            no_rounds: 18446744073709551615,
+            flag_verbose: false,
+            prime: "bn128".into(),
+            link_libraries: vec![],
+        }
     }
 
     pub fn build_output(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
@@ -219,12 +185,62 @@ impl Input {
         self.prime.clone()
     }
 }
-
 pub mod input_processing {
-    use clap::{App, Arg, ArgMatches};
     use std::path::{Path, PathBuf};
 
     use crate::circom::compilation::VERSION;
+    use clap::{App, Arg, ArgMatches};
+
+    use super::Input;
+
+    pub fn generate_input(input_file: PathBuf, output_dir: PathBuf) -> Result<Input, ()> {
+        let matches = view();
+        let mut file_name = input_file
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        let c_flag = get_c(&matches);
+
+        if c_flag && (file_name == "main" || file_name == "fr" || file_name == "calcwit") {
+            println!("The name {} is reserved in Circom when using de --c flag. The files generated for your circuit will use the name {}_c instead of {}.", file_name, file_name, file_name);
+            file_name = format!("{}_c", file_name)
+        };
+
+        let mut input = Input::new(
+            input_file.to_str().unwrap(),
+            output_dir.to_str().unwrap(),
+            Some(&file_name),
+        );
+
+        let o_style = get_simplification_style(&matches)?;
+
+        input.wat_flag = get_wat(&matches);
+        input.wasm_flag = get_wasm(&matches);
+        input.c_flag = c_flag;
+        input.r1cs_flag = get_r1cs(&matches);
+        input.sym_flag = get_sym(&matches);
+        input.main_inputs_flag = get_main_inputs_log(&matches);
+        input.json_constraint_flag = get_json_constraints(&matches);
+        input.json_substitution_flag = get_json_substitutions(&matches);
+        input.print_ir_flag = get_ir(&matches);
+        input.no_rounds = if let SimplificationStyle::O2(r) = o_style {
+            r
+        } else {
+            0
+        };
+        input.fast_flag = o_style == SimplificationStyle::O0;
+        input.reduced_simplification_flag = o_style == SimplificationStyle::O1;
+        input.parallel_simplification_flag = get_parallel_simplification(&matches);
+        input.inspect_constraints_flag = get_inspect_constraints(&matches);
+        input.flag_old_heuristics = get_flag_old_heuristics(&matches);
+        input.flag_verbose = get_flag_verbose(&matches);
+        input.prime = get_prime(&matches)?;
+        input.link_libraries = get_link_libraries(&matches);
+
+        Ok(input)
+    }
 
     pub fn get_input(matches: &ArgMatches) -> Result<PathBuf, ()> {
         let route = Path::new(matches.value_of("input").unwrap()).to_path_buf();
