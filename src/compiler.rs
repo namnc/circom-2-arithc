@@ -188,9 +188,10 @@ impl ArithmeticGate {
     }
 }
 
-/// Represents an arithmetic circuit, with a set of variables and gates.
+/// Compilation data structure representing an arithmetic circuit with extra information, including
+/// a set of variables and gates.
 #[derive(Default, Debug, Serialize, Deserialize)]
-pub struct ArithmeticCircuit {
+pub struct Compiler {
     node_count: u32,
     inputs: HashMap<u32, String>,
     outputs: HashMap<u32, String>,
@@ -199,10 +200,9 @@ pub struct ArithmeticCircuit {
     gates: Vec<ArithmeticGate>,
 }
 
-impl ArithmeticCircuit {
-    /// Creates a new arithmetic circuit.
-    pub fn new() -> ArithmeticCircuit {
-        ArithmeticCircuit {
+impl Compiler {
+    pub fn new() -> Compiler {
+        Compiler {
             node_count: 0,
             inputs: HashMap::new(),
             outputs: HashMap::new(),

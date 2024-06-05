@@ -4,7 +4,7 @@
 
 use crate::{
     circom::{parser::parse_project, type_analysis::analyse_project},
-    circuit::{ArithmeticCircuit, CircuitError},
+    compiler::{CircuitError, Compiler},
     process::{process_expression, process_statements},
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
     Args,
@@ -14,8 +14,8 @@ use std::io;
 use thiserror::Error;
 
 /// Parses a given Circom program and constructs an arithmetic circuit from it.
-pub fn build_circuit(args: &Args) -> Result<ArithmeticCircuit, ProgramError> {
-    let mut circuit = ArithmeticCircuit::new();
+pub fn build_circuit(args: &Args) -> Result<Compiler, ProgramError> {
+    let mut circuit = Compiler::new();
     let mut runtime = Runtime::new();
     let mut program_archive = parse_project(args).map_err(|_| ProgramError::ParsingError)?;
 

@@ -2,7 +2,7 @@
 //!
 //! Handles execution of statements and expressions for arithmetic circuit generation within a `Runtime` environment.
 
-use crate::circuit::{AGateType, ArithmeticCircuit};
+use crate::compiler::{AGateType, Compiler};
 use crate::program::ProgramError;
 use crate::runtime::{
     generate_u32, increment_indices, u32_to_access, Context, DataAccess, DataType, NestedValue,
@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 /// Processes a sequence of statements.
 pub fn process_statements(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     runtime: &mut Runtime,
     program_archive: &ProgramArchive,
     statements: &[Statement],
@@ -33,7 +33,7 @@ pub fn process_statements(
 
 /// Processes a single statement.
 pub fn process_statement(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     runtime: &mut Runtime,
     program_archive: &ProgramArchive,
     statement: &Statement,
@@ -176,7 +176,7 @@ pub fn process_statement(
 
 /// Handles a substitution statement
 fn handle_substitution(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     runtime: &mut Runtime,
     program_archive: &ProgramArchive,
     var: &str,
@@ -262,7 +262,7 @@ fn handle_substitution(
 
 /// Processes an expression and returns an access to the result.
 pub fn process_expression(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     runtime: &mut Runtime,
     program_archive: &ProgramArchive,
     expression: &Expression,
@@ -297,7 +297,7 @@ pub fn process_expression(
 
 /// Handles function and template calls.
 fn handle_call(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     runtime: &mut Runtime,
     program_archive: &ProgramArchive,
     id: &str,
@@ -407,7 +407,7 @@ fn handle_call(
 /// - If one or both inputs are signals, it constructs the corresponding circuit gate.
 /// Returns the access to a variable containing the result of the operation or the signal of the output gate.
 fn handle_infix_op(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     runtime: &mut Runtime,
     program_archive: &ProgramArchive,
     op: &ExpressionInfixOpcode,
@@ -465,7 +465,7 @@ fn handle_infix_op(
 /// - If input is a signal, it handles it like an infix op against a constant.
 /// Returns the access to a variable containing the result of the operation or the signal of the output gate.
 fn handle_prefix_op(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     runtime: &mut Runtime,
     program_archive: &ProgramArchive,
     op: &ExpressionPrefixOpcode,
@@ -518,7 +518,7 @@ fn handle_prefix_op(
 /// - If the access is a signal or a component, it returns the corresponding signal id.
 /// - If the access is a variable, it adds a constant variable to the circuit and returns the corresponding signal id.
 fn get_signal_for_access(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     ctx: &mut Context,
     signal_gen: Rc<RefCell<u32>>,
     access: &DataAccess,
@@ -538,7 +538,7 @@ fn get_signal_for_access(
 }
 
 fn make_constant(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     ctx: &mut Context,
     signal_gen: Rc<RefCell<u32>>,
     value: u32,
@@ -574,7 +574,7 @@ fn get_signal_content_for_access(
 
 /// Connects two composed signals
 fn connect_signal_arrays(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     a: &[NestedValue<u32>],
     b: &[NestedValue<u32>],
 ) -> Result<(), ProgramError> {
@@ -600,7 +600,7 @@ fn connect_signal_arrays(
 
 /// Builds a DataAccess from an Access array
 fn build_access(
-    ac: &mut ArithmeticCircuit,
+    ac: &mut Compiler,
     runtime: &mut Runtime,
     program_archive: &ProgramArchive,
     name: &str,
