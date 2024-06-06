@@ -24,3 +24,9 @@ pub struct Args {
     )]
     pub output: PathBuf,
 }
+
+impl Args {
+    pub fn new(input: PathBuf, output: PathBuf) -> Self {
+        Self { input, output }
+    }
+}
