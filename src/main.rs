@@ -20,13 +20,12 @@ fn main() -> Result<(), ProgramError> {
 
     let args = Args::parse();
 
-    let output_dir = args.output.clone();
-
-    fs::create_dir_all(output_dir.clone())
-        .map_err(|_| ProgramError::OutputDirectoryCreationError)?;
-
     let circuit = build_circuit(&args)?;
     let report = circuit.generate_circuit_report()?;
+
+    let output_dir = args.output.clone();
+    fs::create_dir_all(output_dir.clone())
+        .map_err(|_| ProgramError::OutputDirectoryCreationError)?;
 
     let output_file_path = build_output(
         &output_dir,
