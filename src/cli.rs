@@ -7,10 +7,20 @@ use clap::Parser;
 #[command(disable_help_subcommand = true)]
 pub struct Args {
     /// Input file to process
-    #[arg(short, long, help = "Path to the input file")]
+    #[arg(
+        short,
+        long,
+        help = "Path to the input file",
+        default_value = "./src/assets/circuit.circom"
+    )]
     pub input: PathBuf,
 
     /// Output file to write the result
-    #[arg(short, long, help = "Path to the output file")]
+    #[arg(
+        short,
+        long,
+        help = "Path to the directory where the output will be written",
+        default_value = "./output/"
+    )]
     pub output: PathBuf,
 }

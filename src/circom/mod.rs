@@ -7,6 +7,5 @@
 
 pub const VERSION: &str = "2.0.0";
 
-pub mod execution;
 pub mod parser;
 pub mod type_analysis;
