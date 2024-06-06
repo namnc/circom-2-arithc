@@ -2,6 +2,7 @@
 //!
 //! This library provides the functionality to convert a Circom program into an arithmetic circuit.
 
+pub mod arithmetic_circuit;
 pub mod circom;
 pub mod cli;
 pub mod compiler;

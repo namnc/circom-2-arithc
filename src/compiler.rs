@@ -170,10 +170,10 @@ impl Node {
 /// Represents a circuit gate, with a left-hand input, right-hand input, and output node identifiers.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ArithmeticGate {
-    op: AGateType,
-    lh_in: u32,
-    rh_in: u32,
-    out: u32,
+    pub(crate) op: AGateType,
+    pub(crate) lh_in: u32,
+    pub(crate) rh_in: u32,
+    pub(crate) out: u32,
 }
 
 impl ArithmeticGate {
@@ -587,6 +587,10 @@ pub enum CircuitError {
     UnsupportedGateType(String),
     #[error("Unprocessed node")]
     UnprocessedNode,
+    #[error("Invalid input: {message}")]
+    InvalidInput { message: String },
+    #[error(transparent)]
+    SerdeError(#[from] serde_json::Error),
 }
 
 impl From<CircuitError> for ProgramError {
