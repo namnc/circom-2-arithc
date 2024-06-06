@@ -11,3 +11,4 @@ pub mod program;
 pub mod runtime;
 
 pub use cli::{build_output, Args};
+mod topological_sort;

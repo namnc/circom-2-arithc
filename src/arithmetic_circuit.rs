@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io::{BufRead, BufReader, BufWriter, Write},
     str::FromStr,
 };
@@ -8,8 +9,8 @@ use crate::compiler::{ArithmeticGate, CircuitError};
 #[derive(Debug, PartialEq, Eq)]
 pub struct ArithmeticCircuit {
     pub wire_count: u32,
-    pub inputs: Vec<String>,
-    pub outputs: Vec<String>,
+    pub inputs: HashMap<String, u32>,
+    pub outputs: HashMap<String, u32>,
     pub gates: Vec<ArithmeticGate>,
 }
 
@@ -62,16 +63,21 @@ impl ArithmeticCircuit {
     }
 
     pub fn read_bristol<R: BufRead>(r: &mut R) -> Result<ArithmeticCircuit, CircuitError> {
+        // TODO: Don't assume that inputs are first and outputs are last
+        // TODO: Understand how people using bristol circuits are supposed to identify the input
+        //       and output wires
+
         let (gate_count, wire_count) = BristolLine::read(r)?.circuit_sizes()?;
 
-        let mut inputs = Vec::new();
+        let mut inputs = HashMap::new();
         for i in 0..BristolLine::read(r)?.io_count()? {
-            inputs.push(format!("input{}", i));
+            inputs.insert(format!("input{}", i), i);
         }
 
-        let mut outputs = Vec::new();
-        for i in 0..BristolLine::read(r)?.io_count()? {
-            outputs.push(format!("output{}", i));
+        let mut outputs = HashMap::new();
+        let output_count = BristolLine::read(r)?.io_count()?;
+        for i in 0..output_count {
+            outputs.insert(format!("output{}", i), wire_count - output_count + i);
         }
 
         let mut gates = Vec::new();
@@ -81,7 +87,7 @@ impl ArithmeticCircuit {
 
         for line in r.lines() {
             if !line?.trim().is_empty() {
-                return Err(CircuitError::InvalidInput {
+                return Err(CircuitError::Invalid {
                     message: "Unexpected non-whitespace line after gates".into(),
                 });
             }
@@ -126,14 +132,14 @@ impl BristolLine {
         let count = self.get::<u32>(0)?;
 
         if self.0.len() != (count + 1) as usize {
-            return Err(CircuitError::InvalidInput {
+            return Err(CircuitError::Invalid {
                 message: format!("Expected {} parts", count + 1),
             });
         }
 
         for i in 1..self.0.len() {
             if self.get_str(i)? != "1" {
-                return Err(CircuitError::InvalidInput {
+                return Err(CircuitError::Invalid {
                     message: format!("Expected 1 at index {}", i),
                 });
             }
@@ -144,13 +150,13 @@ impl BristolLine {
 
     pub fn gate(&self) -> Result<ArithmeticGate, CircuitError> {
         if self.0.len() != 6 {
-            return Err(CircuitError::InvalidInput {
+            return Err(CircuitError::Invalid {
                 message: "Expected 6 parts".into(),
             });
         }
 
         if self.get::<u32>(0)? != 2 || self.get::<u32>(1)? != 1 {
-            return Err(CircuitError::InvalidInput {
+            return Err(CircuitError::Invalid {
                 message: "Expected 2 inputs and 1 output".into(),
             });
         }
@@ -166,11 +172,11 @@ impl BristolLine {
     fn get<T: FromStr>(&self, index: usize) -> Result<T, CircuitError> {
         self.0
             .get(index)
-            .ok_or(CircuitError::InvalidInput {
+            .ok_or(CircuitError::Invalid {
                 message: format!("Index {} out of bounds", index),
             })?
             .parse::<T>()
-            .map_err(|_| CircuitError::InvalidInput {
+            .map_err(|_| CircuitError::Invalid {
                 message: format!("Failed to convert at index {}", index),
             })
     }
@@ -178,7 +184,7 @@ impl BristolLine {
     fn get_str(&self, index: usize) -> Result<&str, CircuitError> {
         self.0
             .get(index)
-            .ok_or(CircuitError::InvalidInput {
+            .ok_or(CircuitError::Invalid {
                 message: format!("Index {} out of bounds", index),
             })
             .map(|s| s.as_str())
@@ -196,9 +202,15 @@ mod test_arithmetic_circuit {
     // Helper function to create a sample ArithmeticCircuit
     fn create_sample_circuit() -> ArithmeticCircuit {
         ArithmeticCircuit {
+            // d = (a + b) * b
+            // we need to use inputX and outputX to match deserialization from bristol format
+            // which doesn't specify the wire names
             wire_count: 4,
-            inputs: vec!["input0".to_string(), "input1".to_string()],
-            outputs: vec!["output0".to_string()],
+            inputs: [("input0".to_string(), 0), ("input1".to_string(), 1)]
+                .iter()
+                .cloned()
+                .collect(),
+            outputs: [("output0".to_string(), 3)].iter().cloned().collect(),
             gates: vec![
                 ArithmeticGate {
                     lh_in: 0,

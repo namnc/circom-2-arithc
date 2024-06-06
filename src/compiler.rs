@@ -2,7 +2,10 @@
 //!
 //! This module defines the data structures used to represent the arithmetic circuit.
 
-use crate::program::ProgramError;
+use crate::{
+    arithmetic_circuit::ArithmeticCircuit, program::ProgramError,
+    topological_sort::topological_sort,
+};
 use bmr16_mpz::{
     arithmetic::{
         circuit::ArithmeticCircuit as MpzCircuit,
@@ -17,7 +20,10 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use sim_circuit::circuit::CircuitError as SimCircuitError;
 use sim_circuit::circuit::{Circuit as SimCircuit, Gate as SimGate, Node as SimNode, Operation};
-use std::{collections::HashMap, string::FromUtf8Error};
+use std::{
+    collections::{HashMap, HashSet},
+    string::FromUtf8Error,
+};
 use strum_macros::{Display as StrumDisplay, EnumString};
 use thiserror::Error;
 
@@ -394,6 +400,130 @@ impl Compiler {
         Ok(CircuitReport { inputs, outputs })
     }
 
+    pub fn build_circuit(&self) -> Result<ArithmeticCircuit, CircuitError> {
+        let mut input_to_node_id = HashMap::<String, u32>::new();
+        let mut output_to_node_id = HashMap::<String, u32>::new();
+
+        for (node_id, node) in self.nodes.iter() {
+            for signal_id in node.get_signals() {
+                if let Some(input_name) = self.inputs.get(signal_id) {
+                    let prev = input_to_node_id.insert(input_name.clone(), *node_id);
+
+                    if prev.is_some() {
+                        return Err(CircuitError::Invalid {
+                            message: format!("Duplicate input {}", input_name),
+                        });
+                    }
+                }
+
+                if let Some(output_name) = self.outputs.get(signal_id) {
+                    let prev = output_to_node_id.insert(output_name.clone(), *node_id);
+
+                    if prev.is_some() {
+                        return Err(CircuitError::Invalid {
+                            message: format!("Duplicate output {}", output_name),
+                        });
+                    }
+                }
+            }
+        }
+
+        let input_node_ids = input_to_node_id.values().collect::<HashSet<_>>();
+        let output_node_ids = output_to_node_id.values().collect::<HashSet<_>>();
+
+        let total_io_nodes = input_to_node_id
+            .values()
+            .chain(output_to_node_id.values())
+            .collect::<HashSet<_>>()
+            .len();
+
+        if total_io_nodes != input_to_node_id.len() + output_to_node_id.len() {
+            return Err(CircuitError::Invalid {
+                message: "The nodes used for input and output are not unique".to_string(),
+            });
+        }
+
+        let mut node_id_to_wire_id = HashMap::<u32, u32>::new();
+        let mut next_wire_id = 0;
+
+        for (_, node_id) in &input_to_node_id {
+            node_id_to_wire_id.insert(*node_id, next_wire_id);
+            next_wire_id += 1;
+        }
+
+        let mut node_id_to_required_gate = HashMap::<u32, usize>::new();
+
+        for (gate_id, gate) in self.gates.iter().enumerate() {
+            // the gate.out node depends on this gate
+            node_id_to_required_gate.insert(gate.out, gate_id);
+        }
+
+        let sorted_gate_ids = topological_sort(self.gates.len(), &|gate_id: usize| {
+            let gate = &self.gates[gate_id];
+            let mut deps = Vec::<usize>::new();
+
+            if let Some(required_gate_id) = node_id_to_required_gate.get(&gate.lh_in) {
+                deps.push(*required_gate_id);
+            }
+
+            if let Some(required_gate_id) = node_id_to_required_gate.get(&gate.rh_in) {
+                deps.push(*required_gate_id);
+            }
+
+            deps
+        })?;
+
+        for gate_id in &sorted_gate_ids {
+            let assigned_node_id = self.gates[*gate_id].out;
+
+            if input_node_ids.contains(&assigned_node_id) {
+                return Err(CircuitError::Invalid {
+                    message: "Assignment to input node".to_string(),
+                });
+            }
+
+            if output_node_ids.contains(&assigned_node_id) {
+                // Output wires should be at the end, so we don't assign wire ids here
+                continue;
+            }
+
+            node_id_to_wire_id.insert(assigned_node_id, next_wire_id);
+            next_wire_id += 1;
+        }
+
+        // Assign wire ids to output nodes
+        for (_, node_id) in &output_to_node_id {
+            node_id_to_wire_id.insert(*node_id, next_wire_id);
+            next_wire_id += 1;
+        }
+
+        let mut new_gates = Vec::<ArithmeticGate>::new();
+
+        for gate_id in sorted_gate_ids {
+            let gate = &self.gates[gate_id];
+
+            new_gates.push(ArithmeticGate {
+                op: gate.op,
+                lh_in: node_id_to_wire_id[&gate.lh_in],
+                rh_in: node_id_to_wire_id[&gate.rh_in],
+                out: node_id_to_wire_id[&gate.out],
+            });
+        }
+
+        Ok(ArithmeticCircuit {
+            wire_count: next_wire_id,
+            inputs: input_to_node_id
+                .iter()
+                .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                .collect(),
+            outputs: output_to_node_id
+                .iter()
+                .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                .collect(),
+            gates: new_gates,
+        })
+    }
+
     /// Builds an arithmetic circuit using the mpz circuit builder.
     pub fn build_mpz_circuit(&self, report: &CircuitReport) -> Result<MpzCircuit, CircuitError> {
         let builder = ArithmeticCircuitBuilder::new();
@@ -588,8 +718,10 @@ pub enum CircuitError {
     UnsupportedGateType(String),
     #[error("Unprocessed node")]
     UnprocessedNode,
-    #[error("Invalid input: {message}")]
-    InvalidInput { message: String },
+
+    // TODO: Revise added errors
+    #[error("Invalid: {message}")]
+    Invalid { message: String },
     #[error(transparent)]
     SerdeError(#[from] serde_json::Error),
     #[error(transparent)]
