@@ -2,7 +2,7 @@
 name = "circom-2-arithc"
 version = "0.1.0"
 edition = "2021"
-resolver = "1" # Fixes lalrpop issue, see: https://github.com/lalrpop/lalrpop/issues/616
+resolver = "1"           # Fixes lalrpop issue, see: https://github.com/lalrpop/lalrpop/issues/616
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
@@ -12,27 +12,29 @@ log = "0.4.20"
 rand = "0.8.5"
 regex = "1.10.3"
 serde_json = "1.0"
-serde = { version = "1.0.196", features = ["derive"] } 
+serde = { version = "1.0.196", features = ["derive"] }
 thiserror = "1.0.59"
+strum_macros = "0.26.4"
+strum = "0.26.2"
 
 # DSL
-circom-circom_algebra =  { git = "https://github.com/iden3/circom", package = "circom_algebra"}
-circom-code_producers =  { git = "https://github.com/iden3/circom", package = "code_producers"}
-circom-compiler =  { git = "https://github.com/iden3/circom", package = "compiler"}
-circom-constant_tracking =  { git = "https://github.com/iden3/circom", package = "constant_tracking"}
-circom-constraint_generation =  { git = "https://github.com/iden3/circom", package = "constraint_generation"}
-circom-constraint_list =  { git = "https://github.com/iden3/circom", package = "constraint_list"}
-circom-constraint_writers =  { git = "https://github.com/iden3/circom", package = "constraint_writers"}
-circom-dag =  { git = "https://github.com/iden3/circom", package = "dag"}
-circom-parser =  { git = "https://github.com/iden3/circom", package = "parser"}
-circom-program_structure =  { git = "https://github.com/iden3/circom", package = "program_structure"}
-circom-type_analysis =  { git = "https://github.com/iden3/circom", package = "type_analysis"}
+circom-circom_algebra = { git = "https://github.com/iden3/circom", package = "circom_algebra" }
+circom-code_producers = { git = "https://github.com/iden3/circom", package = "code_producers" }
+circom-compiler = { git = "https://github.com/iden3/circom", package = "compiler" }
+circom-constant_tracking = { git = "https://github.com/iden3/circom", package = "constant_tracking" }
+circom-constraint_generation = { git = "https://github.com/iden3/circom", package = "constraint_generation" }
+circom-constraint_list = { git = "https://github.com/iden3/circom", package = "constraint_list" }
+circom-constraint_writers = { git = "https://github.com/iden3/circom", package = "constraint_writers" }
+circom-dag = { git = "https://github.com/iden3/circom", package = "dag" }
+circom-parser = { git = "https://github.com/iden3/circom", package = "parser" }
+circom-program_structure = { git = "https://github.com/iden3/circom", package = "program_structure" }
+circom-type_analysis = { git = "https://github.com/iden3/circom", package = "type_analysis" }
 
 # MPZ
-mpz-circuits =  { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits" }
+mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits" }
 bmr16-mpz = { git = "https://github.com/tkmct/mpz", package = "mpz-circuits" }
 sim-circuit = { git = "https://github.com/brech1/sim-circuit" }
 
 [[bin]]
-name="circom"
-path="./src/main.rs"
+name = "circom"
+path = "./src/main.rs"

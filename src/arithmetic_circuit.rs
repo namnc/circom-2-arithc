@@ -1,18 +1,35 @@
 use std::{
-    io::{BufRead, Read, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     str::FromStr,
 };
 
 use crate::compiler::{ArithmeticGate, CircuitError};
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct ArithmeticCircuit {
-    wire_count: u32,
-    inputs: Vec<String>,
-    outputs: Vec<String>,
-    gates: Vec<ArithmeticGate>,
+    pub wire_count: u32,
+    pub inputs: Vec<String>,
+    pub outputs: Vec<String>,
+    pub gates: Vec<ArithmeticGate>,
 }
 
 impl ArithmeticCircuit {
+    pub fn to_bristol_string(&self) -> Result<String, CircuitError> {
+        let mut output = Vec::new();
+        let mut writer = BufWriter::new(&mut output);
+
+        self.write_bristol(&mut writer)?;
+        drop(writer);
+
+        Ok(String::from_utf8(output)?)
+    }
+
+    pub fn from_bristol_string(input: &str) -> Result<ArithmeticCircuit, CircuitError> {
+        let mut reader = BufReader::new(input.as_bytes());
+
+        ArithmeticCircuit::read_bristol(&mut reader)
+    }
+
     pub fn write_bristol<W: Write>(&self, w: &mut W) -> Result<(), CircuitError> {
         writeln!(w, "{} {}", self.gates.len(), self.wire_count)?;
 
@@ -31,11 +48,12 @@ impl ArithmeticCircuit {
         }
 
         writeln!(w)?;
+        writeln!(w)?;
 
         for gate in &self.gates {
             writeln!(
                 w,
-                "2 1 {} {} {} {:?}",
+                "2 1 {} {} {} {}",
                 gate.lh_in, gate.rh_in, gate.out, gate.op
             )?;
         }
@@ -43,7 +61,7 @@ impl ArithmeticCircuit {
         Ok(())
     }
 
-    pub fn read_bristol<R: Read + BufRead>(r: &mut R) -> Result<ArithmeticCircuit, CircuitError> {
+    pub fn read_bristol<R: BufRead>(r: &mut R) -> Result<ArithmeticCircuit, CircuitError> {
         let (gate_count, wire_count) = BristolLine::read(r)?.circuit_sizes()?;
 
         let mut inputs = Vec::new();
@@ -141,7 +159,7 @@ impl BristolLine {
             lh_in: self.get(2)?,
             rh_in: self.get(3)?,
             out: self.get(4)?,
-            op: serde_json::from_str(self.get_str(5)?)?,
+            op: self.get(5)?,
         })
     }
 
@@ -164,5 +182,137 @@ impl BristolLine {
                 message: format!("Index {} out of bounds", index),
             })
             .map(|s| s.as_str())
+    }
+}
+
+#[cfg(test)]
+mod test_arithmetic_circuit {
+    use std::io::{BufReader, Cursor};
+
+    use crate::compiler::AGateType;
+
+    use super::*;
+
+    // Helper function to create a sample ArithmeticCircuit
+    fn create_sample_circuit() -> ArithmeticCircuit {
+        ArithmeticCircuit {
+            wire_count: 4,
+            inputs: vec!["input0".to_string(), "input1".to_string()],
+            outputs: vec!["output0".to_string()],
+            gates: vec![
+                ArithmeticGate {
+                    lh_in: 0,
+                    rh_in: 1,
+                    out: 2,
+                    op: AGateType::AAdd,
+                },
+                ArithmeticGate {
+                    lh_in: 2,
+                    rh_in: 1,
+                    out: 3,
+                    op: AGateType::AMul,
+                },
+            ],
+        }
+    }
+
+    fn clean(src: &str) -> String {
+        src.trim_start()
+            .trim_end_matches(char::is_whitespace)
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<&str>>()
+            .join("\n")
+            + "\n"
+    }
+
+    #[test]
+    fn test_write_bristol() {
+        assert_eq!(
+            create_sample_circuit().to_bristol_string().unwrap(),
+            clean(
+                "
+                    2 4
+                    2 1 1
+                    1 1
+                    
+                    2 1 0 1 2 AAdd
+                    2 1 2 1 3 AMul
+                ",
+            ),
+        );
+    }
+
+    #[test]
+    fn test_read_bristol() {
+        assert_eq!(
+            ArithmeticCircuit::from_bristol_string(
+                "
+                    2 4
+                    2 1 1
+                    1 1
+
+                    2 1 0 1 2 AAdd
+                    2 1 2 1 3 AMul
+                "
+            )
+            .unwrap(),
+            create_sample_circuit()
+        );
+    }
+
+    #[test]
+    fn test_bristol_line_read() {
+        let input_data = "2 4\n";
+        let mut reader = BufReader::new(Cursor::new(input_data));
+
+        let bristol_line = BristolLine::read(&mut reader).unwrap();
+        assert_eq!(bristol_line.0, vec!["2", "4"]);
+    }
+
+    #[test]
+    fn test_bristol_line_circuit_sizes() {
+        let bristol_line = BristolLine(vec!["2".to_string(), "4".to_string()]);
+        let (gate_count, wire_count) = bristol_line.circuit_sizes().unwrap();
+        assert_eq!(gate_count, 2);
+        assert_eq!(wire_count, 4);
+    }
+
+    #[test]
+    fn test_bristol_line_io_count() {
+        let bristol_line = BristolLine(vec!["2".to_string(), "1".to_string(), "1".to_string()]);
+        let io_count = bristol_line.io_count().unwrap();
+        assert_eq!(io_count, 2);
+    }
+
+    #[test]
+    fn test_bristol_line_gate() {
+        let bristol_line = BristolLine(vec![
+            "2".to_string(),
+            "1".to_string(),
+            "0".to_string(),
+            "1".to_string(),
+            "2".to_string(),
+            "AAdd".to_string(),
+        ]);
+        let gate = bristol_line.gate().unwrap();
+        assert_eq!(gate.lh_in, 0);
+        assert_eq!(gate.rh_in, 1);
+        assert_eq!(gate.out, 2);
+        assert_eq!(gate.op, AGateType::AAdd);
+    }
+
+    #[test]
+    fn test_bristol_line_get() {
+        let bristol_line = BristolLine(vec!["2".to_string(), "4".to_string()]);
+        let value: u32 = bristol_line.get(0).unwrap();
+        assert_eq!(value, 2);
+    }
+
+    #[test]
+    fn test_bristol_line_get_str() {
+        let bristol_line = BristolLine(vec!["2".to_string(), "4".to_string()]);
+        let value = bristol_line.get_str(1).unwrap();
+        assert_eq!(value, "4");
     }
 }

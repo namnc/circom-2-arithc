@@ -17,11 +17,12 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use sim_circuit::circuit::CircuitError as SimCircuitError;
 use sim_circuit::circuit::{Circuit as SimCircuit, Gate as SimGate, Node as SimNode, Operation};
-use std::collections::HashMap;
+use std::{collections::HashMap, string::FromUtf8Error};
+use strum_macros::{Display as StrumDisplay, EnumString};
 use thiserror::Error;
 
 /// Types of gates that can be used in an arithmetic circuit.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, EnumString, StrumDisplay)]
 pub enum AGateType {
     AAdd,
     ADiv,
@@ -168,12 +169,12 @@ impl Node {
 }
 
 /// Represents a circuit gate, with a left-hand input, right-hand input, and output node identifiers.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ArithmeticGate {
-    pub(crate) op: AGateType,
-    pub(crate) lh_in: u32,
-    pub(crate) rh_in: u32,
-    pub(crate) out: u32,
+    pub op: AGateType,
+    pub lh_in: u32,
+    pub rh_in: u32,
+    pub out: u32,
 }
 
 impl ArithmeticGate {
@@ -591,6 +592,8 @@ pub enum CircuitError {
     InvalidInput { message: String },
     #[error(transparent)]
     SerdeError(#[from] serde_json::Error),
+    #[error(transparent)]
+    FromUtf8Error(#[from] FromUtf8Error),
 }
 
 impl From<CircuitError> for ProgramError {
