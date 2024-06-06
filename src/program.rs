@@ -3,20 +3,21 @@
 //! This module processes the circom input program to build the arithmetic circuit.
 
 use crate::{
-    circom::{input::Input, parser::parse_project, type_analysis::analyse_project},
+    circom::{parser::parse_project, type_analysis::analyse_project},
     circuit::{ArithmeticCircuit, CircuitError},
     process::{process_expression, process_statements},
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
+    Args,
 };
 use circom_program_structure::ast::Expression;
 use std::io;
 use thiserror::Error;
 
 /// Parses a given Circom program and constructs an arithmetic circuit from it.
-pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
+pub fn build_circuit(args: &Args) -> Result<ArithmeticCircuit, ProgramError> {
     let mut circuit = ArithmeticCircuit::new();
     let mut runtime = Runtime::new();
-    let mut program_archive = parse_project(input).map_err(|_| ProgramError::ParsingError)?;
+    let mut program_archive = parse_project(args).map_err(|_| ProgramError::ParsingError)?;
 
     analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
 
