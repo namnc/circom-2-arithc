@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 
@@ -29,4 +29,11 @@ impl Args {
     pub fn new(input: PathBuf, output: PathBuf) -> Self {
         Self { input, output }
     }
+}
+
+/// Function that returns output file path
+pub fn build_output(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
+    let mut file = output_path.to_path_buf();
+    file.push(format!("{}.{}", filename, ext));
+    file
 }
