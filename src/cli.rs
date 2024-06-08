@@ -11,7 +11,7 @@ pub struct Args {
         short,
         long,
         help = "Path to the input file",
-        default_value = "./src/assets/circuit.circom"
+        default_value = "./examples/circuit.circom"
     )]
     pub input: PathBuf,
 
