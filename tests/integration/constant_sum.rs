@@ -1,11 +1,11 @@
-use circom_2_arithc::{program::build_circuit, Args};
+use circom_2_arithc::{program::compile, Args};
 
 const TEST_FILE_PATH: &str = "./tests/circuits/constantSum.circom";
 
 #[test]
 fn test_constant_sum() {
     let input = Args::new(TEST_FILE_PATH.into(), "./".into());
-    let circuit = build_circuit(&input).unwrap();
+    let circuit = compile(&input).unwrap();
     let sim_circuit = circuit.build_sim_circuit().unwrap();
 
     let circuit_input = vec![];

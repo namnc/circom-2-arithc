@@ -4,18 +4,32 @@ use std::{
     str::FromStr,
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::compiler::{ArithmeticGate, CircuitError};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ArithmeticCircuit {
     pub wire_count: u32,
-    pub inputs: HashMap<String, u32>,
-    pub outputs: HashMap<String, u32>,
+    pub info: CircuitInfo,
     pub gates: Vec<ArithmeticGate>,
 }
 
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CircuitInfo {
+    pub input_name_to_wire_index: HashMap<String, u32>,
+    pub constants: HashMap<String, ConstantInfo>,
+    pub output_name_to_wire_index: HashMap<String, u32>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConstantInfo {
+    pub value: u32,
+    pub wire_index: u32,
+}
+
 impl ArithmeticCircuit {
-    pub fn to_bristol_string(&self) -> Result<String, CircuitError> {
+    pub fn get_bristol_string(&self) -> Result<String, CircuitError> {
         let mut output = Vec::new();
         let mut writer = BufWriter::new(&mut output);
 
@@ -25,26 +39,27 @@ impl ArithmeticCircuit {
         Ok(String::from_utf8(output)?)
     }
 
-    pub fn from_bristol_string(input: &str) -> Result<ArithmeticCircuit, CircuitError> {
-        let mut reader = BufReader::new(input.as_bytes());
-
-        ArithmeticCircuit::read_bristol(&mut reader)
+    pub fn from_info_and_bristol_string(
+        info: CircuitInfo,
+        input: &str,
+    ) -> Result<ArithmeticCircuit, CircuitError> {
+        ArithmeticCircuit::read_info_and_bristol(info, &mut BufReader::new(input.as_bytes()))
     }
 
     pub fn write_bristol<W: Write>(&self, w: &mut W) -> Result<(), CircuitError> {
         writeln!(w, "{} {}", self.gates.len(), self.wire_count)?;
 
-        write!(w, "{}", self.inputs.len())?;
+        write!(w, "{}", self.info.input_name_to_wire_index.len())?;
 
-        for _ in 0..self.inputs.len() {
+        for _ in 0..self.info.input_name_to_wire_index.len() {
             write!(w, " 1")?;
         }
 
         writeln!(w)?;
 
-        write!(w, "{}", self.outputs.len())?;
+        write!(w, "{}", self.info.output_name_to_wire_index.len())?;
 
-        for _ in 0..self.outputs.len() {
+        for _ in 0..self.info.output_name_to_wire_index.len() {
             write!(w, " 1")?;
         }
 
@@ -62,7 +77,10 @@ impl ArithmeticCircuit {
         Ok(())
     }
 
-    pub fn read_bristol<R: BufRead>(r: &mut R) -> Result<ArithmeticCircuit, CircuitError> {
+    pub fn read_info_and_bristol<R: BufRead>(
+        info: CircuitInfo,
+        r: &mut R,
+    ) -> Result<ArithmeticCircuit, CircuitError> {
         // TODO: Don't assume that inputs are first and outputs are last
         // TODO: Understand how people using bristol circuits are supposed to identify the input
         //       and output wires
@@ -95,8 +113,7 @@ impl ArithmeticCircuit {
 
         Ok(ArithmeticCircuit {
             wire_count,
-            inputs,
-            outputs,
+            info,
             gates,
         })
     }
@@ -206,11 +223,14 @@ mod test_arithmetic_circuit {
             // we need to use inputX and outputX to match deserialization from bristol format
             // which doesn't specify the wire names
             wire_count: 4,
-            inputs: [("input0".to_string(), 0), ("input1".to_string(), 1)]
-                .iter()
-                .cloned()
-                .collect(),
-            outputs: [("output0".to_string(), 3)].iter().cloned().collect(),
+            info: CircuitInfo {
+                input_name_to_wire_index: [("input0".to_string(), 0), ("input1".to_string(), 1)]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                constants: Default::default(),
+                output_name_to_wire_index: [("output0".to_string(), 3)].iter().cloned().collect(),
+            },
             gates: vec![
                 ArithmeticGate {
                     lh_in: 0,
@@ -241,7 +261,7 @@ mod test_arithmetic_circuit {
     #[test]
     fn test_write_bristol() {
         assert_eq!(
-            create_sample_circuit().to_bristol_string().unwrap(),
+            create_sample_circuit().get_bristol_string().unwrap(),
             clean(
                 "
                     2 4
@@ -258,7 +278,21 @@ mod test_arithmetic_circuit {
     #[test]
     fn test_read_bristol() {
         assert_eq!(
-            ArithmeticCircuit::from_bristol_string(
+            ArithmeticCircuit::from_info_and_bristol_string(
+                CircuitInfo {
+                    input_name_to_wire_index: [
+                        ("input0".to_string(), 0),
+                        ("input1".to_string(), 1)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    constants: Default::default(),
+                    output_name_to_wire_index: [("output0".to_string(), 3)]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                },
                 "
                     2 4
                     2 1 1

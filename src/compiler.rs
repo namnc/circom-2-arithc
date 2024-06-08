@@ -3,7 +3,8 @@
 //! This module defines the data structures used to represent the arithmetic circuit.
 
 use crate::{
-    arithmetic_circuit::ArithmeticCircuit, program::ProgramError,
+    arithmetic_circuit::{ArithmeticCircuit, CircuitInfo, ConstantInfo},
+    program::ProgramError,
     topological_sort::topological_sort,
 };
 use bmr16_mpz::{
@@ -402,6 +403,7 @@ impl Compiler {
 
     pub fn build_circuit(&self) -> Result<ArithmeticCircuit, CircuitError> {
         let mut input_to_node_id = HashMap::<String, u32>::new();
+        let mut constant_to_node_id_and_value = HashMap::<String, (u32, u32)>::new();
         let mut output_to_node_id = HashMap::<String, u32>::new();
 
         for (node_id, node) in self.nodes.iter() {
@@ -425,11 +427,14 @@ impl Compiler {
                         });
                     }
                 }
+
+                let signal = &self.signals[signal_id];
+
+                if let Some(value) = signal.value {
+                    constant_to_node_id_and_value.insert(signal.name.clone(), (*node_id, value));
+                }
             }
         }
-
-        let input_node_ids = input_to_node_id.values().collect::<HashSet<_>>();
-        let output_node_ids = output_to_node_id.values().collect::<HashSet<_>>();
 
         let total_io_nodes = input_to_node_id
             .values()
@@ -473,22 +478,24 @@ impl Compiler {
             deps
         })?;
 
+        let output_node_ids = output_to_node_id.values().collect::<HashSet<_>>();
+
         for gate_id in &sorted_gate_ids {
-            let assigned_node_id = self.gates[*gate_id].out;
+            let gate = &self.gates[*gate_id];
 
-            if input_node_ids.contains(&assigned_node_id) {
-                return Err(CircuitError::Invalid {
-                    message: "Assignment to input node".to_string(),
-                });
+            for node_id in &[gate.lh_in, gate.rh_in, gate.out] {
+                if output_node_ids.contains(node_id) {
+                    // Output wires should be at the end, so we don't assign wire ids here
+                    continue;
+                }
+
+                if node_id_to_wire_id.contains_key(node_id) {
+                    continue;
+                }
+
+                node_id_to_wire_id.insert(*node_id, next_wire_id);
+                next_wire_id += 1;
             }
-
-            if output_node_ids.contains(&assigned_node_id) {
-                // Output wires should be at the end, so we don't assign wire ids here
-                continue;
-            }
-
-            node_id_to_wire_id.insert(assigned_node_id, next_wire_id);
-            next_wire_id += 1;
         }
 
         // Assign wire ids to output nodes
@@ -510,16 +517,31 @@ impl Compiler {
             });
         }
 
+        let mut constants = HashMap::<String, ConstantInfo>::new();
+
+        for (name, (node_id, value)) in constant_to_node_id_and_value {
+            constants.insert(
+                name,
+                ConstantInfo {
+                    value,
+                    wire_index: node_id_to_wire_id[&node_id],
+                },
+            );
+        }
+
         Ok(ArithmeticCircuit {
             wire_count: next_wire_id,
-            inputs: input_to_node_id
-                .iter()
-                .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
-                .collect(),
-            outputs: output_to_node_id
-                .iter()
-                .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
-                .collect(),
+            info: CircuitInfo {
+                input_name_to_wire_index: input_to_node_id
+                    .iter()
+                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                    .collect(),
+                constants,
+                output_name_to_wire_index: output_to_node_id
+                    .iter()
+                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                    .collect(),
+            },
             gates: new_gates,
         })
     }
