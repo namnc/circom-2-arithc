@@ -5,15 +5,9 @@ const TEST_FILE_PATH: &str = "./tests/circuits/addZero.circom";
 #[test]
 fn test_add_zero() {
     let input = Args::new(TEST_FILE_PATH.into(), "./".into());
-    let circuit = compile(&input).unwrap();
-    let sim_circuit = circuit.build_sim_circuit().unwrap();
+    let circuit = compile(&input).unwrap().build_circuit().unwrap();
 
-    let circuit_input = vec![
-        42, // actual input
-        0,  // constant - FIXME: should not need to provide this
-    ];
+    let outputs = circuit.eval([("0.in", 42)]).unwrap();
 
-    let res = sim_circuit.execute(&circuit_input).unwrap();
-
-    assert_eq!(res, vec![42]);
+    assert_eq!(outputs.get("0.out"), Some(&42));
 }

@@ -136,6 +136,10 @@ impl ArithmeticCircuit {
             })?;
         }
 
+        for (_, constant) in &self.info.constants {
+            wires[constant.wire_index as usize] = constant.value;
+        }
+
         for gate in &self.gates {
             let lh = wires[gate.lh_in as usize];
             let rh = wires[gate.rh_in as usize];
