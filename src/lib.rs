@@ -4,6 +4,9 @@
 
 pub mod circom;
 pub mod circuit;
+pub mod cli;
 pub mod process;
 pub mod program;
 pub mod runtime;
+
+pub use cli::{build_output, Args};

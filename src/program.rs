@@ -3,21 +3,21 @@
 //! This module processes the circom input program to build the arithmetic circuit.
 
 use crate::{
-    circom::{input::Input, parser::parse_project, type_analysis::analyse_project},
+    circom::{parser::parse_project, type_analysis::analyse_project},
     circuit::{ArithmeticCircuit, CircuitError},
     process::{process_expression, process_statements},
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
+    Args,
 };
-use circom_compiler::num_traits::sign;
 use circom_program_structure::ast::Expression;
 use std::io;
 use thiserror::Error;
 
 /// Parses a given Circom program and constructs an arithmetic circuit from it.
-pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
+pub fn build_circuit(args: &Args) -> Result<ArithmeticCircuit, ProgramError> {
     let mut circuit = ArithmeticCircuit::new();
     let mut runtime = Runtime::new();
-    let mut program_archive = parse_project(input).map_err(|_| ProgramError::ParsingError)?;
+    let mut program_archive = parse_project(args).map_err(|_| ProgramError::ParsingError)?;
 
     analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
 
@@ -53,7 +53,7 @@ pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
             let statements = template_data.get_body_as_vec();
             process_statements(&mut circuit, &mut runtime, &program_archive, statements)?;
 
-            for (ikey, (ivs, ivh)) in template_data.get_inputs().iter() {
+            for (ikey, (_ivs, _ivh)) in template_data.get_inputs().iter() {
                 // println!("{ikey}:{ivs}");
                 let filter = format!("0.{}", ikey);
                 circuit.add_inputs(circuit.get_signals(filter));
@@ -62,7 +62,7 @@ pub fn build_circuit(input: &Input) -> Result<ArithmeticCircuit, ProgramError> {
                 // }
             }
 
-            for (okey, (ovs, ovh)) in template_data.get_outputs().iter() {
+            for (okey, (_ovs, _ovh)) in template_data.get_outputs().iter() {
                 // println!("{okey}:{ovs}");
                 let filter = format!("0.{}", okey);
                 let signals = circuit.get_signals(filter);
