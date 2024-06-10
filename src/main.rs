@@ -30,7 +30,7 @@ fn main() -> Result<(), ProgramError> {
     let circuit = compiler.build_circuit()?;
 
     let output_file_path = build_output(&output_dir, "circuit", "txt");
-    File::create(output_file_path)?.write_all(circuit.get_bristol_string()?.as_bytes())?;
+    circuit.write_bristol(&mut File::create(output_file_path)?)?;
 
     let output_file_path = build_output(&output_dir, "circuit_info", "json");
     File::create(output_file_path)?.write_all(to_string_pretty(&circuit.info)?.as_bytes())?;
