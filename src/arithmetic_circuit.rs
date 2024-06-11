@@ -24,7 +24,7 @@ pub struct CircuitInfo {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstantInfo {
-    pub value: u32,
+    pub value: String,
     pub wire_index: u32,
 }
 
@@ -138,7 +138,13 @@ impl ArithmeticCircuit {
         }
 
         for (_, constant) in &self.info.constants {
-            wires[constant.wire_index as usize] = constant.value;
+            wires[constant.wire_index as usize] =
+                constant
+                    .value
+                    .parse::<u32>()
+                    .map_err(|_| CircuitError::ParsingError {
+                        message: "could not parse constant as u32".into(),
+                    })?;
         }
 
         for gate in &self.gates {

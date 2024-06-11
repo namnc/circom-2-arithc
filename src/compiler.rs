@@ -400,7 +400,7 @@ impl Compiler {
 
     pub fn build_circuit(&self) -> Result<ArithmeticCircuit, CircuitError> {
         let mut input_to_node_id = HashMap::<String, u32>::new();
-        let mut constant_to_node_id_and_value = HashMap::<String, (u32, u32)>::new();
+        let mut constant_to_node_id_and_value = HashMap::<String, (u32, String)>::new();
         let mut output_to_node_id = HashMap::<String, u32>::new();
 
         for (node_id, node) in self.nodes.iter() {
@@ -428,7 +428,8 @@ impl Compiler {
                 let signal = &self.signals[signal_id];
 
                 if let Some(value) = signal.value {
-                    constant_to_node_id_and_value.insert(signal.name.clone(), (*node_id, value));
+                    constant_to_node_id_and_value
+                        .insert(signal.name.clone(), (*node_id, value.to_string()));
                 }
             }
         }
