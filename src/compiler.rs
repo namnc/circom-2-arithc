@@ -21,10 +21,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use sim_circuit::circuit::CircuitError as SimCircuitError;
 use sim_circuit::circuit::{Circuit as SimCircuit, Gate as SimGate, Node as SimNode, Operation};
-use std::{
-    collections::{HashMap, HashSet},
-    string::FromUtf8Error,
-};
+use std::collections::{HashMap, HashSet};
 use strum_macros::{Display as StrumDisplay, EnumString};
 use thiserror::Error;
 
@@ -412,7 +409,7 @@ impl Compiler {
                     let prev = input_to_node_id.insert(input_name.clone(), *node_id);
 
                     if prev.is_some() {
-                        return Err(CircuitError::Invalid {
+                        return Err(CircuitError::Inconsistency {
                             message: format!("Duplicate input {}", input_name),
                         });
                     }
@@ -422,7 +419,7 @@ impl Compiler {
                     let prev = output_to_node_id.insert(output_name.clone(), *node_id);
 
                     if prev.is_some() {
-                        return Err(CircuitError::Invalid {
+                        return Err(CircuitError::Inconsistency {
                             message: format!("Duplicate output {}", output_name),
                         });
                     }
@@ -443,7 +440,7 @@ impl Compiler {
             .len();
 
         if total_io_nodes != input_to_node_id.len() + output_to_node_id.len() {
-            return Err(CircuitError::Invalid {
+            return Err(CircuitError::Inconsistency {
                 message: "The nodes used for input and output are not unique".to_string(),
             });
         }
@@ -740,14 +737,12 @@ pub enum CircuitError {
     UnsupportedGateType(String),
     #[error("Unprocessed node")]
     UnprocessedNode,
-
-    // TODO: Revise added errors
-    #[error("Invalid: {message}")]
-    Invalid { message: String },
-    #[error(transparent)]
-    SerdeError(#[from] serde_json::Error),
-    #[error(transparent)]
-    FromUtf8Error(#[from] FromUtf8Error),
+    #[error("Cyclic dependency: {message}")]
+    CyclicDependency { message: String },
+    #[error("Inconsistency: {message}")]
+    Inconsistency { message: String },
+    #[error("Parsing error: {message}")]
+    ParsingError { message: String },
 }
 
 impl From<CircuitError> for ProgramError {

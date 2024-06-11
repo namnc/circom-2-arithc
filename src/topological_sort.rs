@@ -32,8 +32,8 @@ fn topological_sort_visit(
     }
 
     if visiting[i] {
-        return Err(CircuitError::Invalid {
-            message: format!("Cyclic dependency detected at i={}", i),
+        return Err(CircuitError::CyclicDependency {
+            message: format!("detected at i={}", i),
         });
     }
 

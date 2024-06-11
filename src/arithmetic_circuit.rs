@@ -36,7 +36,9 @@ impl ArithmeticCircuit {
         self.write_bristol(&mut writer)?;
         drop(writer);
 
-        Ok(String::from_utf8(output)?)
+        String::from_utf8(output).map_err(|_| CircuitError::ParsingError {
+            message: "Generated Bristol data was not valid utf8".into(),
+        })
     }
 
     pub fn from_info_and_bristol_string(
@@ -85,14 +87,14 @@ impl ArithmeticCircuit {
 
         let input_count = BristolLine::read(r)?.io_count()?;
         if input_count != info.input_name_to_wire_index.len() as u32 {
-            return Err(CircuitError::Invalid {
+            return Err(CircuitError::Inconsistency {
                 message: "Input count mismatch".into(),
             });
         }
 
         let output_count = BristolLine::read(r)?.io_count()?;
         if output_count != info.output_name_to_wire_index.len() as u32 {
-            return Err(CircuitError::Invalid {
+            return Err(CircuitError::Inconsistency {
                 message: "Output count mismatch".into(),
             });
         }
@@ -104,7 +106,7 @@ impl ArithmeticCircuit {
 
         for line in r.lines() {
             if !line?.trim().is_empty() {
-                return Err(CircuitError::Invalid {
+                return Err(CircuitError::ParsingError {
                     message: "Unexpected non-whitespace line after gates".into(),
                 });
             }
@@ -130,7 +132,7 @@ impl ArithmeticCircuit {
         let mut wires = vec![0; self.wire_count as usize];
 
         for (name, wire_id) in &self.info.input_name_to_wire_index {
-            wires[*wire_id as usize] = *inputs.get(name).ok_or(CircuitError::Invalid {
+            wires[*wire_id as usize] = *inputs.get(name).ok_or(CircuitError::Inconsistency {
                 message: format!("Missing input {}", name),
             })?;
         }
@@ -209,14 +211,14 @@ impl BristolLine {
         let count = self.get::<u32>(0)?;
 
         if self.0.len() != (count + 1) as usize {
-            return Err(CircuitError::Invalid {
+            return Err(CircuitError::ParsingError {
                 message: format!("Expected {} parts", count + 1),
             });
         }
 
         for i in 1..self.0.len() {
             if self.get_str(i)? != "1" {
-                return Err(CircuitError::Invalid {
+                return Err(CircuitError::ParsingError {
                     message: format!("Expected 1 at index {}", i),
                 });
             }
@@ -227,13 +229,13 @@ impl BristolLine {
 
     pub fn gate(&self) -> Result<ArithmeticGate, CircuitError> {
         if self.0.len() != 6 {
-            return Err(CircuitError::Invalid {
+            return Err(CircuitError::ParsingError {
                 message: "Expected 6 parts".into(),
             });
         }
 
         if self.get::<u32>(0)? != 2 || self.get::<u32>(1)? != 1 {
-            return Err(CircuitError::Invalid {
+            return Err(CircuitError::ParsingError {
                 message: "Expected 2 inputs and 1 output".into(),
             });
         }
@@ -249,11 +251,11 @@ impl BristolLine {
     fn get<T: FromStr>(&self, index: usize) -> Result<T, CircuitError> {
         self.0
             .get(index)
-            .ok_or(CircuitError::Invalid {
+            .ok_or(CircuitError::ParsingError {
                 message: format!("Index {} out of bounds", index),
             })?
             .parse::<T>()
-            .map_err(|_| CircuitError::Invalid {
+            .map_err(|_| CircuitError::ParsingError {
                 message: format!("Failed to convert at index {}", index),
             })
     }
@@ -261,7 +263,7 @@ impl BristolLine {
     fn get_str(&self, index: usize) -> Result<&str, CircuitError> {
         self.0
             .get(index)
-            .ok_or(CircuitError::Invalid {
+            .ok_or(CircuitError::ParsingError {
                 message: format!("Index {} out of bounds", index),
             })
             .map(|s| s.as_str())
