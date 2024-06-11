@@ -1,7 +1,7 @@
-pragma circom 2.0.0;
+pragma circom 2.1.0;
 
 template Switcher() {
-    signal input sel;
+    signal input {binary} sel;
     signal input L;
     signal input R;
     signal output outL;

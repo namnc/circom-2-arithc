@@ -1,4 +1,4 @@
-pragma circom 2.0.0;
+pragma circom 2.1.0;
 
 template ComponentA () {
     signal input in[2][2];

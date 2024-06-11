@@ -5,7 +5,7 @@
 
 #![allow(clippy::result_unit_err)]
 
-pub const VERSION: &str = "2.0.0";
+pub const VERSION: &str = "2.1.0";
 
 pub mod parser;
 pub mod type_analysis;

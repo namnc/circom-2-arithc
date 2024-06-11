@@ -1,4 +1,4 @@
-pragma circom 2.0.0;
+pragma circom 2.1.0;
 
 // matrix multiplication by element
 template matElemMul (m,n) {
