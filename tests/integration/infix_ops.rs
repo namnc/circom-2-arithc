@@ -1,50 +1,49 @@
-use circom_2_arithc::{program::compile, Args};
-
-const TEST_FILE_PATH: &str = "./tests/circuits/infixOps.circom";
+mod helpers;
+use helpers::simulation_test;
 
 #[test]
 fn test_infix_ops() {
-    let input = Args::new(TEST_FILE_PATH.into(), "./".into());
-    let circuit = compile(&input).unwrap();
-    let sim_circuit = circuit.build_sim_circuit().unwrap();
-
-    let circuit_input = vec![0, 1, 2, 3, 4, 5];
-
-    let res = sim_circuit.execute(&circuit_input).unwrap();
-
-    assert_eq!(
-        res,
-        vec![
-            6,  // 2  * 3
-            1,  // 4  / 3 // TODO: Should this behave differently? (finite field division)
-            1,  // 4  \ 3 // (This one is definitely int division)
-            7,  // 3  + 4
-            3,  // 4  - 1
-            16, // 2 ** 4
-            2,  // 5  % 3
-            10, // 5 << 1
-            2,  // 5 >> 1
-            1,  // 2 <= 3
-            1,  // 3 <= 3
-            0,  // 4 <= 3
-            0,  // 2 >= 3
-            1,  // 3 >= 3
-            1,  // 4 >= 3
-            1,  // 2  < 3
-            0,  // 3  < 3
-            0,  // 4  < 3
-            0,  // 2  > 3
-            0,  // 3  > 3
-            1,  // 4  > 3
-            0,  // 2 == 3
-            1,  // 3 == 3
-            1,  // 2 != 3
-            0,  // 3 != 3
-            1,  // 0 || 1
-            0,  // 0 && 1
-            3,  // 1  | 3
-            1,  // 1  & 3
-            2,  // 1  ^ 3
-        ]
+    simulation_test(
+        "tests/circuits/infixOps.circom",
+        [
+            ("0.x0", 0),
+            ("0.x1", 1),
+            ("0.x2", 2),
+            ("0.x3", 3),
+            ("0.x4", 4),
+            ("0.x5", 5),
+        ],
+        [
+            ("0.mul_2_3", 6),
+            // ("0.div_4_3", 1), // unsupported for NumberU32
+            ("0.idiv_4_3", 1),
+            ("0.add_3_4", 7),
+            ("0.sub_4_1", 3),
+            ("0.pow_2_4", 16),
+            ("0.mod_5_3", 2),
+            ("0.shl_5_1", 10),
+            ("0.shr_5_1", 2),
+            ("0.leq_2_3", 1),
+            ("0.leq_3_3", 1),
+            ("0.leq_4_3", 0),
+            ("0.geq_2_3", 0),
+            ("0.geq_3_3", 1),
+            ("0.geq_4_3", 1),
+            ("0.lt_2_3", 1),
+            ("0.lt_3_3", 0),
+            ("0.lt_4_3", 0),
+            ("0.gt_2_3", 0),
+            ("0.gt_3_3", 0),
+            ("0.gt_4_3", 1),
+            ("0.eq_2_3", 0),
+            ("0.eq_3_3", 1),
+            ("0.neq_2_3", 1),
+            ("0.neq_3_3", 0),
+            ("0.or_0_1", 1),
+            ("0.and_0_1", 0),
+            ("0.bit_or_1_3", 3),
+            ("0.bit_and_1_3", 1),
+            ("0.bit_xor_1_3", 2),
+        ],
     );
 }

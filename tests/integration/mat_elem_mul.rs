@@ -1,14 +1,25 @@
-use circom_2_arithc::{program::compile, Args};
-
-const TEST_FILE_PATH: &str = "./tests/circuits/matElemMul.circom";
+mod helpers;
+use helpers::simulation_test;
 
 #[test]
 fn test_matrix_element_multiplication() {
-    let input = Args::new(TEST_FILE_PATH.into(), "./".into());
-    let circuit = compile(&input).unwrap();
-    let sim_circuit = circuit.build_sim_circuit().unwrap();
-
-    let circuit_input = vec![2, 2, 2, 2, 2, 2, 2, 2];
-    let res = sim_circuit.execute(&circuit_input).unwrap();
-    assert_eq!(res, vec![4, 4, 4, 4]);
+    simulation_test(
+        "tests/circuits/matElemMul.circom",
+        [
+            ("0.a[0][0]", 2),
+            ("0.a[0][1]", 2),
+            ("0.a[1][0]", 2),
+            ("0.a[1][1]", 2),
+            ("0.b[0][0]", 2),
+            ("0.b[0][1]", 2),
+            ("0.b[1][0]", 2),
+            ("0.b[1][1]", 2),
+        ],
+        [
+            ("0.out[0][0]", 4),
+            ("0.out[0][1]", 4),
+            ("0.out[1][0]", 4),
+            ("0.out[1][1]", 4),
+        ],
+    );
 }

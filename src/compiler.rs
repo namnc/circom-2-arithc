@@ -19,8 +19,6 @@ use bmr16_mpz::{
 use circom_program_structure::ast::ExpressionInfixOpcode;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use sim_circuit::circuit::CircuitError as SimCircuitError;
-use sim_circuit::circuit::{Circuit as SimCircuit, Gate as SimGate, Node as SimNode, Operation};
 use std::collections::{HashMap, HashSet};
 use strum_macros::{Display as StrumDisplay, EnumString};
 use thiserror::Error;
@@ -73,33 +71,6 @@ impl From<&ExpressionInfixOpcode> for AGateType {
             ExpressionInfixOpcode::BitOr => AGateType::ABitOr,
             ExpressionInfixOpcode::BitAnd => AGateType::ABitAnd,
             ExpressionInfixOpcode::BitXor => AGateType::AXor,
-        }
-    }
-}
-
-impl From<&AGateType> for Operation {
-    fn from(gate: &AGateType) -> Self {
-        match gate {
-            AGateType::AAdd => Operation::Add,
-            AGateType::ASub => Operation::Subtract,
-            AGateType::AMul => Operation::Multiply,
-            AGateType::ADiv => Operation::Divide,
-            AGateType::AEq => Operation::Equals,
-            AGateType::ANeq => Operation::NotEquals,
-            AGateType::ALt => Operation::LessThan,
-            AGateType::ALEq => Operation::LessOrEqual,
-            AGateType::AGt => Operation::GreaterThan,
-            AGateType::AGEq => Operation::GreaterOrEqual,
-            AGateType::AXor => Operation::XorBitwise,
-            AGateType::APow => Operation::Exponentiate,
-            AGateType::AIntDiv => Operation::IntegerDivide,
-            AGateType::AMod => Operation::Modulus,
-            AGateType::AShiftL => Operation::ShiftLeft,
-            AGateType::AShiftR => Operation::ShiftRight,
-            AGateType::ABoolOr => Operation::Or,
-            AGateType::ABoolAnd => Operation::And,
-            AGateType::ABitOr => Operation::OrBitwise,
-            AGateType::ABitAnd => Operation::AndBitwise,
         }
     }
 }
@@ -632,33 +603,6 @@ impl Compiler {
             .map_err(|_| CircuitError::MPZCircuitBuilderError)
     }
 
-    /// Builds a sim circuit instance.
-    pub fn build_sim_circuit(&self) -> Result<SimCircuit, CircuitError> {
-        let mut sim_circuit = SimCircuit::new();
-
-        // Add nodes
-        for (&id, node) in &self.nodes {
-            let mut new_node = SimNode::new();
-            if let Some(value) = node
-                .signals
-                .first()
-                .and_then(|&sig_id| self.signals.get(&sig_id).and_then(|sig| sig.value))
-            {
-                new_node.set_value(value);
-            }
-            sim_circuit.add_node(id, new_node)?;
-        }
-
-        // Add gates
-        for gate in &self.gates {
-            let operation = Operation::from(&gate.op);
-            let sim_gate = SimGate::new(operation, gate.lh_in, gate.rh_in, gate.out);
-            sim_circuit.add_gate(sim_gate)?;
-        }
-
-        Ok(sim_circuit)
-    }
-
     /// Returns a node id and increments the count.
     fn get_node_id(&mut self) -> u32 {
         self.node_count += 1;
@@ -728,8 +672,6 @@ pub enum CircuitError {
     MPZCircuitError(MpzCircuitError),
     #[error("MPZ arithmetic circuit builder error")]
     MPZCircuitBuilderError,
-    #[error("Circuit simulation error")]
-    SimCircuitError(SimCircuitError),
     #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("Signal already declared")]
@@ -755,11 +697,5 @@ impl From<CircuitError> for ProgramError {
 impl From<MpzCircuitError> for CircuitError {
     fn from(e: MpzCircuitError) -> Self {
         CircuitError::MPZCircuitError(e)
-    }
-}
-
-impl From<SimCircuitError> for CircuitError {
-    fn from(e: SimCircuitError) -> Self {
-        CircuitError::SimCircuitError(e)
     }
 }

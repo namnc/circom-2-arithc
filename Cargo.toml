@@ -33,7 +33,7 @@ circom-type_analysis = { git = "https://github.com/iden3/circom", package = "typ
 # MPZ
 mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits" }
 bmr16-mpz = { git = "https://github.com/tkmct/mpz", package = "mpz-circuits" }
-sim-circuit = { git = "https://github.com/brech1/sim-circuit" }
+sim-circuit = { git = "https://github.com/voltrevo/sim-circuit", branch = "c2a-issue-38-better-circuit-struct" }
 
 [[bin]]
 name = "circom"

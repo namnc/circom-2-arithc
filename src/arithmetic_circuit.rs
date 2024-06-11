@@ -5,10 +5,13 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use serde_json::{from_str, to_string};
 
 use crate::compiler::{AGateType, ArithmeticGate, CircuitError};
 
-#[derive(Debug, PartialEq, Eq)]
+use sim_circuit::arithmetic_circuit::ArithmeticCircuit as SimArithmeticCircuit;
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArithmeticCircuit {
     pub wire_count: u32,
     pub info: CircuitInfo,
@@ -29,6 +32,10 @@ pub struct ConstantInfo {
 }
 
 impl ArithmeticCircuit {
+    pub fn to_sim(&self) -> SimArithmeticCircuit {
+        from_str(&to_string(self).unwrap()).unwrap()
+    }
+
     pub fn get_bristol_string(&self) -> Result<String, CircuitError> {
         let mut output = Vec::new();
         let mut writer = BufWriter::new(&mut output);

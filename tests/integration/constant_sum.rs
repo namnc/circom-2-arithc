@@ -1,18 +1,7 @@
-use circom_2_arithc::{program::compile, Args};
-
-const TEST_FILE_PATH: &str = "./tests/circuits/constantSum.circom";
+mod helpers;
+use helpers::simulation_test;
 
 #[test]
 fn test_constant_sum() {
-    let input = Args::new(TEST_FILE_PATH.into(), "./".into());
-    let circuit = compile(&input).unwrap();
-    let sim_circuit = circuit.build_sim_circuit().unwrap();
-
-    let circuit_input = vec![];
-    let res = sim_circuit.execute(&circuit_input).unwrap();
-
-    assert_eq!(
-        res,
-        Vec::<u32>::new(), // FIXME: Should be vec![8]
-    );
+    simulation_test("tests/circuits/constantSum.circom", [], [("0.out", 8)]);
 }
