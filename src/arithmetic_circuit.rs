@@ -81,21 +81,20 @@ impl ArithmeticCircuit {
         info: CircuitInfo,
         r: &mut R,
     ) -> Result<ArithmeticCircuit, CircuitError> {
-        // TODO: Don't assume that inputs are first and outputs are last
-        // TODO: Understand how people using bristol circuits are supposed to identify the input
-        //       and output wires
-
         let (gate_count, wire_count) = BristolLine::read(r)?.circuit_sizes()?;
 
-        let mut inputs = HashMap::new();
-        for i in 0..BristolLine::read(r)?.io_count()? {
-            inputs.insert(format!("input{}", i), i);
+        let input_count = BristolLine::read(r)?.io_count()?;
+        if input_count != info.input_name_to_wire_index.len() as u32 {
+            return Err(CircuitError::Invalid {
+                message: "Input count mismatch".into(),
+            });
         }
 
-        let mut outputs = HashMap::new();
         let output_count = BristolLine::read(r)?.io_count()?;
-        for i in 0..output_count {
-            outputs.insert(format!("output{}", i), wire_count - output_count + i);
+        if output_count != info.output_name_to_wire_index.len() as u32 {
+            return Err(CircuitError::Invalid {
+                message: "Output count mismatch".into(),
+            });
         }
 
         let mut gates = Vec::new();
