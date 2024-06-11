@@ -7,7 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string};
 
-use crate::compiler::{AGateType, ArithmeticGate, CircuitError};
+use crate::compiler::{ArithmeticGate, CircuitError};
 
 use sim_circuit::arithmetic_circuit::ArithmeticCircuit as SimArithmeticCircuit;
 
@@ -124,73 +124,6 @@ impl ArithmeticCircuit {
             info,
             gates,
         })
-    }
-
-    pub fn eval<Inputs, K>(&self, inputs: Inputs) -> Result<HashMap<String, u32>, CircuitError>
-    where
-        Inputs: IntoIterator<Item = (K, u32)>,
-        K: Into<String>,
-    {
-        let inputs: HashMap<String, u32> = inputs
-            .into_iter()
-            .map(|(k, v)| (k.into(), v.into()))
-            .collect();
-
-        let mut wires = vec![0; self.wire_count as usize];
-
-        for (name, wire_id) in &self.info.input_name_to_wire_index {
-            wires[*wire_id as usize] = *inputs.get(name).ok_or(CircuitError::Inconsistency {
-                message: format!("Missing input {}", name),
-            })?;
-        }
-
-        for (_, constant) in &self.info.constants {
-            wires[constant.wire_index as usize] =
-                constant
-                    .value
-                    .parse::<u32>()
-                    .map_err(|_| CircuitError::ParsingError {
-                        message: "could not parse constant as u32".into(),
-                    })?;
-        }
-
-        for gate in &self.gates {
-            let lh = wires[gate.lh_in as usize];
-            let rh = wires[gate.rh_in as usize];
-
-            let result = match gate.op {
-                AGateType::AAdd => lh + rh,
-                AGateType::ADiv => lh / rh,
-                AGateType::AEq => (lh == rh) as u32,
-                AGateType::AGEq => (lh >= rh) as u32,
-                AGateType::AGt => (lh > rh) as u32,
-                AGateType::ALEq => (lh <= rh) as u32,
-                AGateType::ALt => (lh < rh) as u32,
-                AGateType::AMul => lh * rh,
-                AGateType::ANeq => (lh != rh) as u32,
-                AGateType::ASub => lh - rh,
-                AGateType::AXor => lh ^ rh,
-                AGateType::APow => todo!(),
-                AGateType::AIntDiv => lh / rh,
-                AGateType::AMod => lh % rh,
-                AGateType::AShiftL => todo!(),
-                AGateType::AShiftR => todo!(),
-                AGateType::ABoolOr => todo!(),
-                AGateType::ABoolAnd => todo!(),
-                AGateType::ABitOr => todo!(),
-                AGateType::ABitAnd => todo!(),
-            };
-
-            wires[gate.out as usize] = result;
-        }
-
-        let mut outputs = HashMap::new();
-
-        for (name, wire_id) in &self.info.output_name_to_wire_index {
-            outputs.insert(name.clone(), wires[*wire_id as usize]);
-        }
-
-        Ok(outputs)
     }
 }
 
