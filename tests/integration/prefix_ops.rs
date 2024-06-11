@@ -1,5 +1,4 @@
-mod helpers;
-use helpers::simulation_test;
+use crate::helpers::simulation_test;
 
 #[test]
 #[should_panic] // FIXME: Should NOT panic (see comment below)

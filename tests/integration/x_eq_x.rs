@@ -1,5 +1,4 @@
-mod helpers;
-use helpers::simulation_test;
+use crate::helpers::simulation_test;
 
 #[test]
 fn test_x_eq_x() {
