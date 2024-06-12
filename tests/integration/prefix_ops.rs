@@ -5,7 +5,7 @@ use crate::helpers::simulation_test;
 fn test_prefix_ops() {
     // FIXME: The compiler sees several of the outputs as inputs, leading to the error below
     //        CircuitError(Inconsistency {
-    //            message: "The nodes used for input and output are not unique"
+    //            message: "Node 10 used for both input 0.complementC and output 0.complementC"
     //        })
     simulation_test(
         "tests/circuits/prefixOps.circom",

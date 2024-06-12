@@ -370,11 +370,15 @@ impl Compiler {
     }
 
     pub fn build_circuit(&self) -> Result<ArithmeticCircuit, CircuitError> {
+        // First build up these maps so we can easily see which node id to use
         let mut input_to_node_id = HashMap::<String, u32>::new();
         let mut constant_to_node_id_and_value = HashMap::<String, (u32, String)>::new();
         let mut output_to_node_id = HashMap::<String, u32>::new();
 
         for (node_id, node) in self.nodes.iter() {
+            // Each node has a list of signal ids which all correspond to that node
+            // The compiler associates IO with signals, so here we bridge the gap so we get
+            // IO <=> node instead of IO <=> signal <=> node
             for signal_id in node.get_signals() {
                 if let Some(input_name) = self.inputs.get(signal_id) {
                     let prev = input_to_node_id.insert(input_name.clone(), *node_id);
@@ -405,25 +409,43 @@ impl Compiler {
             }
         }
 
-        let total_io_nodes = input_to_node_id
-            .values()
-            .chain(output_to_node_id.values())
-            .collect::<HashSet<_>>()
-            .len();
+        {
+            // We want inputs at the start and outputs at the end
+            // We won't be able to do that if a node is used for both input and output
+            // That shouldn't happen, so we check here that it doesn't happen
 
-        if total_io_nodes != input_to_node_id.len() + output_to_node_id.len() {
-            return Err(CircuitError::Inconsistency {
-                message: "The nodes used for input and output are not unique".to_string(),
-            });
+            let node_id_to_input_name = input_to_node_id
+                .iter()
+                .map(|(name, node_id)| (node_id, name))
+                .collect::<HashMap<_, _>>();
+
+            for (output_name, output_node_id) in &output_to_node_id {
+                if let Some(input_name) = node_id_to_input_name.get(output_node_id) {
+                    return Err(CircuitError::Inconsistency {
+                        message: format!(
+                            "Node {} used for both input {} and output {}",
+                            output_node_id, input_name, output_name
+                        ),
+                    });
+                }
+            }
         }
 
+        // Now node ids are like wire ids, but the compiler generates them in a way that leaves a
+        // lot of gaps. So we assign new wire ids so they'll be sequential instead. We also do this
+        // ensure inputs are at the start and outputs are at the end.
         let mut node_id_to_wire_id = HashMap::<u32, u32>::new();
         let mut next_wire_id = 0;
 
+        // First inputs
         for (_, node_id) in &input_to_node_id {
             node_id_to_wire_id.insert(*node_id, next_wire_id);
             next_wire_id += 1;
         }
+
+        // For the intermediate nodes, we need the gates in topological order so that the wires are
+        // assigned in the order they are needed. The topological order is also needed to comply
+        // with bristol format and allow for easy evaluation.
 
         let mut node_id_to_required_gate = HashMap::<u32, usize>::new();
 
@@ -449,12 +471,14 @@ impl Compiler {
 
         let output_node_ids = output_to_node_id.values().collect::<HashSet<_>>();
 
+        // Now that the gates are in order, we can assign wire ids to each node in the order they
+        // are seen
         for gate_id in &sorted_gate_ids {
             let gate = &self.gates[*gate_id];
 
             for node_id in &[gate.lh_in, gate.rh_in, gate.out] {
                 if output_node_ids.contains(node_id) {
-                    // Output wires should be at the end, so we don't assign wire ids here
+                    // Output wires are excluded so that they can all be at the end
                     continue;
                 }
 
@@ -473,8 +497,8 @@ impl Compiler {
             next_wire_id += 1;
         }
 
+        // Now we can create the new gates using topological order and the new wire ids
         let mut new_gates = Vec::<ArithmeticGate>::new();
-
         for gate_id in sorted_gate_ids {
             let gate = &self.gates[gate_id];
 
