@@ -6,7 +6,7 @@ use crate::compiler::{AGateType, Compiler};
 use crate::program::ProgramError;
 use crate::runtime::{
     generate_u32, increment_indices, u32_to_access, Context, DataAccess, DataType, NestedValue,
-    Runtime, Signal, SubAccess, RETURN_VAR,
+    Runtime, RuntimeError, Signal, SubAccess, RETURN_VAR,
 };
 use circom_circom_algebra::num_traits::ToPrimitive;
 use circom_program_structure::ast::{
@@ -167,6 +167,19 @@ pub fn process_statement(
 
             ctx.declare_item(DataType::Variable, RETURN_VAR, &[], signal_gen)?;
             ctx.set_variable(&DataAccess::new(RETURN_VAR, vec![]), Some(return_value))?;
+
+            Ok(())
+        }
+        Statement::Assert { arg, .. } => {
+            let access = process_expression(ac, runtime, program_archive, arg)?;
+            let result = runtime
+                .current_context()?
+                .get_variable_value(&access)?
+                .ok_or(ProgramError::EmptyDataItem)?;
+
+            if result == 0 {
+                return Err(ProgramError::RuntimeError(RuntimeError::AssertionFailed));
+            }
 
             Ok(())
         }

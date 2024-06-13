@@ -25,7 +25,7 @@ This library enables the creation of arithmetic circuits from circom programs.
 |                 | `UnderscoreSubstitution` |    ❌     |
 |                 | `ConstraintEquality`     |    ❌     |
 |                 | `LogCall`                |    ❌     |
-|                 | `Assert`                 |    ❌     |
+|                 | `Assert`                 |    ✅     |
 | **Expressions** | `Call`                   |    ✅     |
 |                 | `InfixOp`                |    ✅     |
 |                 | `Number`                 |    ✅     |

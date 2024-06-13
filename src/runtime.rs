@@ -824,6 +824,8 @@ pub enum RuntimeError {
     NotAValue,
     #[error("Unsupported data type")]
     UnsupportedDataType,
+    #[error("Assertion failed")]
+    AssertionFailed,
 }
 
 impl From<RuntimeError> for ProgramError {
