@@ -1,168 +1,32 @@
 pragma circom 2.1.0;
 
-template Switcher() {
-    signal input {binary} sel;
-    signal input L;
-    signal input R;
-    signal output outL;
-    signal output outR;
+// M parties each with N items
 
-    signal aux;
+template naive_search(M,N) {
+   signal input inlist[M][N];
+   signal input in;
+   signal output out;
+   signal matches[M][N];
+   signal sum[M][N];
 
-    aux <== (R-L)*sel;    // We create aux in order to have only one multiplication
-    outL <==  aux + L;
-    outR <==  R - aux;
+   sum[0][0] <== 0 + 0;
+   for (var i = 1; i < N; i++) {
+         matches[0][i] <== in == inlist[0][i];
+         sum[0][i] <== sum[0][i-1] + matches[0][i];
+      }
+
+   for (var i = 1; i < M; i++) {
+      sum[i][0] <== sum[i-1][N-1];
+      matches[i][0] <== in == inlist[i][0];
+      for (var j = 1; j < N; j++) {
+         matches[i][j] <== in == inlist[i][j];
+         sum[i][j] <== sum[i][j-1] + matches[i][j];
+      }
+   }
+   
+
+   
+   out <== sum[M-1][N-1] + 2;
 }
 
-
-template fc (width, height) {
-    signal input in[width];
-    signal input weights[height][width];
-    signal input biases[height];
-    signal output out[height];
-
-    component rows[height];
-
-    component relu[height];
-
-    for(var index = 0; index < height; index++) {
-        rows[index] = dot_product(width);
-        for(var index_input = 0; index_input < width; index_input++) {
-            rows[index].inputs[index_input] <== in[index_input];
-            rows[index].weight_vector[index_input] <== weights[index][index_input];
-        }
-        rows[index].bias <== biases[index];
-        relu[index] = div_relu(12);
-        relu[index].in <== rows[index].out;
-        out[index] <== relu[index].out;
-    }
-}
-
-template fc_no_relu (width, height) {
-    signal input in[width];
-    signal input weights[height][width];
-    signal input biases[height];
-    signal output out[height];
-
-    component rows[height];
-
-    for(var index = 0; index < height; index++) {
-        rows[index] = dot_product(width);
-        for(var index_input = 0; index_input < width; index_input++) {
-            rows[index].inputs[index_input] <== in[index_input];
-            rows[index].weight_vector[index_input] <== weights[index][index_input];
-        }
-        rows[index].bias <== biases[index];
-        out[index] <== rows[index].out;
-    }
-}
-
-template dot_product (width) {
-    signal input inputs[width];
-    signal input weight_vector[width];
-    signal inter_accum[width];
-    signal input bias;
-    signal output out;
-
-    inter_accum[0] <== inputs[0]*weight_vector[0];
-    // inter_accum[0]*0 === 0;
-
-    for(var index = 1; index < width; index++) {
-        inter_accum[index] <== inputs[index]*weight_vector[index] + inter_accum[index-1];
-    }
-    out <== inter_accum[width-1] + bias;
-}
-
-template ShiftRight(k) {
-    signal input in;
-    signal output out;
-    out <== in;
-}
-
-template Sign() {
-    signal input in;
-    signal output sign;
-}
-
-template div_relu(k) {
-    signal input in;
-    signal output out;
-    component shiftRight = ShiftRight(k);
-    component sign = Sign();
-    
-    shiftRight.in <== in;
-    sign.in <== shiftRight.out;
-
-    component switcher = Switcher();
-    switcher.sel <== sign.sign;
-    switcher.L <== shiftRight.out;
-    switcher.R <== 0;
-    //switcher.outR*0 === 0;
-
-    out <== switcher.outL;
-}
-
-template network() {
-    // var in_len = 2;
-    // var out_len = 3;
-    signal input in[1];
-    signal output out[2];
-
-    component l0 = fc(1, 2);
-    signal input w0[2][1];
-    signal input b0[2];
-    for (var i = 0; i < 2; i++) {
-        for (var j = 0; j < 1; j++) {
-            l0.weights[i][j] <== w0[i][j];
-        }
-        l0.biases[i] <== b0[i];
-    }
-    // l0.weights <== w0;
-    // l0.biases <== b0;
-    for (var k = 0; k < 1; k++) {
-        l0.in[k] <== in[k];
-    }
-
-    for (var k = 0; k < 2; k++) {
-        out[k] <== l0.out[k];
-    }
-
-    // component l1 = fc(3, 4);
-    // signal input w1[4][3];
-    // signal input b1[4];
-    // for (var i = 0; i < 4; i++) {
-    //     for (var j = 0; j < 3; j++) {
-    //         l1.weights[i][j] <== w1[i][j];
-    //     }
-    //     l1.biases[i] <== b1[i];
-    // }
-    // // l1.weights <== w1;
-    // // l1.biases <== b1;
-    // for (var k = 0; k < 3; k++) {
-    //     l1.in[k] <== l0.out[k];
-    // }
-    // // l1.in <== l0.out;
-
-    // component l2 = fc_no_relu(4, 3);
-    // signal input w2[3][4];
-    // signal input b2[3];
-    // for (var i = 0; i < 3; i++) {
-    //     for (var j = 0; j < 4; j++) {
-    //         l2.weights[i][j] <== w2[i][j];
-    //     }
-    //     l2.biases[i] <== b2[i];
-    // }
-    // // l2.weights <== w2;
-    // // l2.biases <== b2;
-    // for (var k = 0; k < 4; k++) {
-    //     l2.in[k] <== l1.out[k];
-    // }
-    // // l2.in <== l1.out;
-
-    // for (var k = 0; k < 3; k++) {
-    //     out[k] <== l2.out[k];
-    // }
-    // out <== l2.out;
-}
-
-component main = network();
+component main = naive_search(3,5);
