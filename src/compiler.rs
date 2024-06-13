@@ -527,12 +527,16 @@ impl Compiler {
             info: CircuitInfo {
                 input_name_to_wire_index: input_to_node_id
                     .iter()
-                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                    .map(|(name, node_id)| {
+                        (name.clone().replace("0.", ""), node_id_to_wire_id[node_id])
+                    })
                     .collect(),
                 constants,
                 output_name_to_wire_index: output_to_node_id
                     .iter()
-                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                    .map(|(name, node_id)| {
+                        (name.clone().replace("0.", ""), node_id_to_wire_id[node_id])
+                    })
                     .collect(),
             },
             gates: new_gates,
