@@ -9,7 +9,7 @@ template infixOps() {
     signal input x5;
 
     signal output mul_2_3;
-    signal output div_4_3;
+    // signal output div_4_3; // unsupported for NumberU32
     signal output idiv_4_3;
     signal output add_3_4;
     signal output sub_4_1;
@@ -40,7 +40,7 @@ template infixOps() {
     signal output bit_xor_1_3;
 
     mul_2_3 <== x2 * x3;
-    div_4_3 <== x4 / x3;
+    // div_4_3 <== x4 / x3;
     idiv_4_3 <== x4 \ x3;
     add_3_4 <== x3 + x4;
     sub_4_1 <== x4 - x1;

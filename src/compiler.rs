@@ -2,7 +2,11 @@
 //!
 //! This module defines the data structures used to represent the arithmetic circuit.
 
-use crate::program::ProgramError;
+use crate::{
+    arithmetic_circuit::{ArithmeticCircuit, CircuitInfo, ConstantInfo},
+    program::ProgramError,
+    topological_sort::topological_sort,
+};
 use bmr16_mpz::{
     arithmetic::{
         circuit::ArithmeticCircuit as MpzCircuit,
@@ -15,13 +19,12 @@ use bmr16_mpz::{
 use circom_program_structure::ast::ExpressionInfixOpcode;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use sim_circuit::circuit::CircuitError as SimCircuitError;
-use sim_circuit::circuit::{Circuit as SimCircuit, Gate as SimGate, Node as SimNode, Operation};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use strum_macros::{Display as StrumDisplay, EnumString};
 use thiserror::Error;
 
 /// Types of gates that can be used in an arithmetic circuit.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, EnumString, StrumDisplay)]
 pub enum AGateType {
     AAdd,
     ADiv,
@@ -68,33 +71,6 @@ impl From<&ExpressionInfixOpcode> for AGateType {
             ExpressionInfixOpcode::BitOr => AGateType::ABitOr,
             ExpressionInfixOpcode::BitAnd => AGateType::ABitAnd,
             ExpressionInfixOpcode::BitXor => AGateType::AXor,
-        }
-    }
-}
-
-impl From<&AGateType> for Operation {
-    fn from(gate: &AGateType) -> Self {
-        match gate {
-            AGateType::AAdd => Operation::Add,
-            AGateType::ASub => Operation::Subtract,
-            AGateType::AMul => Operation::Multiply,
-            AGateType::ADiv => Operation::Divide,
-            AGateType::AEq => Operation::Equals,
-            AGateType::ANeq => Operation::NotEquals,
-            AGateType::ALt => Operation::LessThan,
-            AGateType::ALEq => Operation::LessOrEqual,
-            AGateType::AGt => Operation::GreaterThan,
-            AGateType::AGEq => Operation::GreaterOrEqual,
-            AGateType::AXor => Operation::XorBitwise,
-            AGateType::APow => Operation::Exponentiate,
-            AGateType::AIntDiv => Operation::IntegerDivide,
-            AGateType::AMod => Operation::Modulus,
-            AGateType::AShiftL => Operation::ShiftLeft,
-            AGateType::AShiftR => Operation::ShiftRight,
-            AGateType::ABoolOr => Operation::Or,
-            AGateType::ABoolAnd => Operation::And,
-            AGateType::ABitOr => Operation::OrBitwise,
-            AGateType::ABitAnd => Operation::AndBitwise,
         }
     }
 }
@@ -168,12 +144,12 @@ impl Node {
 }
 
 /// Represents a circuit gate, with a left-hand input, right-hand input, and output node identifiers.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ArithmeticGate {
-    op: AGateType,
-    lh_in: u32,
-    rh_in: u32,
-    out: u32,
+    pub op: AGateType,
+    pub lh_in: u32,
+    pub rh_in: u32,
+    pub out: u32,
 }
 
 impl ArithmeticGate {
@@ -188,9 +164,10 @@ impl ArithmeticGate {
     }
 }
 
-/// Represents an arithmetic circuit, with a set of variables and gates.
+/// Compilation data structure representing an arithmetic circuit with extra information, including
+/// a set of variables and gates.
 #[derive(Default, Debug, Serialize, Deserialize)]
-pub struct ArithmeticCircuit {
+pub struct Compiler {
     node_count: u32,
     inputs: HashMap<u32, String>,
     outputs: HashMap<u32, String>,
@@ -199,10 +176,9 @@ pub struct ArithmeticCircuit {
     gates: Vec<ArithmeticGate>,
 }
 
-impl ArithmeticCircuit {
-    /// Creates a new arithmetic circuit.
-    pub fn new() -> ArithmeticCircuit {
-        ArithmeticCircuit {
+impl Compiler {
+    pub fn new() -> Compiler {
+        Compiler {
             node_count: 0,
             inputs: HashMap::new(),
             outputs: HashMap::new(),
@@ -393,6 +369,176 @@ impl ArithmeticCircuit {
         Ok(CircuitReport { inputs, outputs })
     }
 
+    pub fn build_circuit(&self) -> Result<ArithmeticCircuit, CircuitError> {
+        // First build up these maps so we can easily see which node id to use
+        let mut input_to_node_id = HashMap::<String, u32>::new();
+        let mut constant_to_node_id_and_value = HashMap::<String, (u32, String)>::new();
+        let mut output_to_node_id = HashMap::<String, u32>::new();
+
+        for (node_id, node) in self.nodes.iter() {
+            // Each node has a list of signal ids which all correspond to that node
+            // The compiler associates IO with signals, so here we bridge the gap so we get
+            // IO <=> node instead of IO <=> signal <=> node
+            for signal_id in node.get_signals() {
+                if let Some(input_name) = self.inputs.get(signal_id) {
+                    let prev = input_to_node_id.insert(input_name.clone(), *node_id);
+
+                    if prev.is_some() {
+                        return Err(CircuitError::Inconsistency {
+                            message: format!("Duplicate input {}", input_name),
+                        });
+                    }
+                }
+
+                if let Some(output_name) = self.outputs.get(signal_id) {
+                    let prev = output_to_node_id.insert(output_name.clone(), *node_id);
+
+                    if prev.is_some() {
+                        return Err(CircuitError::Inconsistency {
+                            message: format!("Duplicate output {}", output_name),
+                        });
+                    }
+                }
+
+                let signal = &self.signals[signal_id];
+
+                if let Some(value) = signal.value {
+                    constant_to_node_id_and_value
+                        .insert(signal.name.clone(), (*node_id, value.to_string()));
+                }
+            }
+        }
+
+        {
+            // We want inputs at the start and outputs at the end
+            // We won't be able to do that if a node is used for both input and output
+            // That shouldn't happen, so we check here that it doesn't happen
+
+            let node_id_to_input_name = input_to_node_id
+                .iter()
+                .map(|(name, node_id)| (node_id, name))
+                .collect::<HashMap<_, _>>();
+
+            for (output_name, output_node_id) in &output_to_node_id {
+                if let Some(input_name) = node_id_to_input_name.get(output_node_id) {
+                    return Err(CircuitError::Inconsistency {
+                        message: format!(
+                            "Node {} used for both input {} and output {}",
+                            output_node_id, input_name, output_name
+                        ),
+                    });
+                }
+            }
+        }
+
+        // Now node ids are like wire ids, but the compiler generates them in a way that leaves a
+        // lot of gaps. So we assign new wire ids so they'll be sequential instead. We also do this
+        // ensure inputs are at the start and outputs are at the end.
+        let mut node_id_to_wire_id = HashMap::<u32, u32>::new();
+        let mut next_wire_id = 0;
+
+        // First inputs
+        for (_, node_id) in &input_to_node_id {
+            node_id_to_wire_id.insert(*node_id, next_wire_id);
+            next_wire_id += 1;
+        }
+
+        // For the intermediate nodes, we need the gates in topological order so that the wires are
+        // assigned in the order they are needed. The topological order is also needed to comply
+        // with bristol format and allow for easy evaluation.
+
+        let mut node_id_to_required_gate = HashMap::<u32, usize>::new();
+
+        for (gate_id, gate) in self.gates.iter().enumerate() {
+            // the gate.out node depends on this gate
+            node_id_to_required_gate.insert(gate.out, gate_id);
+        }
+
+        let sorted_gate_ids = topological_sort(self.gates.len(), &|gate_id: usize| {
+            let gate = &self.gates[gate_id];
+            let mut deps = Vec::<usize>::new();
+
+            if let Some(required_gate_id) = node_id_to_required_gate.get(&gate.lh_in) {
+                deps.push(*required_gate_id);
+            }
+
+            if let Some(required_gate_id) = node_id_to_required_gate.get(&gate.rh_in) {
+                deps.push(*required_gate_id);
+            }
+
+            deps
+        })?;
+
+        let output_node_ids = output_to_node_id.values().collect::<HashSet<_>>();
+
+        // Now that the gates are in order, we can assign wire ids to each node in the order they
+        // are seen
+        for gate_id in &sorted_gate_ids {
+            let gate = &self.gates[*gate_id];
+
+            for node_id in &[gate.lh_in, gate.rh_in, gate.out] {
+                if output_node_ids.contains(node_id) {
+                    // Output wires are excluded so that they can all be at the end
+                    continue;
+                }
+
+                if node_id_to_wire_id.contains_key(node_id) {
+                    continue;
+                }
+
+                node_id_to_wire_id.insert(*node_id, next_wire_id);
+                next_wire_id += 1;
+            }
+        }
+
+        // Assign wire ids to output nodes
+        for (_, node_id) in &output_to_node_id {
+            node_id_to_wire_id.insert(*node_id, next_wire_id);
+            next_wire_id += 1;
+        }
+
+        // Now we can create the new gates using topological order and the new wire ids
+        let mut new_gates = Vec::<ArithmeticGate>::new();
+        for gate_id in sorted_gate_ids {
+            let gate = &self.gates[gate_id];
+
+            new_gates.push(ArithmeticGate {
+                op: gate.op,
+                lh_in: node_id_to_wire_id[&gate.lh_in],
+                rh_in: node_id_to_wire_id[&gate.rh_in],
+                out: node_id_to_wire_id[&gate.out],
+            });
+        }
+
+        let mut constants = HashMap::<String, ConstantInfo>::new();
+
+        for (name, (node_id, value)) in constant_to_node_id_and_value {
+            constants.insert(
+                name,
+                ConstantInfo {
+                    value,
+                    wire_index: node_id_to_wire_id[&node_id],
+                },
+            );
+        }
+
+        Ok(ArithmeticCircuit {
+            wire_count: next_wire_id,
+            info: CircuitInfo {
+                input_name_to_wire_index: input_to_node_id
+                    .iter()
+                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                    .collect(),
+                constants,
+                output_name_to_wire_index: output_to_node_id
+                    .iter()
+                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                    .collect(),
+            },
+            gates: new_gates,
+        })
+    }
+
     /// Builds an arithmetic circuit using the mpz circuit builder.
     pub fn build_mpz_circuit(&self, report: &CircuitReport) -> Result<MpzCircuit, CircuitError> {
         let builder = ArithmeticCircuitBuilder::new();
@@ -481,33 +627,6 @@ impl ArithmeticCircuit {
             .map_err(|_| CircuitError::MPZCircuitBuilderError)
     }
 
-    /// Builds a sim circuit instance.
-    pub fn build_sim_circuit(&self) -> Result<SimCircuit, CircuitError> {
-        let mut sim_circuit = SimCircuit::new();
-
-        // Add nodes
-        for (&id, node) in &self.nodes {
-            let mut new_node = SimNode::new();
-            if let Some(value) = node
-                .signals
-                .first()
-                .and_then(|&sig_id| self.signals.get(&sig_id).and_then(|sig| sig.value))
-            {
-                new_node.set_value(value);
-            }
-            sim_circuit.add_node(id, new_node)?;
-        }
-
-        // Add gates
-        for gate in &self.gates {
-            let operation = Operation::from(&gate.op);
-            let sim_gate = SimGate::new(operation, gate.lh_in, gate.rh_in, gate.out);
-            sim_circuit.add_gate(sim_gate)?;
-        }
-
-        Ok(sim_circuit)
-    }
-
     /// Returns a node id and increments the count.
     fn get_node_id(&mut self) -> u32 {
         self.node_count += 1;
@@ -577,8 +696,6 @@ pub enum CircuitError {
     MPZCircuitError(MpzCircuitError),
     #[error("MPZ arithmetic circuit builder error")]
     MPZCircuitBuilderError,
-    #[error("Circuit simulation error")]
-    SimCircuitError(SimCircuitError),
     #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("Signal already declared")]
@@ -587,6 +704,12 @@ pub enum CircuitError {
     UnsupportedGateType(String),
     #[error("Unprocessed node")]
     UnprocessedNode,
+    #[error("Cyclic dependency: {message}")]
+    CyclicDependency { message: String },
+    #[error("Inconsistency: {message}")]
+    Inconsistency { message: String },
+    #[error("Parsing error: {message}")]
+    ParsingError { message: String },
 }
 
 impl From<CircuitError> for ProgramError {
@@ -598,11 +721,5 @@ impl From<CircuitError> for ProgramError {
 impl From<MpzCircuitError> for CircuitError {
     fn from(e: MpzCircuitError) -> Self {
         CircuitError::MPZCircuitError(e)
-    }
-}
-
-impl From<SimCircuitError> for CircuitError {
-    fn from(e: SimCircuitError) -> Self {
-        CircuitError::SimCircuitError(e)
     }
 }

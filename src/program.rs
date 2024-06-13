@@ -4,7 +4,7 @@
 
 use crate::{
     circom::{parser::parse_project, type_analysis::analyse_project},
-    circuit::{ArithmeticCircuit, CircuitError},
+    compiler::{CircuitError, Compiler},
     process::{process_expression, process_statements},
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
     Args,
@@ -14,8 +14,8 @@ use std::io;
 use thiserror::Error;
 
 /// Parses a given Circom program and constructs an arithmetic circuit from it.
-pub fn build_circuit(args: &Args) -> Result<ArithmeticCircuit, ProgramError> {
-    let mut circuit = ArithmeticCircuit::new();
+pub fn compile(args: &Args) -> Result<Compiler, ProgramError> {
+    let mut compiler = Compiler::new();
     let mut runtime = Runtime::new();
     let mut program_archive = parse_project(args).map_err(|_| ProgramError::ParsingError)?;
 
@@ -29,7 +29,7 @@ pub fn build_circuit(args: &Args) -> Result<ArithmeticCircuit, ProgramError> {
             let mut values: Vec<Option<u32>> = Vec::new();
             for expression in args {
                 let access =
-                    process_expression(&mut circuit, &mut runtime, &program_archive, expression)?;
+                    process_expression(&mut compiler, &mut runtime, &program_archive, expression)?;
                 let value = runtime.current_context()?.get_variable_value(&access)?;
                 values.push(value);
             }
@@ -51,12 +51,12 @@ pub fn build_circuit(args: &Args) -> Result<ArithmeticCircuit, ProgramError> {
 
             // Process the main component
             let statements = template_data.get_body_as_vec();
-            process_statements(&mut circuit, &mut runtime, &program_archive, statements)?;
+            process_statements(&mut compiler, &mut runtime, &program_archive, statements)?;
 
             for (ikey, (_ivs, _ivh)) in template_data.get_inputs().iter() {
                 // println!("{ikey}:{ivs}");
                 let filter = format!("0.{}", ikey);
-                circuit.add_inputs(circuit.get_signals(filter));
+                compiler.add_inputs(compiler.get_signals(filter));
                 // for ivhs in ivh.iter() {
                 //     println!("{ivhs}");
                 // }
@@ -65,8 +65,8 @@ pub fn build_circuit(args: &Args) -> Result<ArithmeticCircuit, ProgramError> {
             for (okey, (_ovs, _ovh)) in template_data.get_outputs().iter() {
                 // println!("{okey}:{ovs}");
                 let filter = format!("0.{}", okey);
-                let signals = circuit.get_signals(filter);
-                circuit.add_outputs(signals);
+                let signals = compiler.get_signals(filter);
+                compiler.add_outputs(signals);
                 // for ovhs in ovh.iter() {
                 //     println!("{ovhs}");
                 // }
@@ -75,7 +75,7 @@ pub fn build_circuit(args: &Args) -> Result<ArithmeticCircuit, ProgramError> {
         _ => return Err(ProgramError::MainExpressionNotACall),
     }
 
-    Ok(circuit)
+    Ok(compiler)
 }
 
 /// Program errors
