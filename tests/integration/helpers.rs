@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-
-use circom_2_arithc::{program::compile, Args};
+use circom_2_arithc::{cli::Args, program::compile};
 use sim_circuit::{simulate, NumberU32};
+use std::collections::HashMap;
 
 pub fn simulation_test<
     Input: IntoIterator<Item = (&'static str, u32)>,
