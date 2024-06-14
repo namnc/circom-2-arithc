@@ -215,9 +215,9 @@ impl BristolLine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::compiler::AGateType;
     use std::io::{BufReader, Cursor};
+    use crate::compiler::AGateType;
+    use super::*;
 
     // Helper function to create a sample ArithmeticCircuit
     fn create_sample_circuit() -> ArithmeticCircuit {
