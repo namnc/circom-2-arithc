@@ -1,15 +1,12 @@
+use crate::compiler::{ArithmeticGate, CircuitError};
+use serde::{Deserialize, Serialize};
+use serde_json::{from_str, to_string};
+use sim_circuit::arithmetic_circuit::ArithmeticCircuit as SimArithmeticCircuit;
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader, BufWriter, Write},
     str::FromStr,
 };
-
-use serde::{Deserialize, Serialize};
-use serde_json::{from_str, to_string};
-
-use crate::compiler::{ArithmeticGate, CircuitError};
-
-use sim_circuit::arithmetic_circuit::ArithmeticCircuit as SimArithmeticCircuit;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArithmeticCircuit {
@@ -217,12 +214,10 @@ impl BristolLine {
 }
 
 #[cfg(test)]
-mod test_arithmetic_circuit {
-    use std::io::{BufReader, Cursor};
-
-    use crate::compiler::AGateType;
-
+mod tests {
     use super::*;
+    use crate::compiler::AGateType;
+    use std::io::{BufReader, Cursor};
 
     // Helper function to create a sample ArithmeticCircuit
     fn create_sample_circuit() -> ArithmeticCircuit {
