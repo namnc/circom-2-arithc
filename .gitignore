@@ -16,6 +16,7 @@ Cargo.lock
 
 # Local
 .env
+.vscode/
 
 # Output
 output/

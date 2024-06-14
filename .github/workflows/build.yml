@@ -1,4 +1,4 @@
-name: Main Action
+name: Build
 
 on:
   push:
