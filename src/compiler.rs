@@ -438,7 +438,7 @@ impl Compiler {
         let mut next_wire_id = 0;
 
         // First inputs
-        for (_, node_id) in &input_to_node_id {
+        for node_id in input_to_node_id.values() {
             node_id_to_wire_id.insert(*node_id, next_wire_id);
             next_wire_id += 1;
         }
@@ -492,7 +492,7 @@ impl Compiler {
         }
 
         // Assign wire ids to output nodes
-        for (_, node_id) in &output_to_node_id {
+        for node_id in output_to_node_id.values() {
             node_id_to_wire_id.insert(*node_id, next_wire_id);
             next_wire_id += 1;
         }
