@@ -2,7 +2,7 @@
 name = "circom-2-arithc"
 version = "0.1.0"
 edition = "2021"
-resolver = "1"           # Fixes lalrpop issue, see: https://github.com/lalrpop/lalrpop/issues/616
+resolver = "1" # Fixes lalrpop issue, see: https://github.com/lalrpop/lalrpop/issues/616
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }

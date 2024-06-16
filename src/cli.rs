@@ -36,3 +36,20 @@ pub fn build_output(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
     file.push(format!("{}.{}", filename, ext));
     file
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_output() {
+        let output_path = Path::new("./output");
+        let filename = "result";
+        let ext = "txt";
+
+        let expected = PathBuf::from("./output/result.txt");
+        let result = build_output(output_path, filename, ext);
+
+        assert_eq!(result, expected);
+    }
+}
