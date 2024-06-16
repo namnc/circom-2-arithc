@@ -3,6 +3,7 @@
 //! Handles execution of statements and expressions for arithmetic circuit generation within a `Runtime` environment.
 
 use crate::compiler::{AGateType, Compiler};
+use crate::error_handler::get_line_and_column;
 use crate::program::ProgramError;
 use crate::runtime::{
     generate_u32, increment_indices, u32_to_access, Context, DataAccess, DataType, NestedValue,
@@ -170,15 +171,19 @@ pub fn process_statement(
 
             Ok(())
         }
-        Statement::Assert { arg, .. } => {
+        Statement::Assert { meta, arg, .. } => {
             let access = process_expression(ac, runtime, program_archive, arg)?;
             let result = runtime
                 .current_context()?
                 .get_variable_value(&access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
 
+            let message = get_line_and_column(meta.file_id.unwrap(), meta.start).unwrap();
+
             if result == 0 {
-                return Err(ProgramError::RuntimeError(RuntimeError::AssertionFailed));
+                return Err(ProgramError::RuntimeError(RuntimeError::AssertionFailed(
+                    message,
+                )));
             }
 
             Ok(())
