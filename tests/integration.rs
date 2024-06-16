@@ -35,7 +35,7 @@ mod integration_tests {
     #[test]
     fn test_add_zero() {
         simulation_test(
-            "tests/circuits/addZero.circom",
+            "tests/circuits/integration/addZero.circom",
             [("0.in", 42)],
             [("0.out", 42)],
         );
@@ -43,13 +43,17 @@ mod integration_tests {
 
     #[test]
     fn test_constant_sum() {
-        simulation_test("tests/circuits/constantSum.circom", [], [("0.out", 8)]);
+        simulation_test(
+            "tests/circuits/integration/constantSum.circom",
+            [],
+            [("0.out", 8)],
+        );
     }
 
     #[test]
     fn test_infix_ops() {
         simulation_test(
-            "tests/circuits/infixOps.circom",
+            "tests/circuits/integration/infixOps.circom",
             [
                 ("0.x0", 0),
                 ("0.x1", 1),
@@ -96,7 +100,7 @@ mod integration_tests {
     #[test]
     fn test_matrix_element_multiplication() {
         simulation_test(
-            "tests/circuits/matElemMul.circom",
+            "tests/circuits/integration/matElemMul.circom",
             [
                 ("0.a[0][0]", 2),
                 ("0.a[0][1]", 2),
@@ -124,7 +128,7 @@ mod integration_tests {
         //            message: "Node 10 used for both input 0.complementC and output 0.complementC"
         //        })
         simulation_test(
-            "tests/circuits/prefixOps.circom",
+            "tests/circuits/integration/prefixOps.circom",
             [("0.a", 0), ("0.b", 1), ("0.c", 2)],
             [
                 ("0.negateA", 0),                                          // -0
@@ -141,7 +145,7 @@ mod integration_tests {
     #[test]
     fn test_sum() {
         simulation_test(
-            "tests/circuits/sum.circom",
+            "tests/circuits/integration/sum.circom",
             [("0.a", 3), ("0.b", 5)],
             [("0.out", 8)],
         );
@@ -151,11 +155,19 @@ mod integration_tests {
     fn test_under_constrained() {
         // FIXME: There should be an error instead (zero comes from default initialization, not from
         //        running the circuit)
-        simulation_test("tests/circuits/underConstrained.circom", [], [("0.x", 0)]);
+        simulation_test(
+            "tests/circuits/integration/underConstrained.circom",
+            [],
+            [("0.x", 0)],
+        );
     }
 
     #[test]
     fn test_x_eq_x() {
-        simulation_test("tests/circuits/xEqX.circom", [("0.x", 37)], [("0.out", 1)]);
+        simulation_test(
+            "tests/circuits/integration/xEqX.circom",
+            [("0.x", 37)],
+            [("0.out", 1)],
+        );
     }
 }
