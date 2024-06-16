@@ -13,7 +13,7 @@ env:
   CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
 jobs:
-  ci:
+  setup:
     runs-on: ubuntu-latest
 
     steps:
@@ -38,7 +38,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: ci
+    needs: setup
 
     steps:
       - name: Build
@@ -55,7 +55,7 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
-    needs: ci
+    needs: setup
 
     steps:
       - name: Install cargo-llvm-cov
