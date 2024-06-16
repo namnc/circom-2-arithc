@@ -178,7 +178,14 @@ pub fn process_statement(
                 .get_variable_value(&access)?
                 .ok_or(ProgramError::EmptyDataItem)?;
 
-            let message = get_line_and_column(meta.file_id.unwrap(), meta.start).unwrap();
+            let file_path = program_archive
+                .file_library
+                .get_files()
+                .get(meta.file_id.unwrap())
+                .unwrap()
+                .name();
+
+            let message = get_line_and_column(&file_path, meta.start).unwrap();
 
             if result == 0 {
                 return Err(ProgramError::RuntimeError(RuntimeError::AssertionFailed(
