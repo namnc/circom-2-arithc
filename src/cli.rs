@@ -10,7 +10,7 @@ pub struct Args {
         short,
         long,
         help = "Path to the input file",
-        default_value = "./examples/circuit.circom"
+        default_value = "./input/circuit.circom"
     )]
     pub input: PathBuf,
 

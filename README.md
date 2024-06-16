@@ -48,7 +48,7 @@ WIP
 
 ## Getting Started
 
-- Write your circom program in the `assets` directory under the `circuit.circom` name.
+- Write your circom program in the `input` directory under the `circuit.circom` name.
 
 - Build the program
 
