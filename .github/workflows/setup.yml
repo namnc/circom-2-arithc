@@ -29,12 +29,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Set up Rust
-        uses: actions/setup-rust@v1
+     - name: Set up Rust
+        uses: actions-rs/toolchain@v1
         with:
-          rust-version: stable
-
-      - name: Install Rust stable toolchain
-        run: rustup toolchain install stable --profile minimal
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
