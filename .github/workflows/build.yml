@@ -2,9 +2,11 @@ name: Build
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
   pull_request:
-    branches: ["main"]
+    branches:
+      - main
 
 env:
   CARGO_TERM_COLOR: always
@@ -15,14 +17,28 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - run: rustup toolchain install stable --profile minimal
-      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo
+            ~/.rustup/toolchains
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install Rust
+        run: rustup toolchain install stable
 
       - name: Build
         run: cargo build --verbose
+
       - name: Clippy
-        run: cargo clippy --verbose
+        run: cargo clippy --verbose -- -D warnings
+
       - name: Tests
         run: cargo test --verbose
+
       - name: Fmt
         run: cargo fmt -- --check
