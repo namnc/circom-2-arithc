@@ -5,9 +5,9 @@
 [![codecov](https://codecov.io/github/namnc/circom-2-arithc/graph/badge.svg)](https://app.codecov.io/github/namnc/circom-2-arithc/)
 
 [mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
-[mit-url]: https://github.com/eigen-trust/protocol/blob/master/LICENSE
-[actions-badge]: https://github.com/eigen-trust/protocol/actions/workflows/test.yml/badge.svg
-[actions-url]: https://github.com/eigen-trust/protocol/actions?query=branch%3Amaster
+[mit-url]: https://github.com/namnc/circom-2-arithc/blob/master/LICENSE
+[actions-badge]: https://github.com/namnc/circom-2-arithc/actions/workflows/build.yml/badge.svg
+[actions-url]: https://github.com/namnc/circom-2-arithc/actions?query=branch%3Amain
 
 This library enables the creation of arithmetic circuits from circom programs.
 
