@@ -1,6 +1,5 @@
-use std::path::{Path, PathBuf};
-
 use clap::Parser;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[clap(name = "Arithmetic Circuits Compiler")]
@@ -11,7 +10,7 @@ pub struct Args {
         short,
         long,
         help = "Path to the input file",
-        default_value = "./examples/circuit.circom"
+        default_value = "./input/circuit.circom"
     )]
     pub input: PathBuf,
 
@@ -36,4 +35,21 @@ pub fn build_output(output_path: &Path, filename: &str, ext: &str) -> PathBuf {
     let mut file = output_path.to_path_buf();
     file.push(format!("{}.{}", filename, ext));
     file
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_output() {
+        let output_path = Path::new("./output");
+        let filename = "result";
+        let ext = "txt";
+
+        let expected = PathBuf::from("./output/result.txt");
+        let result = build_output(output_path, filename, ext);
+
+        assert_eq!(result, expected);
+    }
 }

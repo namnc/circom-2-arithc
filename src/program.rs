@@ -4,10 +4,10 @@
 
 use crate::{
     circom::{parser::parse_project, type_analysis::analyse_project},
+    cli::Args,
     compiler::{CircuitError, Compiler},
     process::{process_expression, process_statements},
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
-    Args,
 };
 use circom_program_structure::ast::Expression;
 use std::io;
@@ -17,9 +17,9 @@ use thiserror::Error;
 pub fn compile(args: &Args) -> Result<Compiler, ProgramError> {
     let mut compiler = Compiler::new();
     let mut runtime = Runtime::new();
-    let mut program_archive = parse_project(args).map_err(|_| ProgramError::ParsingError)?;
+    let mut program_archive = parse_project(args)?;
 
-    analyse_project(&mut program_archive).map_err(|_| ProgramError::AnalysisError)?;
+    analyse_project(&mut program_archive)?;
 
     match program_archive.get_main_expression() {
         Expression::Call { id, args, .. } => {
@@ -54,22 +54,14 @@ pub fn compile(args: &Args) -> Result<Compiler, ProgramError> {
             process_statements(&mut compiler, &mut runtime, &program_archive, statements)?;
 
             for (ikey, (_ivs, _ivh)) in template_data.get_inputs().iter() {
-                // println!("{ikey}:{ivs}");
                 let filter = format!("0.{}", ikey);
                 compiler.add_inputs(compiler.get_signals(filter));
-                // for ivhs in ivh.iter() {
-                //     println!("{ivhs}");
-                // }
             }
 
             for (okey, (_ovs, _ovh)) in template_data.get_outputs().iter() {
-                // println!("{okey}:{ovs}");
                 let filter = format!("0.{}", okey);
                 let signals = compiler.get_signals(filter);
                 compiler.add_outputs(signals);
-                // for ovhs in ovh.iter() {
-                //     println!("{ovhs}");
-                // }
             }
         }
         _ => return Err(ProgramError::MainExpressionNotACall),
@@ -113,6 +105,8 @@ pub enum ProgramError {
     RuntimeError(RuntimeError),
     #[error("Statement not implemented")]
     StatementNotImplemented,
+    #[error("Signal substitution not implemented")]
+    SignalSubstitutionNotImplemented,
     #[error("Undefined function or template")]
     UndefinedFunctionOrTemplate,
 }
