@@ -239,17 +239,9 @@ fn handle_substitution(
         },
         DataType::Signal => {
             match rhe {
-                Expression::InfixOp { .. } => {
-                    // Construct the corresponding circuit gate for the given operation
-                    let given_output_id = ctx.get_signal_id(&lh_access)?;
-                    let gate_output_id = get_signal_for_access(ac, ctx, signal_gen, &rh_access)?;
-
-                    // Connect the generated gate output to the actual signal
-                    ac.add_connection(gate_output_id, given_output_id)?;
-                }
                 Expression::Variable { .. } => match ctx.get_signal_content(&lh_access)? {
-                    // This corresponds to
                     NestedValue::Array(signal) => {
+                        // Connect the signals in the arrays
                         let assigned_signal_array =
                             match get_signal_content_for_access(ctx, &rh_access)? {
                                 NestedValue::Array(array) => array,
@@ -265,7 +257,17 @@ fn handle_substitution(
                         ac.add_connection(gate_output_id, signal_id)?;
                     }
                 },
-                _ => {}
+                Expression::Call { .. }
+                | Expression::InfixOp { .. }
+                | Expression::PrefixOp { .. }
+                | Expression::Number(_, _) => {
+                    // Get the signal identifiers and connect them
+                    let given_output_id = ctx.get_signal_id(&lh_access)?;
+                    let gate_output_id = get_signal_for_access(ac, ctx, signal_gen, &rh_access)?;
+
+                    ac.add_connection(gate_output_id, given_output_id)?;
+                }
+                _ => return Err(ProgramError::SignalSubstitutionNotImplemented),
             }
         }
     }

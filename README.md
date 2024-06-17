@@ -2,6 +2,7 @@
 
 [![MIT licensed][mit-badge]][mit-url]
 [![Build Status][actions-badge]][actions-url]
+[![codecov](https://codecov.io/github/namnc/circom-2-arithc/graph/badge.svg)](https://app.codecov.io/github/namnc/circom-2-arithc/)
 
 [mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
 [mit-url]: https://github.com/eigen-trust/protocol/blob/master/LICENSE

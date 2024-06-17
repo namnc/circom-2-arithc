@@ -105,6 +105,8 @@ pub enum ProgramError {
     RuntimeError(RuntimeError),
     #[error("Statement not implemented")]
     StatementNotImplemented,
+    #[error("Signal substitution not implemented")]
+    SignalSubstitutionNotImplemented,
     #[error("Undefined function or template")]
     UndefinedFunctionOrTemplate,
 }
