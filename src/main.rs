@@ -1,18 +1,15 @@
-use std::{
-    fs::{self, File},
-    io::Write,
-};
-
 use circom_2_arithc::{
-    build_output,
-    cli::Args,
+    cli::{build_output, Args},
     program::{compile, ProgramError},
 };
-
 use clap::Parser;
 use dotenv::dotenv;
 use env_logger::{init_from_env, Env};
 use serde_json::to_string_pretty;
+use std::{
+    fs::{self, File},
+    io::Write,
+};
 
 fn main() -> Result<(), ProgramError> {
     dotenv().ok();

@@ -2,7 +2,7 @@
 name = "circom-2-arithc"
 version = "0.1.0"
 edition = "2021"
-resolver = "1"           # Fixes lalrpop issue, see: https://github.com/lalrpop/lalrpop/issues/616
+resolver = "1" # Fixes lalrpop issue, see: https://github.com/lalrpop/lalrpop/issues/616
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
@@ -34,7 +34,3 @@ circom-type_analysis = { git = "https://github.com/iden3/circom", package = "typ
 mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits" }
 bmr16-mpz = { git = "https://github.com/tkmct/mpz", package = "mpz-circuits" }
 sim-circuit = { git = "https://github.com/voltrevo/sim-circuit", branch = "c2a-issue-38-better-circuit-struct" }
-
-[[bin]]
-name = "circom"
-path = "./src/main.rs"

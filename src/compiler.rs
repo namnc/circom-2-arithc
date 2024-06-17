@@ -213,7 +213,7 @@ impl Compiler {
         self.signals.insert(id, signal);
 
         // Create a new node
-        let node = Node::new_with_signal(id, false, value.is_some());
+        let node = Node::new_with_signal(id, value.is_some(), false);
         debug!("{:?}", node);
         let node_id = self.get_node_id();
         self.nodes.insert(node_id, node);
@@ -438,7 +438,7 @@ impl Compiler {
         let mut next_wire_id = 0;
 
         // First inputs
-        for (_, node_id) in &input_to_node_id {
+        for node_id in input_to_node_id.values() {
             node_id_to_wire_id.insert(*node_id, next_wire_id);
             next_wire_id += 1;
         }
@@ -492,7 +492,7 @@ impl Compiler {
         }
 
         // Assign wire ids to output nodes
-        for (_, node_id) in &output_to_node_id {
+        for node_id in output_to_node_id.values() {
             node_id_to_wire_id.insert(*node_id, next_wire_id);
             next_wire_id += 1;
         }
@@ -721,5 +721,218 @@ impl From<CircuitError> for ProgramError {
 impl From<MpzCircuitError> for CircuitError {
     fn from(e: MpzCircuitError) -> Self {
         CircuitError::MPZCircuitError(e)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_node_with_signal() {
+        let node = Node::new_with_signal(1, true, false);
+        assert_eq!(node.signals.len(), 1);
+        assert_eq!(node.signals[0], 1);
+        assert!(node.is_const);
+        assert!(!node.is_out);
+    }
+
+    #[test]
+    fn test_node_add_signal() {
+        let mut node = Node::new();
+        node.add_signals(&vec![1, 2, 3]);
+        assert_eq!(node.signals.len(), 3);
+        assert!(node.contains_signal(&1));
+        assert!(node.contains_signal(&2));
+        assert!(node.contains_signal(&3));
+    }
+
+    #[test]
+    fn test_node_contains_signal() {
+        let node = Node::new_with_signal(1, true, false);
+        assert!(node.contains_signal(&1));
+        assert!(!node.contains_signal(&2));
+    }
+
+    #[test]
+    fn test_node_set_output() {
+        let mut node = Node::new();
+        node.set_output(true);
+        assert!(node.is_out);
+    }
+
+    #[test]
+    fn test_node_set_const() {
+        let mut node = Node::new();
+        node.set_const(true);
+        assert!(node.is_const);
+    }
+
+    #[test]
+    fn test_compiler_add_inputs() {
+        let mut compiler = Compiler::new();
+        let mut inputs = HashMap::new();
+        inputs.insert(1, String::from("input1"));
+        inputs.insert(2, String::from("input2"));
+        compiler.add_inputs(inputs);
+
+        assert_eq!(compiler.inputs.len(), 2);
+        assert_eq!(compiler.inputs[&1], "input1");
+        assert_eq!(compiler.inputs[&2], "input2");
+    }
+
+    #[test]
+    fn test_compiler_add_outputs() {
+        let mut compiler = Compiler::new();
+        let mut outputs = HashMap::new();
+        outputs.insert(3, String::from("output1"));
+        outputs.insert(4, String::from("output2"));
+        compiler.add_outputs(outputs);
+
+        assert_eq!(compiler.outputs.len(), 2);
+        assert_eq!(compiler.outputs[&3], "output1");
+        assert_eq!(compiler.outputs[&4], "output2");
+    }
+
+    #[test]
+    fn test_compiler_add_signal() {
+        let mut compiler = Compiler::new();
+        let result = compiler.add_signal(1, String::from("signal1"), None);
+
+        assert!(result.is_ok());
+        assert_eq!(compiler.signals.len(), 1);
+        assert!(compiler.signals.contains_key(&1));
+        assert_eq!(compiler.signals[&1].name, "signal1");
+    }
+
+    #[test]
+    fn test_compiler_add_duplicated_signal() {
+        let mut compiler = Compiler::new();
+        compiler
+            .add_signal(1, String::from("signal1"), None)
+            .unwrap();
+        let result = compiler.add_signal(1, String::from("signal1"), None);
+
+        assert!(matches!(result, Err(CircuitError::SignalAlreadyDeclared)));
+    }
+
+    #[test]
+    fn test_compiler_get_signals() {
+        let mut compiler = Compiler::new();
+        compiler
+            .add_signal(1, String::from("signal1"), None)
+            .unwrap();
+        compiler
+            .add_signal(2, String::from("filter_signal"), None)
+            .unwrap();
+        let filtered_signals = compiler.get_signals(String::from("filter"));
+
+        assert_eq!(filtered_signals.len(), 1);
+        assert_eq!(filtered_signals[&2], "filter_signal");
+    }
+
+    #[test]
+    fn test_compiler_add_gate() {
+        let mut compiler = Compiler::new();
+        compiler
+            .add_signal(1, String::from("signal1"), None)
+            .unwrap();
+        compiler
+            .add_signal(2, String::from("signal2"), None)
+            .unwrap();
+        compiler
+            .add_signal(3, String::from("signal3"), None)
+            .unwrap();
+
+        let result = compiler.add_gate(AGateType::AAdd, 1, 2, 3);
+
+        assert!(result.is_ok());
+        assert_eq!(compiler.gates.len(), 1);
+        let gate = &compiler.gates[0];
+        assert_eq!(gate.op, AGateType::AAdd);
+        assert_eq!(gate.lh_in, 1);
+        assert_eq!(gate.rh_in, 2);
+        assert_eq!(gate.out, 3);
+    }
+
+    #[test]
+    fn test_compiler_add_connection() {
+        let mut compiler = Compiler::new();
+        compiler
+            .add_signal(1, String::from("signal1"), None)
+            .unwrap();
+        compiler
+            .add_signal(2, String::from("signal2"), None)
+            .unwrap();
+        compiler
+            .add_signal(3, String::from("signal3"), None)
+            .unwrap();
+
+        // Adding connection between signals 1 and 2
+        let result = compiler.add_connection(1, 2);
+
+        assert!(result.is_ok());
+        assert_eq!(compiler.nodes.len(), 2);
+
+        // Assert new node contains both signals
+        let node = compiler.nodes.get(&4).unwrap();
+        assert_eq!(node.signals.len(), 2);
+        assert!(node.contains_signal(&1));
+        assert!(node.contains_signal(&2));
+    }
+
+    #[test]
+    fn test_compiler_add_connection_same_node() {
+        let mut compiler = Compiler::new();
+        compiler
+            .add_signal(1, String::from("signal1"), None)
+            .unwrap();
+        compiler
+            .add_signal(2, String::from("signal2"), None)
+            .unwrap();
+
+        compiler.add_connection(1, 2).unwrap();
+        // Connect the same node
+        let result = compiler.add_connection(1, 2);
+
+        assert!(result.is_ok());
+        // No change in number of nodes
+        assert_eq!(compiler.nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_compiler_add_connection_output_nodes() {
+        let mut compiler = Compiler::new();
+        compiler
+            .add_signal(1, String::from("signal1"), None)
+            .unwrap();
+        compiler
+            .add_signal(2, String::from("signal2"), None)
+            .unwrap();
+
+        // Set both nodes as output nodes
+        compiler.nodes.get_mut(&1).unwrap().set_output(true);
+        compiler.nodes.get_mut(&2).unwrap().set_output(true);
+
+        let result = compiler.add_connection(1, 2);
+
+        assert!(matches!(result, Err(CircuitError::CannotMergeOutputNodes)));
+    }
+
+    #[test]
+    fn test_compiler_add_connection_constant_nodes() {
+        let mut compiler = Compiler::new();
+        compiler
+            .add_signal(1, String::from("signal1"), Some(1))
+            .unwrap();
+        compiler
+            .add_signal(2, String::from("signal2"), Some(2))
+            .unwrap();
+
+        let result = compiler.add_connection(1, 2);
+        assert!(matches!(
+            result,
+            Err(CircuitError::CannotMergeConstantNodes)
+        ));
     }
 }

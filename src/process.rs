@@ -239,17 +239,9 @@ fn handle_substitution(
         },
         DataType::Signal => {
             match rhe {
-                Expression::InfixOp { .. } => {
-                    // Construct the corresponding circuit gate for the given operation
-                    let given_output_id = ctx.get_signal_id(&lh_access)?;
-                    let gate_output_id = get_signal_for_access(ac, ctx, signal_gen, &rh_access)?;
-
-                    // Connect the generated gate output to the actual signal
-                    ac.add_connection(gate_output_id, given_output_id)?;
-                }
                 Expression::Variable { .. } => match ctx.get_signal_content(&lh_access)? {
-                    // This corresponds to
                     NestedValue::Array(signal) => {
+                        // Connect the signals in the arrays
                         let assigned_signal_array =
                             match get_signal_content_for_access(ctx, &rh_access)? {
                                 NestedValue::Array(array) => array,
@@ -265,7 +257,17 @@ fn handle_substitution(
                         ac.add_connection(gate_output_id, signal_id)?;
                     }
                 },
-                _ => {}
+                Expression::Call { .. }
+                | Expression::InfixOp { .. }
+                | Expression::PrefixOp { .. }
+                | Expression::Number(_, _) => {
+                    // Get the signal identifiers and connect them
+                    let given_output_id = ctx.get_signal_id(&lh_access)?;
+                    let gate_output_id = get_signal_for_access(ac, ctx, signal_gen, &rh_access)?;
+
+                    ac.add_connection(gate_output_id, given_output_id)?;
+                }
+                _ => return Err(ProgramError::SignalSubstitutionNotImplemented),
             }
         }
     }
@@ -652,7 +654,15 @@ fn execute_op(lhs: u32, rhs: u32, op: &ExpressionInfixOpcode) -> Result<u32, Pro
             lhs / rhs
         }
         ExpressionInfixOpcode::Add => lhs + rhs,
-        ExpressionInfixOpcode::Sub => lhs - rhs,
+        ExpressionInfixOpcode::Sub => {
+            if lhs < rhs {
+                return Err(ProgramError::OperationError(
+                    "Subtraction underflow".to_string(),
+                ));
+            }
+
+            lhs - rhs
+        }
         ExpressionInfixOpcode::Pow => lhs.pow(rhs),
         ExpressionInfixOpcode::IntDiv => {
             if rhs == 0 {
@@ -747,5 +757,79 @@ fn to_equivalent_infix(op: &ExpressionPrefixOpcode) -> (u32, ExpressionInfixOpco
         ExpressionPrefixOpcode::Sub => (0, ExpressionInfixOpcode::Sub),
         ExpressionPrefixOpcode::BoolNot => (0, ExpressionInfixOpcode::Eq),
         ExpressionPrefixOpcode::Complement => (u32::MAX, ExpressionInfixOpcode::BitXor),
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use circom_program_structure::ast::{ExpressionInfixOpcode, ExpressionPrefixOpcode};
+
+    #[test]
+    fn test_execute_op() {
+        assert_eq!(execute_op(3, 4, &ExpressionInfixOpcode::Add).unwrap(), 7);
+        assert_eq!(execute_op(10, 5, &ExpressionInfixOpcode::Sub).unwrap(), 5);
+        assert_eq!(execute_op(6, 3, &ExpressionInfixOpcode::Mul).unwrap(), 18);
+        assert_eq!(execute_op(9, 3, &ExpressionInfixOpcode::Div).unwrap(), 3);
+        assert_eq!(execute_op(7, 3, &ExpressionInfixOpcode::Mod).unwrap(), 1);
+        assert_eq!(execute_op(2, 3, &ExpressionInfixOpcode::Pow).unwrap(), 8);
+        assert_eq!(
+            execute_op(8, 2, &ExpressionInfixOpcode::ShiftL).unwrap(),
+            32
+        );
+        assert_eq!(execute_op(8, 2, &ExpressionInfixOpcode::ShiftR).unwrap(), 2);
+        assert_eq!(execute_op(5, 5, &ExpressionInfixOpcode::Eq).unwrap(), 1);
+        assert_eq!(execute_op(5, 4, &ExpressionInfixOpcode::NotEq).unwrap(), 1);
+        assert_eq!(execute_op(1, 0, &ExpressionInfixOpcode::BoolOr).unwrap(), 1);
+        assert_eq!(
+            execute_op(1, 1, &ExpressionInfixOpcode::BoolAnd).unwrap(),
+            1
+        );
+        assert_eq!(execute_op(1, 1, &ExpressionInfixOpcode::BitOr).unwrap(), 1);
+        assert_eq!(execute_op(1, 1, &ExpressionInfixOpcode::BitAnd).unwrap(), 1);
+        assert_eq!(execute_op(1, 1, &ExpressionInfixOpcode::BitXor).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_execute_op_errors() {
+        assert!(execute_op(10, 0, &ExpressionInfixOpcode::Div).is_err());
+        assert!(execute_op(10, 0, &ExpressionInfixOpcode::IntDiv).is_err());
+        assert!(execute_op(10, 0, &ExpressionInfixOpcode::Mod).is_err());
+    }
+
+    #[test]
+    fn test_execute_prefix_op() {
+        assert_eq!(
+            execute_prefix_op(&ExpressionPrefixOpcode::Sub, 5)
+                .unwrap_err()
+                .to_string(),
+            "Operation error: Subtraction underflow"
+        ); // 0 - 5
+        assert_eq!(
+            execute_prefix_op(&ExpressionPrefixOpcode::BoolNot, 0).unwrap(),
+            1
+        ); // !0 == 1
+        assert_eq!(
+            execute_prefix_op(&ExpressionPrefixOpcode::BoolNot, 1).unwrap(),
+            0
+        ); // !1 == 0
+        assert_eq!(
+            execute_prefix_op(&ExpressionPrefixOpcode::Complement, 0b1010).unwrap(),
+            0b1111_1111_1111_1111_1111_1111_1111_0101
+        ); // ~0b1010
+    }
+
+    #[test]
+    fn test_to_equivalent_infix() {
+        let (value, opcode) = to_equivalent_infix(&ExpressionPrefixOpcode::Sub);
+        assert_eq!(value, 0);
+        assert!(matches!(opcode, ExpressionInfixOpcode::Sub));
+
+        let (value, opcode) = to_equivalent_infix(&ExpressionPrefixOpcode::BoolNot);
+        assert_eq!(value, 0);
+        assert!(matches!(opcode, ExpressionInfixOpcode::Eq));
+
+        let (value, opcode) = to_equivalent_infix(&ExpressionPrefixOpcode::Complement);
+        assert_eq!(value, u32::MAX);
+        assert!(matches!(opcode, ExpressionInfixOpcode::BitXor));
     }
 }
