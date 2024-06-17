@@ -170,4 +170,10 @@ mod integration_tests {
             [("0.out", 1)],
         );
     }
+
+    #[test]
+    #[should_panic] // FIXME: Should NOT panic
+    fn test_direct_output() {
+        simulation_test("tests/circuits/directOutput.circom", [], [("0.out", 42)]);
+    }
 }
