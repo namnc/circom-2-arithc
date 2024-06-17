@@ -1,4 +1,4 @@
-name: CI
+name: Coverage
 
 on:
   push:
@@ -13,39 +13,6 @@ env:
   CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo
-            ~/.rustup/toolchains
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Install Rust
-        run: |
-          rustup toolchain install stable
-          rustup component add rustfmt clippy
-
-      - name: Build
-        run: cargo build --verbose
-
-      - name: Clippy
-        run: cargo clippy --verbose -- -D warnings
-
-      - name: Tests
-        run: cargo test --verbose
-
-      - name: Fmt
-        run: cargo fmt -- --check
-
   coverage:
     runs-on: ubuntu-latest
 
@@ -63,9 +30,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install Rust
-        run: |
-          rustup toolchain install stable
-          rustup component add rustfmt clippy
+        run: rustup toolchain install stable
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
