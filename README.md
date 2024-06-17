@@ -7,7 +7,7 @@
 [mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
 [mit-url]: https://github.com/namnc/circom-2-arithc/blob/master/LICENSE
 [actions-badge]: https://github.com/namnc/circom-2-arithc/actions/workflows/build.yml/badge.svg
-[actions-url]: https://github.com/namnc/circom-2-arithc/actions?query=branch%3Amaster
+[actions-url]: https://github.com/namnc/circom-2-arithc/actions?query=branch%3Amain
 
 This library enables the creation of arithmetic circuits from circom programs.
 
