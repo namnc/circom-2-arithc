@@ -13,7 +13,7 @@ env:
   CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
 jobs:
-  setup:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,13 +34,6 @@ jobs:
           rustup toolchain install stable
           rustup component add rustfmt clippy
 
-      - uses: Swatinem/rust-cache@v2
-
-  build:
-    runs-on: ubuntu-latest
-    needs: setup
-
-    steps:
       - name: Build
         run: cargo build --verbose
 
@@ -55,9 +48,25 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
-    needs: setup
 
     steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo
+            ~/.rustup/toolchains
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable
+          rustup component add rustfmt clippy
+
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
