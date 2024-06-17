@@ -2,7 +2,7 @@
 
 pragma circom 2.1.0;
 
-template circuit() {
+template indexOutOfBounds() {
    signal arr[10];
 
    for (var i = 0; i < 100; i++) {
@@ -10,4 +10,4 @@ template circuit() {
    }
 }
 
-component main = circuit();
+component main = indexOutOfBounds();

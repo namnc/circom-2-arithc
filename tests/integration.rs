@@ -30,7 +30,8 @@ pub fn simulation_test<
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::simulation_test;
+    use super::*;
+    use circom_2_arithc::{cli::Args, program::compile};
 
     #[test]
     fn test_add_zero() {
@@ -177,6 +178,21 @@ mod integration_tests {
             "tests/circuits/integration/directOutput.circom",
             [],
             [("0.out", 42)],
+        );
+    }
+
+    #[test]
+    fn test_out_of_bounds() {
+        let compiler_input = Args::new(
+            "tests/circuits/integration/indexOutOfBounds.circom".into(),
+            "./".into(),
+        );
+        let circuit = compile(&compiler_input);
+
+        assert_eq!(circuit.is_err(), true);
+        assert_eq!(
+            circuit.unwrap_err().to_string(),
+            "Runtime error: Index out of bounds"
         );
     }
 }
