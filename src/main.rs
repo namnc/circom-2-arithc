@@ -32,8 +32,8 @@ fn main() -> Result<(), ProgramError> {
     // let output_file_path_json = build_output(&output_dir, "circuit", "json");
     // File::create(output_file_path_json)?.write_all(serde_json::to_string_pretty(&circuit)?.as_bytes())?;
 
-    let output_debug_path_json = build_output(&output_dir, "debug", "json");
-    File::create(output_debug_path_json)?.write_all(serde_json::to_string_pretty(&compiler)?.as_bytes())?;
+    // let output_debug_path_json = build_output(&output_dir, "debug", "json");
+    // File::create(output_debug_path_json)?.write_all(serde_json::to_string_pretty(&compiler)?.as_bytes())?;
 
     let output_file_path = build_output(&output_dir, "circuit_info", "json");
     File::create(output_file_path)?.write_all(to_string_pretty(&circuit.info)?.as_bytes())?;
