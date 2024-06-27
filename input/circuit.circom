@@ -1,20 +1,57 @@
-pragma circom 2.1.0;
+// from 0xZKML/zk-mnist
 
-template componentA () {
-    signal input in[2][2];
-    signal output out;
+pragma circom 2.0.0;
 
-    out <== in[0][0] + in[0][1] + in[1][0] + in[1][1];
+template Switcher() {
+    signal input sel;
+    signal input L;
+    signal input R;
+    signal output outL;
+    signal output outR;
+
+    signal aux;
+
+    aux <== (R-L)*sel;    // We create aux in order to have only one multiplication
+    outL <==  aux + L;
+    outR <== -aux + R;
 }
 
-template componentB() {
-    signal input a_in[2][2];
+template ArgMax (n) {
+    signal input in[n];
     signal output out;
 
-    component a = componentA();
-    a.in <== a_in;
+    // assert (out < n);
+    signal gts[n];        // store comparators
+    component switchers[n+1];  // switcher for comparing maxs
+    component aswitchers[n+1]; // switcher for arg max
 
-    out <== a.out;
+    signal maxs[n+1];
+    signal amaxs[n+1];
+
+    maxs[0] <== in[0];
+    amaxs[0] <== 0;
+    for(var i = 0; i < n; i++) {
+        gts[i] <== in[i] > maxs[i]; // changed to 252 (maximum) for better compatibility
+        switchers[i+1] = Switcher();
+        aswitchers[i+1] = Switcher();
+
+        switchers[i+1].sel <== gts[i];
+        switchers[i+1].L <== maxs[i];
+        switchers[i+1].R <== in[i];
+
+        aswitchers[i+1].sel <== gts[i];
+        aswitchers[i+1].L <== amaxs[i];
+        aswitchers[i+1].R <== i;
+        amaxs[i+1] <== aswitchers[i+1].outL;
+        maxs[i+1] <== switchers[i+1].outL;
+    }
+
+    out <== amaxs[n];
 }
 
-component main = componentB();
+component main = ArgMax(1);
+
+/* INPUT = {
+    "in":  ["2","3","1","5","4"],
+    "out": "3"
+} */

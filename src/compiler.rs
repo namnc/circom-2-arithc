@@ -404,7 +404,7 @@ impl Compiler {
 
                 if let Some(value) = signal.value {
                     constant_to_node_id_and_value
-                        .insert(signal.name.clone(), (*node_id, value.to_string()));
+                        .insert(format!("{}_{}",signal.name.clone(),signal_id), (*node_id, value.to_string()));
                 }
             }
         }
