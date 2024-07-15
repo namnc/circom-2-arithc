@@ -403,8 +403,10 @@ impl Compiler {
                 let signal = &self.signals[signal_id];
 
                 if let Some(value) = signal.value {
-                    constant_to_node_id_and_value
-                        .insert(format!("{}_{}",signal.name.clone(),signal_id), (*node_id, value.to_string()));
+                    constant_to_node_id_and_value.insert(
+                        format!("{}_{}", signal.name.clone(), signal_id),
+                        (*node_id, value.to_string()),
+                    );
                 }
             }
         }
