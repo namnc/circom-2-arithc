@@ -6,6 +6,7 @@ pub mod arithmetic_circuit;
 pub mod circom;
 pub mod cli;
 pub mod compiler;
+pub mod error_handler;
 pub mod process;
 pub mod program;
 pub mod runtime;
