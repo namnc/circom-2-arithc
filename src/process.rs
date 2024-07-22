@@ -2,7 +2,8 @@
 //!
 //! Handles execution of statements and expressions for arithmetic circuit generation within a `Runtime` environment.
 
-use crate::compiler::{AGateType, Compiler};
+use crate::arithmetic_circuit::AGateType;
+use crate::compiler::Compiler;
 use crate::program::ProgramError;
 use crate::runtime::{
     generate_u32, increment_indices, u32_to_access, Context, DataAccess, DataType, NestedValue,

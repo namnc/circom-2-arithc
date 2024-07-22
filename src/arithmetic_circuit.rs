@@ -1,12 +1,64 @@
 use crate::compiler::{ArithmeticGate, CircuitError};
+use circom_program_structure::ast::ExpressionInfixOpcode;
 use serde::{Deserialize, Serialize};
-use serde_json::{from_str, to_string};
-use sim_circuit::arithmetic_circuit::ArithmeticCircuit as SimArithmeticCircuit;
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader, BufWriter, Write},
     str::FromStr,
 };
+use strum_macros::{Display as StrumDisplay, EnumString};
+
+/// The supported Arithmetic gate types.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, EnumString, StrumDisplay)]
+pub enum AGateType {
+    AAdd,
+    ADiv,
+    AEq,
+    AGEq,
+    AGt,
+    ALEq,
+    ALt,
+    AMul,
+    ANeq,
+    ASub,
+    AXor,
+    APow,
+    AIntDiv,
+    AMod,
+    AShiftL,
+    AShiftR,
+    ABoolOr,
+    ABoolAnd,
+    ABitOr,
+    ABitAnd,
+}
+
+impl From<&ExpressionInfixOpcode> for AGateType {
+    fn from(opcode: &ExpressionInfixOpcode) -> Self {
+        match opcode {
+            ExpressionInfixOpcode::Mul => AGateType::AMul,
+            ExpressionInfixOpcode::Div => AGateType::ADiv,
+            ExpressionInfixOpcode::Add => AGateType::AAdd,
+            ExpressionInfixOpcode::Sub => AGateType::ASub,
+            ExpressionInfixOpcode::Pow => AGateType::APow,
+            ExpressionInfixOpcode::IntDiv => AGateType::AIntDiv,
+            ExpressionInfixOpcode::Mod => AGateType::AMod,
+            ExpressionInfixOpcode::ShiftL => AGateType::AShiftL,
+            ExpressionInfixOpcode::ShiftR => AGateType::AShiftR,
+            ExpressionInfixOpcode::LesserEq => AGateType::ALEq,
+            ExpressionInfixOpcode::GreaterEq => AGateType::AGEq,
+            ExpressionInfixOpcode::Lesser => AGateType::ALt,
+            ExpressionInfixOpcode::Greater => AGateType::AGt,
+            ExpressionInfixOpcode::Eq => AGateType::AEq,
+            ExpressionInfixOpcode::NotEq => AGateType::ANeq,
+            ExpressionInfixOpcode::BoolOr => AGateType::ABoolOr,
+            ExpressionInfixOpcode::BoolAnd => AGateType::ABoolAnd,
+            ExpressionInfixOpcode::BitOr => AGateType::ABitOr,
+            ExpressionInfixOpcode::BitAnd => AGateType::ABitAnd,
+            ExpressionInfixOpcode::BitXor => AGateType::AXor,
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArithmeticCircuit {
@@ -29,10 +81,6 @@ pub struct ConstantInfo {
 }
 
 impl ArithmeticCircuit {
-    pub fn to_sim(&self) -> SimArithmeticCircuit {
-        from_str(&to_string(self).unwrap()).unwrap()
-    }
-
     pub fn get_bristol_string(&self) -> Result<String, CircuitError> {
         let mut output = Vec::new();
         let mut writer = BufWriter::new(&mut output);
@@ -216,7 +264,6 @@ impl BristolLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler::AGateType;
     use std::io::{BufReader, Cursor};
 
     // Helper function to create a sample ArithmeticCircuit
