@@ -760,6 +760,7 @@ fn to_equivalent_infix(op: &ExpressionPrefixOpcode) -> (u32, ExpressionInfixOpco
         ExpressionPrefixOpcode::Complement => (u32::MAX, ExpressionInfixOpcode::BitXor),
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -121,8 +121,8 @@ impl Executable<u32, CircuitMemory<u32>> for ArithmeticGate {
 #[derive(Debug, PartialEq, Eq)]
 pub struct ArithmeticCircuit {
     circuit: GenericCircuit<ArithmeticGate, u32>,
+    constants: HashMap<usize, u32>,
     label_to_index: HashMap<String, usize>,
-    inputs: Vec<String>,
     outputs: Vec<String>,
 }
 
@@ -133,17 +133,24 @@ impl ArithmeticCircuit {
     ) -> Result<Self, &'static str> {
         let mut builder = CircuitBuilder::<ArithmeticGate, u32>::new();
         let mut label_to_index: HashMap<String, usize> = HashMap::new();
-        let mut circuit_inputs: Vec<String> = vec![];
         let mut circuit_outputs: Vec<String> = vec![];
 
         // Get circuit inputs
         let inputs = circuit.info.input_name_to_wire_index;
         let mut input_indices = vec![];
         for (label, index) in inputs {
-            let index = index as usize;
-            label_to_index.insert(label.clone(), index);
-            circuit_inputs.push(label);
-            input_indices.push(index);
+            label_to_index.insert(label, index as usize);
+            input_indices.push(index as usize);
+        }
+
+        // Get circuit constants
+        let mut constants: HashMap<usize, u32> = HashMap::new();
+        for (_, constant_info) in circuit.info.constants {
+            input_indices.push(constant_info.wire_index as usize);
+            constants.insert(
+                constant_info.wire_index as usize,
+                constant_info.value.parse().unwrap(),
+            );
         }
         builder.add_inputs(&input_indices);
 
@@ -173,8 +180,8 @@ impl ArithmeticCircuit {
 
         Ok(Self {
             circuit: builder.build().map_err(|_| "Failed to build circuit")?,
+            constants,
             label_to_index,
-            inputs: circuit_inputs,
             outputs: circuit_outputs,
         })
     }
@@ -187,6 +194,14 @@ impl ArithmeticCircuit {
         let memory_size = self.circuit.memory_size();
         let mut memory = CircuitMemory::<u32>::new(memory_size);
 
+        // Load constants into memory
+        for (index, value) in &self.constants {
+            memory
+                .write(*index, *value)
+                .map_err(|_| "Failed to write constant value")?;
+        }
+
+        // Load inputs into memory
         for (label, value) in inputs {
             let index = self
                 .label_to_index
