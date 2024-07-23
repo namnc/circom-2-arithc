@@ -16,6 +16,7 @@ serde = { version = "1.0.196", features = ["derive"] }
 thiserror = "1.0.59"
 strum_macros = "0.26.4"
 strum = "0.26.2"
+sim-circuit = { git = "https://github.com/brech1/sim-circuit" }
 
 # DSL
 circom-circom_algebra = { git = "https://github.com/iden3/circom", package = "circom_algebra" }
@@ -29,8 +30,3 @@ circom-dag = { git = "https://github.com/iden3/circom", package = "dag" }
 circom-parser = { git = "https://github.com/iden3/circom", package = "parser" }
 circom-program_structure = { git = "https://github.com/iden3/circom", package = "program_structure" }
 circom-type_analysis = { git = "https://github.com/iden3/circom", package = "type_analysis" }
-
-# MPZ
-mpz-circuits = { git = "https://github.com/privacy-scaling-explorations/mpz", package = "mpz-circuits" }
-bmr16-mpz = { git = "https://github.com/tkmct/mpz", package = "mpz-circuits" }
-sim-circuit = { git = "https://github.com/brech1/sim-circuit" }

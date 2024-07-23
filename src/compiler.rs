@@ -3,77 +3,14 @@
 //! This module defines the data structures used to represent the arithmetic circuit.
 
 use crate::{
-    arithmetic_circuit::{ArithmeticCircuit, CircuitInfo, ConstantInfo},
+    arithmetic_circuit::{AGateType, ArithmeticCircuit, CircuitInfo, ConstantInfo},
     program::ProgramError,
     topological_sort::topological_sort,
 };
-use bmr16_mpz::{
-    arithmetic::{
-        circuit::ArithmeticCircuit as MpzCircuit,
-        ops::{add, cmul, mul, sub},
-        types::CrtRepr,
-        ArithCircuitError as MpzCircuitError,
-    },
-    ArithmeticCircuitBuilder,
-};
-use circom_program_structure::ast::ExpressionInfixOpcode;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use strum_macros::{Display as StrumDisplay, EnumString};
 use thiserror::Error;
-
-/// Types of gates that can be used in an arithmetic circuit.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, EnumString, StrumDisplay)]
-pub enum AGateType {
-    AAdd,
-    ADiv,
-    AEq,
-    AGEq,
-    AGt,
-    ALEq,
-    ALt,
-    AMul,
-    ANeq,
-    ASub,
-    AXor,
-    APow,
-    AIntDiv,
-    AMod,
-    AShiftL,
-    AShiftR,
-    ABoolOr,
-    ABoolAnd,
-    ABitOr,
-    ABitAnd,
-}
-
-impl From<&ExpressionInfixOpcode> for AGateType {
-    fn from(opcode: &ExpressionInfixOpcode) -> Self {
-        match opcode {
-            ExpressionInfixOpcode::Mul => AGateType::AMul,
-            ExpressionInfixOpcode::Div => AGateType::ADiv,
-            ExpressionInfixOpcode::Add => AGateType::AAdd,
-            ExpressionInfixOpcode::Sub => AGateType::ASub,
-            ExpressionInfixOpcode::Pow => AGateType::APow,
-            ExpressionInfixOpcode::IntDiv => AGateType::AIntDiv,
-            ExpressionInfixOpcode::Mod => AGateType::AMod,
-            ExpressionInfixOpcode::ShiftL => AGateType::AShiftL,
-            ExpressionInfixOpcode::ShiftR => AGateType::AShiftR,
-            ExpressionInfixOpcode::LesserEq => AGateType::ALEq,
-            ExpressionInfixOpcode::GreaterEq => AGateType::AGEq,
-            ExpressionInfixOpcode::Lesser => AGateType::ALt,
-            ExpressionInfixOpcode::Greater => AGateType::AGt,
-            ExpressionInfixOpcode::Eq => AGateType::AEq,
-            ExpressionInfixOpcode::NotEq => AGateType::ANeq,
-            ExpressionInfixOpcode::BoolOr => AGateType::ABoolOr,
-            ExpressionInfixOpcode::BoolAnd => AGateType::ABoolAnd,
-            ExpressionInfixOpcode::BitOr => AGateType::ABitOr,
-            ExpressionInfixOpcode::BitAnd => AGateType::ABitAnd,
-            ExpressionInfixOpcode::BitXor => AGateType::AXor,
-        }
-    }
-}
 
 /// Represents a signal in the circuit, with a name and an optional value.
 #[derive(Debug, Serialize, Deserialize)]
@@ -541,94 +478,6 @@ impl Compiler {
         })
     }
 
-    /// Builds an arithmetic circuit using the mpz circuit builder.
-    pub fn build_mpz_circuit(&self, report: &CircuitReport) -> Result<MpzCircuit, CircuitError> {
-        let builder = ArithmeticCircuitBuilder::new();
-
-        // Initialize CRT signals map with the circuit inputs
-        let mut crt_signals: HashMap<u32, CrtRepr> =
-            report
-                .inputs
-                .iter()
-                .try_fold(HashMap::new(), |mut acc, signal| {
-                    let input = builder
-                        .add_input::<u32>(signal.names[0].to_string())
-                        .map_err(CircuitError::MPZCircuitError)?;
-                    acc.insert(signal.id, input.repr);
-                    Ok::<_, CircuitError>(acc)
-                })?;
-
-        // Initialize a vec for indices of gates that need processing
-        let mut to_process = std::collections::VecDeque::new();
-        to_process.extend(0..self.gates.len());
-
-        while let Some(index) = to_process.pop_front() {
-            let gate = &self.gates[index];
-
-            if let (Some(lh_in_repr), Some(rh_in_repr)) =
-                (crt_signals.get(&gate.lh_in), crt_signals.get(&gate.rh_in))
-            {
-                let result_repr = match gate.op {
-                    AGateType::AAdd => {
-                        add(&mut builder.state().borrow_mut(), lh_in_repr, rh_in_repr)
-                            .map_err(|e| e.into())
-                    }
-                    AGateType::AMul => {
-                        // Get the constant value from one of the signals if available
-                        let constant_value = self
-                            .signals
-                            .get(&gate.lh_in)
-                            .and_then(|signal| signal.value.map(|v| v as u64))
-                            .or_else(|| {
-                                self.signals
-                                    .get(&gate.rh_in)
-                                    .and_then(|signal| signal.value.map(|v| v as u64))
-                            });
-
-                        // Perform multiplication depending on whether one input is a constant
-                        if let Some(value) = constant_value {
-                            Ok::<_, CircuitError>(cmul(
-                                &mut builder.state().borrow_mut(),
-                                lh_in_repr,
-                                value,
-                            ))
-                        } else {
-                            mul(&mut builder.state().borrow_mut(), lh_in_repr, rh_in_repr)
-                                .map_err(|e| e.into())
-                        }
-                    }
-                    AGateType::ASub => {
-                        sub(&mut builder.state().borrow_mut(), lh_in_repr, rh_in_repr)
-                            .map_err(|e| e.into())
-                    }
-                    _ => {
-                        return Err(CircuitError::UnsupportedGateType(format!(
-                            "{:?} not supported by MPZ",
-                            gate.op
-                        )))
-                    }
-                }?;
-
-                crt_signals.insert(gate.out, result_repr);
-            } else {
-                // Not ready to process, push back for later attempt.
-                to_process.push_back(index);
-            }
-        }
-
-        // Add output signals
-        for signal in &report.outputs {
-            let output_repr = crt_signals
-                .get(&signal.id)
-                .ok_or_else(|| CircuitError::UnprocessedNode)?;
-            builder.add_output(output_repr);
-        }
-
-        builder
-            .build()
-            .map_err(|_| CircuitError::MPZCircuitBuilderError)
-    }
-
     /// Returns a node id and increments the count.
     fn get_node_id(&mut self) -> u32 {
         self.node_count += 1;
@@ -694,10 +543,6 @@ pub enum CircuitError {
     DisconnectedSignal,
     #[error(transparent)]
     IOError(#[from] std::io::Error),
-    #[error("MPZ arithmetic circuit error: {0}")]
-    MPZCircuitError(MpzCircuitError),
-    #[error("MPZ arithmetic circuit builder error")]
-    MPZCircuitBuilderError,
     #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("Signal already declared")]
@@ -717,12 +562,6 @@ pub enum CircuitError {
 impl From<CircuitError> for ProgramError {
     fn from(e: CircuitError) -> Self {
         ProgramError::CircuitError(e)
-    }
-}
-
-impl From<MpzCircuitError> for CircuitError {
-    fn from(e: MpzCircuitError) -> Self {
-        CircuitError::MPZCircuitError(e)
     }
 }
 
