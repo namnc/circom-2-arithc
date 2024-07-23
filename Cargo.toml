@@ -16,7 +16,7 @@ serde = { version = "1.0.196", features = ["derive"] }
 thiserror = "1.0.59"
 strum_macros = "0.26.4"
 strum = "0.26.2"
-sim-circuit = { git = "https://github.com/brech1/sim-circuit", branch = "feat/generic-circuit" }
+sim-circuit = { git = "https://github.com/brech1/sim-circuit" }
 
 # DSL
 circom-circom_algebra = { git = "https://github.com/iden3/circom", package = "circom_algebra" }

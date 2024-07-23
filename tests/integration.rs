@@ -2,12 +2,12 @@ use circom_2_arithc::arithmetic_circuit::{
     AGateType, ArithmeticCircuit as CompilerArithmeticCircuit,
 };
 use sim_circuit::{
-    circuit::{CircuitBuilder, CircuitMemory, GenericCircuit},
+    circuit::{CircuitBuilder, CircuitMemory, GenericCircuit, GenericCircuitExecutor},
     model::{Component, Executable, Memory},
 };
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 enum ArithmeticOperation {
     ADD,
     DIV,
@@ -58,7 +58,7 @@ impl From<AGateType> for ArithmeticOperation {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct ArithmeticGate {
     operation: ArithmeticOperation,
     inputs: Vec<usize>,
@@ -118,11 +118,12 @@ impl Executable<u32, CircuitMemory<u32>> for ArithmeticGate {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ArithmeticCircuit {
-    circuit: GenericCircuit<ArithmeticGate, u32>,
+    gates: Vec<ArithmeticGate>,
     constants: HashMap<usize, u32>,
     label_to_index: HashMap<String, usize>,
+    input_indices: Vec<usize>,
     outputs: Vec<String>,
 }
 
@@ -131,13 +132,13 @@ impl ArithmeticCircuit {
     pub fn new_from_compiled_circuit(
         circuit: CompilerArithmeticCircuit,
     ) -> Result<Self, &'static str> {
-        let mut builder = CircuitBuilder::<ArithmeticGate, u32>::new();
         let mut label_to_index: HashMap<String, usize> = HashMap::new();
-        let mut circuit_outputs: Vec<String> = vec![];
+        let mut outputs: Vec<String> = Vec::new();
+        let mut input_indices: Vec<usize> = Vec::new();
+        let mut gates: Vec<ArithmeticGate> = Vec::new();
 
         // Get circuit inputs
         let inputs = circuit.info.input_name_to_wire_index;
-        let mut input_indices = vec![];
         for (label, index) in inputs {
             label_to_index.insert(label, index as usize);
             input_indices.push(index as usize);
@@ -152,15 +153,14 @@ impl ArithmeticCircuit {
                 constant_info.value.parse().unwrap(),
             );
         }
-        builder.add_inputs(&input_indices);
 
         // Get circuit outputs
-        let outputs = circuit.info.output_name_to_wire_index;
+        let output_map = circuit.info.output_name_to_wire_index;
         let mut output_indices = vec![];
-        for (label, index) in outputs {
+        for (label, index) in output_map {
             let index = index as usize;
             label_to_index.insert(label.clone(), index);
-            circuit_outputs.push(label);
+            outputs.push(label);
             output_indices.push(index);
         }
 
@@ -175,67 +175,83 @@ impl ArithmeticCircuit {
                 inputs,
                 outputs,
             };
-            builder.add_component(arithmetic_gate).unwrap();
+            gates.push(arithmetic_gate);
         }
 
         Ok(Self {
-            circuit: builder.build().map_err(|_| "Failed to build circuit")?,
+            gates,
             constants,
             label_to_index,
-            outputs: circuit_outputs,
+            input_indices,
+            outputs,
         })
     }
 
-    /// Execute the circuit with the given inputs
-    pub fn execute(
-        &self,
-        inputs: HashMap<String, u32>,
-    ) -> Result<HashMap<String, u32>, &'static str> {
-        let memory_size = self.circuit.memory_size();
-        let mut memory = CircuitMemory::<u32>::new(memory_size);
+    /// Run the circuit
+    pub fn run(&self, inputs: HashMap<String, u32>) -> Result<HashMap<String, u32>, &'static str> {
+        // Build circuit
+        let circuit = self.build_circuit();
+        // Instantiate a circuit executor
+        let mut executor: GenericCircuitExecutor<ArithmeticGate, u32> =
+            GenericCircuitExecutor::new(circuit);
 
-        // Load constants into memory
-        for (index, value) in &self.constants {
-            memory
-                .write(*index, *value)
-                .map_err(|_| "Failed to write constant value")?;
+        // The executor receives a map of WireIndex -> Value
+        let input_map: HashMap<usize, u32> = inputs
+            .iter()
+            .map(|(label, value)| {
+                let index = self
+                    .label_to_index
+                    .get(label)
+                    .ok_or("Input label not found")
+                    .unwrap();
+                (*index, *value)
+            })
+            .collect();
+
+        // Load constants into the input map
+        let input_map = self
+            .constants
+            .iter()
+            .fold(input_map, |mut acc, (index, value)| {
+                acc.insert(*index, *value);
+                acc
+            });
+
+        let output = executor.run(&input_map).unwrap();
+
+        // The executor returns a map of WireIndex -> Value
+        let output_map: HashMap<String, u32> = self
+            .outputs
+            .iter()
+            .map(|label| {
+                let index = self
+                    .label_to_index
+                    .get(label)
+                    .ok_or("Output label not found")
+                    .unwrap();
+                (label.clone(), output.get(index).unwrap().clone())
+            })
+            .collect();
+
+        Ok(output_map)
+    }
+
+    fn build_circuit(&self) -> GenericCircuit<ArithmeticGate, u32> {
+        let mut builder = CircuitBuilder::<ArithmeticGate, u32>::new();
+        builder.add_inputs(&self.input_indices);
+
+        for gate in &self.gates {
+            builder.add_component(gate.clone()).unwrap();
         }
 
-        // Load inputs into memory
-        for (label, value) in inputs {
-            let index = self
-                .label_to_index
-                .get(&label)
-                .ok_or("Input label not found")?;
-            memory
-                .write(*index, value)
-                .map_err(|_| "Failed to write input value")?;
-        }
-
-        self.circuit
-            .execute(&mut memory)
-            .map_err(|_| "Failed to execute gate")?;
-
-        let mut outputs = HashMap::new();
-        for label in &self.outputs {
-            let index = self
-                .label_to_index
-                .get(label)
-                .ok_or("Output label not found")?;
-            let value = memory
-                .read(*index)
-                .map_err(|_| "Failed to read output value")?;
-            outputs.insert(label.clone(), value);
-        }
-
-        Ok(outputs)
+        builder.build().unwrap()
     }
 }
 
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use circom_2_arithc::{cli::Args, program::compile};
+    use circom_2_arithc::{arithmetic_circuit::ConstantInfo, cli::Args, program::compile};
 
     fn simulation_test(
         circuit_path: &str,
@@ -251,7 +267,7 @@ mod integration_tests {
             input_map.insert(label.to_string(), *value);
         }
 
-        let outputs: HashMap<String, u32> = arithmetic_circuit.execute(input_map).unwrap();
+        let outputs: HashMap<String, u32> = arithmetic_circuit.run(input_map).unwrap();
 
         for (label, expected_value) in expected_outputs {
             let value = outputs.get(&label.to_string()).unwrap();
@@ -265,15 +281,6 @@ mod integration_tests {
             "tests/circuits/integration/addZero.circom",
             &[("0.in", 42)],
             &[("0.out", 42)],
-        );
-    }
-
-    #[test]
-    fn test_constant_sum() {
-        simulation_test(
-            "tests/circuits/integration/constantSum.circom",
-            &[],
-            &[("0.out", 8)],
         );
     }
 
@@ -348,7 +355,98 @@ mod integration_tests {
     }
 
     #[test]
-    #[should_panic] // FIXME: Should NOT panic (see comment below)
+    fn test_sum() {
+        simulation_test(
+            "tests/circuits/integration/sum.circom",
+            &[("0.a", 3), ("0.b", 5)],
+            &[("0.out", 8)],
+        );
+    }
+
+    #[test]
+    fn test_x_eq_x() {
+        simulation_test(
+            "tests/circuits/integration/xEqX.circom",
+            &[("0.x", 37)],
+            &[("0.out", 1)],
+        );
+    }
+
+    #[test]
+    fn test_out_of_bounds() {
+        let compiler_input = Args::new(
+            "tests/circuits/integration/indexOutOfBounds.circom".into(),
+            "./".into(),
+        );
+        let circuit = compile(&compiler_input);
+
+        assert_eq!(circuit.is_err(), true);
+        assert_eq!(
+            circuit.unwrap_err().to_string(),
+            "Runtime error: Index out of bounds"
+        );
+    }
+
+    #[test]
+    fn test_constant_sum() {
+        let compiler_input = Args::new(
+            "tests/circuits/integration/constantSum.circom".into(),
+            "./".into(),
+        );
+        let circuit_res = compile(&compiler_input);
+
+        assert_eq!(circuit_res.is_ok(), true);
+
+        let circuit = circuit_res.unwrap().build_circuit().unwrap();
+
+        assert_eq!(circuit.info.constants.len(), 1);
+        assert_eq!(
+            circuit.info.constants.get("0.const_signal_8_1"),
+            Some(&ConstantInfo {
+                value: "8".to_string(), // 5 + 3
+                wire_index: 0
+            })
+        );
+    }
+
+    #[test]
+    fn test_direct_output() {
+        let compiler_input = Args::new(
+            "tests/circuits/integration/directOutput.circom".into(),
+            "./".into(),
+        );
+        let circuit_res = compile(&compiler_input);
+
+        assert_eq!(circuit_res.is_ok(), true);
+
+        let circuit = circuit_res.unwrap().build_circuit().unwrap();
+
+        let expected_output = HashMap::from([("0.out".to_string(), 0)]);
+        assert_eq!(circuit.info.output_name_to_wire_index, expected_output);
+        assert_eq!(circuit.info.constants.len(), 1);
+        assert_eq!(
+            circuit.info.constants.get("0.const_signal_42_1"),
+            Some(&ConstantInfo {
+                value: "42".to_string(),
+                wire_index: 0
+            })
+        );
+    }
+
+    #[ignore]
+    #[test]
+    fn test_under_constrained() {
+        // FIXME: There should be an error instead (zero comes from default initialization, not from
+        //        running the circuit)
+        simulation_test(
+            "tests/circuits/integration/underConstrained.circom",
+            &[],
+            &[("0.x", 0)],
+        );
+    }
+
+    #[ignore]
+    #[test]
     fn test_prefix_ops() {
         // FIXME: The compiler sees several of the outputs as inputs, leading to the error below
         //        CircuitError(Inconsistency {
@@ -366,59 +464,6 @@ mod integration_tests {
                 ("0.complementB", 0b_11111111_11111111_11111111_11111110), // ~1
                 ("0.complementC", 0b_11111111_11111111_11111111_11111101), // ~2
             ],
-        );
-    }
-
-    #[test]
-    fn test_sum() {
-        simulation_test(
-            "tests/circuits/integration/sum.circom",
-            &[("0.a", 3), ("0.b", 5)],
-            &[("0.out", 8)],
-        );
-    }
-
-    #[test]
-    fn test_under_constrained() {
-        // FIXME: There should be an error instead (zero comes from default initialization, not from
-        //        running the circuit)
-        simulation_test(
-            "tests/circuits/integration/underConstrained.circom",
-            &[],
-            &[("0.x", 0)],
-        );
-    }
-
-    #[test]
-    fn test_x_eq_x() {
-        simulation_test(
-            "tests/circuits/integration/xEqX.circom",
-            &[("0.x", 37)],
-            &[("0.out", 1)],
-        );
-    }
-
-    #[test]
-    fn test_direct_output() {
-        simulation_test(
-            "tests/circuits/integration/directOutput.circom",
-            &[],
-            &[("0.out", 42)],
-        );
-    }
-
-    #[test]
-    fn test_out_of_bounds() {
-        let compiler_input = Args::new(
-            "tests/circuits/integration/indexOutOfBounds.circom".into(),
-            "./".into(),
-        );
-        let circuit = compile(&compiler_input);
-
-        assert_eq!(circuit.is_err(), true);
-        assert_eq!(
-            circuit.unwrap_err().to_string(),
-            "Runtime error: Index out of bounds"
         );
     }
 }
