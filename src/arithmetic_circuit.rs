@@ -1,3 +1,4 @@
+use crate::cli::ValueType;
 use crate::compiler::{ArithmeticGate, CircuitError};
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string};
@@ -20,6 +21,7 @@ pub struct CircuitInfo {
     pub input_name_to_wire_index: HashMap<String, u32>,
     pub constants: HashMap<String, ConstantInfo>,
     pub output_name_to_wire_index: HashMap<String, u32>,
+    pub value_type: ValueType,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -233,6 +235,7 @@ mod tests {
                     .collect(),
                 constants: Default::default(),
                 output_name_to_wire_index: [("output0".to_string(), 3)].iter().cloned().collect(),
+                value_type: ValueType::Sint,
             },
             gates: vec![
                 ArithmeticGate {
@@ -295,6 +298,7 @@ mod tests {
                         .iter()
                         .cloned()
                         .collect(),
+                    value_type: ValueType::Sint,
                 },
                 "
                     2 4

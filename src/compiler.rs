@@ -4,6 +4,7 @@
 
 use crate::{
     arithmetic_circuit::{ArithmeticCircuit, CircuitInfo, ConstantInfo},
+    cli::ValueType,
     program::ProgramError,
     topological_sort::topological_sort,
 };
@@ -174,6 +175,7 @@ pub struct Compiler {
     signals: HashMap<u32, Signal>,
     nodes: HashMap<u32, Node>,
     gates: Vec<ArithmeticGate>,
+    value_type: ValueType,
 }
 
 impl Compiler {
@@ -185,6 +187,7 @@ impl Compiler {
             signals: HashMap::new(),
             nodes: HashMap::new(),
             gates: Vec::new(),
+            value_type: Default::default(),
         }
     }
 
@@ -334,6 +337,12 @@ impl Compiler {
         self.nodes.remove(&node_a_id);
         self.nodes.remove(&node_b_id);
         self.nodes.insert(merged_node_id, merged_node);
+
+        Ok(())
+    }
+
+    pub fn update_type(&mut self, value_type: ValueType) -> Result<(), CircuitError> {
+        self.value_type = value_type;
 
         Ok(())
     }
@@ -536,6 +545,7 @@ impl Compiler {
                     .iter()
                     .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
                     .collect(),
+                value_type: self.value_type,
             },
             gates: new_gates,
         })

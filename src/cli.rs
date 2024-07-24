@@ -1,9 +1,15 @@
-use clap::{Parser, ValueEnum};
 use std::path::{Path, PathBuf};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+use clap::{Parser, ValueEnum};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum ValueType {
+    #[serde(rename = "sint")]
+    #[default]
     Sint,
+    #[serde(rename = "sfloat")]
     Sfloat,
 }
 

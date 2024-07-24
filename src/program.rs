@@ -67,6 +67,8 @@ pub fn compile(args: &Args) -> Result<Compiler, ProgramError> {
         _ => return Err(ProgramError::MainExpressionNotACall),
     }
 
+    compiler.update_type(args.value_type)?;
+
     Ok(compiler)
 }
 
