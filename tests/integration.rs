@@ -1,4 +1,7 @@
-use circom_2_arithc::{cli::Args, program::compile};
+use circom_2_arithc::{
+    cli::{Args, ValueType},
+    program::compile,
+};
 use sim_circuit::{simulate, NumberU32};
 use std::collections::HashMap;
 
@@ -10,7 +13,7 @@ pub fn simulation_test<
     input: Input,
     expected_output: Output,
 ) {
-    let compiler_input = Args::new(test_file_path.into(), "./".into());
+    let compiler_input = Args::new(test_file_path.into(), "./".into(), ValueType::Sint);
     let circuit = compile(&compiler_input).unwrap().build_circuit().unwrap();
 
     let input = input
@@ -186,10 +189,11 @@ mod integration_tests {
         let compiler_input = Args::new(
             "tests/circuits/integration/indexOutOfBounds.circom".into(),
             "./".into(),
+            ValueType::Sint,
         );
         let circuit = compile(&compiler_input);
 
-        assert_eq!(circuit.is_err(), true);
+        assert!(circuit.is_err());
         assert_eq!(
             circuit.unwrap_err().to_string(),
             "Runtime error: Index out of bounds"

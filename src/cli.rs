@@ -1,5 +1,11 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::path::{Path, PathBuf};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ValueType {
+    Sint,
+    Sfloat,
+}
 
 #[derive(Parser)]
 #[clap(name = "Arithmetic Circuits Compiler")]
@@ -22,11 +28,25 @@ pub struct Args {
         default_value = "./output/"
     )]
     pub output: PathBuf,
+
+    /// Default type that's used for values in a MPC backend
+    #[arg(
+        short,
+        long,
+        value_enum,
+        help = "Type that'll be used for values in a MPC backend",
+        default_value_t = ValueType::Sint,
+    )]
+    pub value_type: ValueType,
 }
 
 impl Args {
-    pub fn new(input: PathBuf, output: PathBuf) -> Self {
-        Self { input, output }
+    pub fn new(input: PathBuf, output: PathBuf, value_type: ValueType) -> Self {
+        Self {
+            input,
+            output,
+            value_type,
+        }
     }
 }
 
