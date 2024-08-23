@@ -421,6 +421,7 @@ fn handle_call(
 /// Handles an infix operation.
 /// - If both inputs are variables, it directly computes the operation.
 /// - If one or both inputs are signals, it constructs the corresponding circuit gate.
+///
 /// Returns the access to a variable containing the result of the operation or the signal of the output gate.
 fn handle_infix_op(
     ac: &mut Compiler,
@@ -479,6 +480,7 @@ fn handle_infix_op(
 /// Handles a prefix operation.
 /// - If input is a variable, it directly computes the operation.
 /// - If input is a signal, it handles it like an infix op against a constant.
+///
 /// Returns the access to a variable containing the result of the operation or the signal of the output gate.
 fn handle_prefix_op(
     ac: &mut Compiler,
