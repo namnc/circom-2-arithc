@@ -34,9 +34,9 @@ This library enables the creation of arithmetic circuits from circom programs.
 |                 | `PrefixOp`               |    ✅     |
 |                 | `InlineSwitchOp`         |    ❌     |
 |                 | `ParallelOp`             |    ❌     |
-|                 | `AnonymousComp`          |    ❌     |
+|                 | `AnonymousComp`          |    ✅     |
 |                 | `ArrayInLine`            |    ❌     |
-|                 | `Tuple`                  |    ❌     |
+|                 | `Tuple`                  |    ✅     |
 |                 | `UniformArray`           |    ❌     |
 
 ## Circomlib

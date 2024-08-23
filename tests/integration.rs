@@ -1,3 +1,5 @@
+#![allow(clippy::upper_case_acronyms)]
+
 use circom_2_arithc::arithmetic_circuit::{
     AGateType, ArithmeticCircuit as CompilerArithmeticCircuit,
 };
@@ -229,7 +231,7 @@ impl ArithmeticCircuit {
                     .get(label)
                     .ok_or("Output label not found")
                     .unwrap();
-                (label.clone(), output.get(index).unwrap().clone())
+                (label.clone(), *output.get(index).unwrap())
             })
             .collect();
 
@@ -270,7 +272,7 @@ mod integration_tests {
         let outputs: HashMap<String, u32> = arithmetic_circuit.run(input_map).unwrap();
 
         for (label, expected_value) in expected_outputs {
-            let value = outputs.get(&label.to_string()).unwrap();
+            let value = outputs.get(*label).unwrap();
             assert_eq!(value, expected_value);
         }
     }
@@ -380,7 +382,7 @@ mod integration_tests {
         );
         let circuit = compile(&compiler_input);
 
-        assert_eq!(circuit.is_err(), true);
+        assert!(circuit.is_err());
         assert_eq!(
             circuit.unwrap_err().to_string(),
             "Runtime error: Index out of bounds"
@@ -395,7 +397,7 @@ mod integration_tests {
         );
         let circuit_res = compile(&compiler_input);
 
-        assert_eq!(circuit_res.is_ok(), true);
+        assert!(circuit_res.is_ok());
 
         let circuit = circuit_res.unwrap().build_circuit().unwrap();
 
@@ -417,7 +419,7 @@ mod integration_tests {
         );
         let circuit_res = compile(&compiler_input);
 
-        assert_eq!(circuit_res.is_ok(), true);
+        assert!(circuit_res.is_ok());
 
         let circuit = circuit_res.unwrap().build_circuit().unwrap();
 
