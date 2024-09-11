@@ -2,7 +2,7 @@
 //!
 //! Handles execution of statements and expressions for arithmetic circuit generation within a `Runtime` environment.
 
-use crate::arithmetic_circuit::AGateType;
+use crate::a_gate_type::AGateType;
 use crate::compiler::Compiler;
 use crate::program::ProgramError;
 use crate::runtime::{

@@ -1,3 +1,4 @@
+use boolify::boolify;
 use circom_2_arithc::{
     cli::{build_output, Args},
     program::{compile, ProgramError},
@@ -24,7 +25,11 @@ fn main() -> Result<(), ProgramError> {
     fs::create_dir_all(output_dir.clone())
         .map_err(|_| ProgramError::OutputDirectoryCreationError)?;
 
-    let circuit = compiler.build_circuit()?;
+    let mut circuit = compiler.build_circuit()?;
+
+    if let Some(boolify_width) = args.boolify_width {
+        circuit = boolify(&circuit, boolify_width);
+    }
 
     let output_file_path = build_output(&output_dir, "circuit", "txt");
     circuit.write_bristol(&mut File::create(output_file_path)?)?;

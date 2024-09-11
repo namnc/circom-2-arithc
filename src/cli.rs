@@ -22,11 +22,22 @@ pub struct Args {
         default_value = "./output/"
     )]
     pub output: PathBuf,
+
+    #[arg(
+        long,
+        help = "Optional: Convert to a boolean circuit by using integers with this number of bits",
+        default_value = None,
+    )]
+    pub boolify_width: Option<usize>,
 }
 
 impl Args {
-    pub fn new(input: PathBuf, output: PathBuf) -> Self {
-        Self { input, output }
+    pub fn new(input: PathBuf, output: PathBuf, boolify_width: Option<usize>) -> Self {
+        Self {
+            input,
+            output,
+            boolify_width,
+        }
     }
 }
 

@@ -9,6 +9,7 @@ use crate::{
     process::{process_expression, process_statements},
     runtime::{DataAccess, DataType, Runtime, RuntimeError},
 };
+use bristol_circuit::BristolCircuitError;
 use circom_program_structure::ast::Expression;
 use std::io;
 use thiserror::Error;
@@ -109,4 +110,6 @@ pub enum ProgramError {
     SignalSubstitutionNotImplemented,
     #[error("Undefined function or template")]
     UndefinedFunctionOrTemplate,
+    #[error(transparent)]
+    BristolCircuitError(#[from] BristolCircuitError),
 }

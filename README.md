@@ -59,11 +59,21 @@ cargo build --release
 
 - Run the compilation
 
-```
+```bash
 cargo run --release
 ```
 
 The compiled circuit and circuit report can be found in the `./output` directory.
+
+### Boolean Circuits
+
+Although this library is named after arithmetic circuits, the CLI integrates [boolify](https://github.com/voltrevo/boolify) allowing further compilation down to boolean circuits.
+
+To achieve this, add `--boolify-width DESIRED_INT_WIDTH` to your command:
+
+```bash
+cargo run --release -- --boolify-width 16
+```
 
 ## ZK/MPC/FHE backends:
 

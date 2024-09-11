@@ -49,7 +49,7 @@ template ArgMax (n) {
     out <== amaxs[n];
 }
 
-component main = ArgMax(1);
+component main = ArgMax(2);
 
 /* INPUT = {
     "in":  ["2","3","1","5","4"],

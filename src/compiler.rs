@@ -2,11 +2,8 @@
 //!
 //! This module defines the data structures used to represent the arithmetic circuit.
 
-use crate::{
-    arithmetic_circuit::{AGateType, ArithmeticCircuit, CircuitInfo, ConstantInfo},
-    program::ProgramError,
-    topological_sort::topological_sort,
-};
+use crate::{a_gate_type::AGateType, program::ProgramError, topological_sort::topological_sort};
+use bristol_circuit::{BristolCircuit, CircuitInfo, ConstantInfo, Gate};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -306,7 +303,7 @@ impl Compiler {
         Ok(CircuitReport { inputs, outputs })
     }
 
-    pub fn build_circuit(&self) -> Result<ArithmeticCircuit, CircuitError> {
+    pub fn build_circuit(&self) -> Result<BristolCircuit, CircuitError> {
         // First build up these maps so we can easily see which node id to use
         let mut input_to_node_id = HashMap::<String, u32>::new();
         let mut constant_to_node_id_and_value = HashMap::<String, (u32, String)>::new();
@@ -437,15 +434,17 @@ impl Compiler {
         }
 
         // Now we can create the new gates using topological order and the new wire ids
-        let mut new_gates = Vec::<ArithmeticGate>::new();
+        let mut new_gates = Vec::<Gate>::new();
         for gate_id in sorted_gate_ids {
             let gate = &self.gates[gate_id];
 
-            new_gates.push(ArithmeticGate {
-                op: gate.op,
-                lh_in: node_id_to_wire_id[&gate.lh_in],
-                rh_in: node_id_to_wire_id[&gate.rh_in],
-                out: node_id_to_wire_id[&gate.out],
+            new_gates.push(Gate {
+                inputs: vec![
+                    node_id_to_wire_id[&gate.lh_in] as usize,
+                    node_id_to_wire_id[&gate.rh_in] as usize,
+                ],
+                outputs: vec![node_id_to_wire_id[&gate.out] as usize],
+                op: gate.op.to_string(),
             });
         }
 
@@ -456,25 +455,26 @@ impl Compiler {
                 name,
                 ConstantInfo {
                     value,
-                    wire_index: node_id_to_wire_id[&node_id],
+                    wire_index: node_id_to_wire_id[&node_id] as usize,
                 },
             );
         }
 
-        Ok(ArithmeticCircuit {
-            wire_count: next_wire_id,
+        Ok(BristolCircuit {
+            wire_count: next_wire_id as usize,
             info: CircuitInfo {
                 input_name_to_wire_index: input_to_node_id
                     .iter()
-                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id] as usize))
                     .collect(),
                 constants,
                 output_name_to_wire_index: output_to_node_id
                     .iter()
-                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id]))
+                    .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id] as usize))
                     .collect(),
             },
             gates: new_gates,
+            io_widths: None,
         })
     }
 
