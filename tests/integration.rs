@@ -1,8 +1,7 @@
 #![allow(clippy::upper_case_acronyms)]
 
-use circom_2_arithc::arithmetic_circuit::{
-    AGateType, ArithmeticCircuit as CompilerArithmeticCircuit,
-};
+use bristol_circuit::BristolCircuit;
+use circom_2_arithc::a_gate_type::AGateType;
 use sim_circuit::{
     circuit::{CircuitBuilder, CircuitMemory, GenericCircuit, GenericCircuitExecutor},
     model::{Component, Executable, Memory},
@@ -130,9 +129,9 @@ pub struct ArithmeticCircuit {
 }
 
 impl ArithmeticCircuit {
-    /// Create a new `ArithmeticCircuit` from a compiled circuit
-    pub fn new_from_compiled_circuit(
-        circuit: CompilerArithmeticCircuit,
+    /// Create a new `ArithmeticCircuit` from a bristol circuit
+    pub fn new_from_bristol(
+        circuit: BristolCircuit,
     ) -> Result<Self, &'static str> {
         let mut label_to_index: HashMap<String, usize> = HashMap::new();
         let mut outputs: Vec<String> = Vec::new();
@@ -168,14 +167,14 @@ impl ArithmeticCircuit {
 
         // Transform and add gates
         for gate in circuit.gates {
-            let operation = ArithmeticOperation::from(gate.op);
-            let inputs = vec![gate.lh_in as usize, gate.rh_in as usize];
-            let outputs = vec![gate.out as usize];
+            let operation = ArithmeticOperation::from(
+                gate.op.parse::<AGateType>().map_err(|_| "unrecognized gate")?,
+            );
 
             let arithmetic_gate = ArithmeticGate {
                 operation,
-                inputs,
-                outputs,
+                inputs: gate.inputs,
+                outputs: gate.outputs,
             };
             gates.push(arithmetic_gate);
         }
@@ -253,16 +252,17 @@ impl ArithmeticCircuit {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use circom_2_arithc::{arithmetic_circuit::ConstantInfo, cli::Args, program::compile};
+    use bristol_circuit::ConstantInfo;
+    use circom_2_arithc::{cli::Args, program::compile};
 
     fn simulation_test(
         circuit_path: &str,
         inputs: &[(&str, u32)],
         expected_outputs: &[(&str, u32)],
     ) {
-        let compiler_input = Args::new(circuit_path.into(), "./".into());
+        let compiler_input = Args::new(circuit_path.into(), "./".into(), None);
         let circuit = compile(&compiler_input).unwrap().build_circuit().unwrap();
-        let arithmetic_circuit = ArithmeticCircuit::new_from_compiled_circuit(circuit).unwrap();
+        let arithmetic_circuit = ArithmeticCircuit::new_from_bristol(circuit).unwrap();
 
         let mut input_map: HashMap<String, u32> = HashMap::new();
         for (label, value) in inputs {
@@ -379,6 +379,7 @@ mod integration_tests {
         let compiler_input = Args::new(
             "tests/circuits/integration/indexOutOfBounds.circom".into(),
             "./".into(),
+            None,
         );
         let circuit = compile(&compiler_input);
 
@@ -394,6 +395,7 @@ mod integration_tests {
         let compiler_input = Args::new(
             "tests/circuits/integration/constantSum.circom".into(),
             "./".into(),
+            None,
         );
         let circuit_res = compile(&compiler_input);
 
@@ -416,6 +418,7 @@ mod integration_tests {
         let compiler_input = Args::new(
             "tests/circuits/integration/directOutput.circom".into(),
             "./".into(),
+            None,
         );
         let circuit_res = compile(&compiler_input);
 

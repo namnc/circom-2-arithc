@@ -17,6 +17,8 @@ thiserror = "1.0.59"
 strum_macros = "0.26.4"
 strum = "0.26.2"
 sim-circuit = { git = "https://github.com/brech1/sim-circuit" }
+bristol-circuit = { git = "https://github.com/voltrevo/bristol-circuit", rev = "2a8b001" }
+boolify = { git = "https://github.com/voltrevo/boolify", rev = "6376405" }
 
 # DSL
 circom-circom_algebra = { git = "https://github.com/iden3/circom", package = "circom_algebra", rev = "e8e125e" }
