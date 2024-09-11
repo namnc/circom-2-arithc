@@ -130,9 +130,7 @@ pub struct ArithmeticCircuit {
 
 impl ArithmeticCircuit {
     /// Create a new `ArithmeticCircuit` from a bristol circuit
-    pub fn new_from_bristol(
-        circuit: BristolCircuit,
-    ) -> Result<Self, &'static str> {
+    pub fn new_from_bristol(circuit: BristolCircuit) -> Result<Self, &'static str> {
         let mut label_to_index: HashMap<String, usize> = HashMap::new();
         let mut outputs: Vec<String> = Vec::new();
         let mut input_indices: Vec<usize> = Vec::new();
@@ -168,7 +166,9 @@ impl ArithmeticCircuit {
         // Transform and add gates
         for gate in circuit.gates {
             let operation = ArithmeticOperation::from(
-                gate.op.parse::<AGateType>().map_err(|_| "unrecognized gate")?,
+                gate.op
+                    .parse::<AGateType>()
+                    .map_err(|_| "unrecognized gate")?,
             );
 
             let arithmetic_gate = ArithmeticGate {

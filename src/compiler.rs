@@ -2,11 +2,7 @@
 //!
 //! This module defines the data structures used to represent the arithmetic circuit.
 
-use crate::{
-    a_gate_type::AGateType,
-    program::ProgramError,
-    topological_sort::topological_sort,
-};
+use crate::{a_gate_type::AGateType, program::ProgramError, topological_sort::topological_sort};
 use bristol_circuit::{BristolCircuit, CircuitInfo, ConstantInfo, Gate};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -443,7 +439,10 @@ impl Compiler {
             let gate = &self.gates[gate_id];
 
             new_gates.push(Gate {
-                inputs: vec![node_id_to_wire_id[&gate.lh_in] as usize, node_id_to_wire_id[&gate.rh_in] as usize],
+                inputs: vec![
+                    node_id_to_wire_id[&gate.lh_in] as usize,
+                    node_id_to_wire_id[&gate.rh_in] as usize,
+                ],
                 outputs: vec![node_id_to_wire_id[&gate.out] as usize],
                 op: gate.op.to_string(),
             });
