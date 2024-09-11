@@ -2,7 +2,10 @@
 //!
 //! This module defines the data structures used to represent the arithmetic circuit.
 
-use crate::{a_gate_type::AGateType, program::ProgramError, topological_sort::topological_sort};
+use crate::{
+    a_gate_type::AGateType, cli::ValueType, program::ProgramError,
+    topological_sort::topological_sort,
+};
 use bristol_circuit::{BristolCircuit, CircuitInfo, ConstantInfo, Gate};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -108,6 +111,7 @@ pub struct Compiler {
     signals: HashMap<u32, Signal>,
     nodes: HashMap<u32, Node>,
     gates: Vec<ArithmeticGate>,
+    value_type: ValueType,
 }
 
 impl Compiler {
@@ -119,6 +123,7 @@ impl Compiler {
             signals: HashMap::new(),
             nodes: HashMap::new(),
             gates: Vec::new(),
+            value_type: Default::default(),
         }
     }
 
@@ -272,6 +277,12 @@ impl Compiler {
         Ok(())
     }
 
+    pub fn update_type(&mut self, value_type: ValueType) -> Result<(), CircuitError> {
+        self.value_type = value_type;
+
+        Ok(())
+    }
+
     /// Generates a circuit report with input and output signals information.
     pub fn generate_circuit_report(&self) -> Result<CircuitReport, CircuitError> {
         // Split input and output nodes
@@ -300,7 +311,11 @@ impl Compiler {
         let inputs = self.generate_signal_reports(&input_nodes);
         let outputs = self.generate_signal_reports(&output_nodes);
 
-        Ok(CircuitReport { inputs, outputs })
+        Ok(CircuitReport {
+            inputs,
+            outputs,
+            value_type: self.value_type,
+        })
     }
 
     pub fn build_circuit(&self) -> Result<BristolCircuit, CircuitError> {
@@ -521,6 +536,7 @@ impl Compiler {
 pub struct CircuitReport {
     inputs: Vec<SignalReport>,
     outputs: Vec<SignalReport>,
+    value_type: ValueType,
 }
 
 /// A single node report, with a list of signal names and an optional value.

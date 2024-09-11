@@ -1,5 +1,17 @@
-use clap::Parser;
 use std::path::{Path, PathBuf};
+
+use clap::{Parser, ValueEnum};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ValueType {
+    #[serde(rename = "sint")]
+    #[default]
+    Sint,
+    #[serde(rename = "sfloat")]
+    Sfloat,
+}
 
 #[derive(Parser)]
 #[clap(name = "Arithmetic Circuits Compiler")]
@@ -24,6 +36,15 @@ pub struct Args {
     pub output: PathBuf,
 
     #[arg(
+        short,
+        long,
+        value_enum,
+        help = "Type that'll be used for values in MPC backend",
+        default_value_t = ValueType::Sint,
+    )]
+    pub value_type: ValueType,
+
+    #[arg(
         long,
         help = "Optional: Convert to a boolean circuit by using integers with this number of bits",
         default_value = None,
@@ -32,10 +53,16 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn new(input: PathBuf, output: PathBuf, boolify_width: Option<usize>) -> Self {
+    pub fn new(
+        input: PathBuf,
+        output: PathBuf,
+        value_type: ValueType,
+        boolify_width: Option<usize>,
+    ) -> Self {
         Self {
             input,
             output,
+            value_type,
             boolify_width,
         }
     }

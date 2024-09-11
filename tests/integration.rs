@@ -1,7 +1,7 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use bristol_circuit::BristolCircuit;
-use circom_2_arithc::a_gate_type::AGateType;
+use circom_2_arithc::{a_gate_type::AGateType, cli::ValueType};
 use sim_circuit::{
     circuit::{CircuitBuilder, CircuitMemory, GenericCircuit, GenericCircuitExecutor},
     model::{Component, Executable, Memory},
@@ -139,16 +139,16 @@ impl ArithmeticCircuit {
         // Get circuit inputs
         let inputs = circuit.info.input_name_to_wire_index;
         for (label, index) in inputs {
-            label_to_index.insert(label, index as usize);
-            input_indices.push(index as usize);
+            label_to_index.insert(label, index);
+            input_indices.push(index);
         }
 
         // Get circuit constants
         let mut constants: HashMap<usize, u32> = HashMap::new();
         for (_, constant_info) in circuit.info.constants {
-            input_indices.push(constant_info.wire_index as usize);
+            input_indices.push(constant_info.wire_index);
             constants.insert(
-                constant_info.wire_index as usize,
+                constant_info.wire_index,
                 constant_info.value.parse().unwrap(),
             );
         }
@@ -157,7 +157,6 @@ impl ArithmeticCircuit {
         let output_map = circuit.info.output_name_to_wire_index;
         let mut output_indices = vec![];
         for (label, index) in output_map {
-            let index = index as usize;
             label_to_index.insert(label.clone(), index);
             outputs.push(label);
             output_indices.push(index);
@@ -260,7 +259,7 @@ mod integration_tests {
         inputs: &[(&str, u32)],
         expected_outputs: &[(&str, u32)],
     ) {
-        let compiler_input = Args::new(circuit_path.into(), "./".into(), None);
+        let compiler_input = Args::new(circuit_path.into(), "./".into(), ValueType::Sint, None);
         let circuit = compile(&compiler_input).unwrap().build_circuit().unwrap();
         let arithmetic_circuit = ArithmeticCircuit::new_from_bristol(circuit).unwrap();
 
@@ -379,6 +378,7 @@ mod integration_tests {
         let compiler_input = Args::new(
             "tests/circuits/integration/indexOutOfBounds.circom".into(),
             "./".into(),
+            ValueType::Sint,
             None,
         );
         let circuit = compile(&compiler_input);
@@ -395,6 +395,7 @@ mod integration_tests {
         let compiler_input = Args::new(
             "tests/circuits/integration/constantSum.circom".into(),
             "./".into(),
+            ValueType::Sint,
             None,
         );
         let circuit_res = compile(&compiler_input);
@@ -418,6 +419,7 @@ mod integration_tests {
         let compiler_input = Args::new(
             "tests/circuits/integration/directOutput.circom".into(),
             "./".into(),
+            ValueType::Sint,
             None,
         );
         let circuit_res = compile(&compiler_input);
