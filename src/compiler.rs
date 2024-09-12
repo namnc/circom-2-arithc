@@ -9,7 +9,7 @@ use crate::{
 use bristol_circuit::{BristolCircuit, CircuitInfo, ConstantInfo, Gate};
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use thiserror::Error;
 
 /// Represents a signal in the circuit, with a name and an optional value.
@@ -106,10 +106,10 @@ impl ArithmeticGate {
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct Compiler {
     node_count: u32,
-    inputs: HashMap<u32, String>,
-    outputs: HashMap<u32, String>,
-    signals: HashMap<u32, Signal>,
-    nodes: HashMap<u32, Node>,
+    inputs: BTreeMap<u32, String>,
+    outputs: BTreeMap<u32, String>,
+    signals: BTreeMap<u32, Signal>,
+    nodes: BTreeMap<u32, Node>,
     gates: Vec<ArithmeticGate>,
     value_type: ValueType,
 }
@@ -118,20 +118,20 @@ impl Compiler {
     pub fn new() -> Compiler {
         Compiler {
             node_count: 0,
-            inputs: HashMap::new(),
-            outputs: HashMap::new(),
-            signals: HashMap::new(),
-            nodes: HashMap::new(),
+            inputs: BTreeMap::new(),
+            outputs: BTreeMap::new(),
+            signals: BTreeMap::new(),
+            nodes: BTreeMap::new(),
             gates: Vec::new(),
             value_type: Default::default(),
         }
     }
 
-    pub fn add_inputs(&mut self, inputs: HashMap<u32, String>) {
+    pub fn add_inputs(&mut self, inputs: BTreeMap<u32, String>) {
         self.inputs.extend(inputs);
     }
 
-    pub fn add_outputs(&mut self, outputs: HashMap<u32, String>) {
+    pub fn add_outputs(&mut self, outputs: BTreeMap<u32, String>) {
         self.outputs.extend(outputs);
     }
 
@@ -160,8 +160,8 @@ impl Compiler {
         Ok(())
     }
 
-    pub fn get_signals(&self, filter: String) -> HashMap<u32, String> {
-        let mut ret = HashMap::new();
+    pub fn get_signals(&self, filter: String) -> BTreeMap<u32, String> {
+        let mut ret = BTreeMap::new();
         for (signal_id, signal) in self.signals.iter() {
             if signal.name.starts_with(filter.as_str()) {
                 ret.insert(*signal_id, signal.name.to_string());
@@ -320,9 +320,9 @@ impl Compiler {
 
     pub fn build_circuit(&self) -> Result<BristolCircuit, CircuitError> {
         // First build up these maps so we can easily see which node id to use
-        let mut input_to_node_id = HashMap::<String, u32>::new();
-        let mut constant_to_node_id_and_value = HashMap::<String, (u32, String)>::new();
-        let mut output_to_node_id = HashMap::<String, u32>::new();
+        let mut input_to_node_id = BTreeMap::<String, u32>::new();
+        let mut constant_to_node_id_and_value = BTreeMap::<String, (u32, String)>::new();
+        let mut output_to_node_id = BTreeMap::<String, u32>::new();
 
         for (node_id, node) in self.nodes.iter() {
             // Each node has a list of signal ids which all correspond to that node
@@ -368,7 +368,7 @@ impl Compiler {
             let node_id_to_input_name = input_to_node_id
                 .iter()
                 .map(|(name, node_id)| (node_id, name))
-                .collect::<HashMap<_, _>>();
+                .collect::<BTreeMap<_, _>>();
 
             for (output_name, output_node_id) in &output_to_node_id {
                 if let Some(input_name) = node_id_to_input_name.get(output_node_id) {
@@ -385,7 +385,7 @@ impl Compiler {
         // Now node ids are like wire ids, but the compiler generates them in a way that leaves a
         // lot of gaps. So we assign new wire ids so they'll be sequential instead. We also do this
         // ensure inputs are at the start and outputs are at the end.
-        let mut node_id_to_wire_id = HashMap::<u32, u32>::new();
+        let mut node_id_to_wire_id = BTreeMap::<u32, u32>::new();
         let mut next_wire_id = 0;
 
         // First inputs
@@ -398,7 +398,7 @@ impl Compiler {
         // assigned in the order they are needed. The topological order is also needed to comply
         // with bristol format and allow for easy evaluation.
 
-        let mut node_id_to_required_gate = HashMap::<u32, usize>::new();
+        let mut node_id_to_required_gate = BTreeMap::<u32, usize>::new();
 
         for (gate_id, gate) in self.gates.iter().enumerate() {
             // the gate.out node depends on this gate
@@ -463,7 +463,7 @@ impl Compiler {
             });
         }
 
-        let mut constants = HashMap::<String, ConstantInfo>::new();
+        let mut constants = BTreeMap::<String, ConstantInfo>::new();
 
         for (name, (node_id, value)) in constant_to_node_id_and_value {
             constants.insert(
@@ -482,7 +482,7 @@ impl Compiler {
                     .iter()
                     .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id] as usize))
                     .collect(),
-                constants,
+                constants: constants.into_iter().collect(),
                 output_name_to_wire_index: output_to_node_id
                     .iter()
                     .map(|(name, node_id)| (name.clone(), node_id_to_wire_id[node_id] as usize))
@@ -628,7 +628,7 @@ mod tests {
     #[test]
     fn test_compiler_add_inputs() {
         let mut compiler = Compiler::new();
-        let mut inputs = HashMap::new();
+        let mut inputs = BTreeMap::new();
         inputs.insert(1, String::from("input1"));
         inputs.insert(2, String::from("input2"));
         compiler.add_inputs(inputs);
@@ -641,7 +641,7 @@ mod tests {
     #[test]
     fn test_compiler_add_outputs() {
         let mut compiler = Compiler::new();
-        let mut outputs = HashMap::new();
+        let mut outputs = BTreeMap::new();
         outputs.insert(3, String::from("output1"));
         outputs.insert(4, String::from("output2"));
         compiler.add_outputs(outputs);
