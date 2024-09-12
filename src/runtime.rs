@@ -7,7 +7,7 @@ use circom_program_structure::ast::VariableType;
 use rand::{thread_rng, Rng};
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashSet, VecDeque},
     fmt::Write,
     rc::Rc,
 };
@@ -130,9 +130,9 @@ impl Runtime {
 pub struct Context {
     ctx_name: String,
     names: HashSet<String>,
-    variables: HashMap<String, Variable>,
-    signals: HashMap<String, Signal>,
-    components: HashMap<String, Component>,
+    variables: BTreeMap<String, Variable>,
+    signals: BTreeMap<String, Signal>,
+    components: BTreeMap<String, Component>,
 }
 
 impl Context {
@@ -141,9 +141,9 @@ impl Context {
         Self {
             ctx_name,
             names: HashSet::new(),
-            variables: HashMap::new(),
-            signals: HashMap::new(),
-            components: HashMap::new(),
+            variables: BTreeMap::new(),
+            signals: BTreeMap::new(),
+            components: BTreeMap::new(),
         }
     }
 
@@ -352,7 +352,7 @@ impl Context {
     pub fn get_component_map(
         &self,
         access: &DataAccess,
-    ) -> Result<HashMap<String, Signal>, RuntimeError> {
+    ) -> Result<BTreeMap<String, Signal>, RuntimeError> {
         let component = self
             .components
             .get(&access.name)
@@ -405,7 +405,7 @@ impl Context {
     pub fn set_component(
         &mut self,
         access: &DataAccess,
-        map: HashMap<String, Signal>,
+        map: BTreeMap<String, Signal>,
     ) -> Result<(), RuntimeError> {
         let component =
             self.components
@@ -514,13 +514,13 @@ impl Variable {
 /// Stores a component's input/output signals with their respective identifiers.
 #[derive(Clone, Debug)]
 pub struct Component {
-    signal_map: NestedValue<HashMap<String, Signal>>,
+    signal_map: NestedValue<BTreeMap<String, Signal>>,
 }
 
 impl Component {
     /// Constructs a new Component as a nested structure based on provided dimensions.
     fn new(dimensions: &[u32]) -> Self {
-        let mut signal_map = NestedValue::Value(HashMap::new());
+        let mut signal_map = NestedValue::Value(BTreeMap::new());
 
         // Construct the nested structure in reverse order to ensure the correct dimensionality.
         for &dimension in dimensions.iter().rev() {
@@ -532,7 +532,7 @@ impl Component {
     }
 
     /// Retrieves the component signal map at the specified index path.
-    fn get_map(&self, index_path: &[u32]) -> Result<HashMap<String, Signal>, RuntimeError> {
+    fn get_map(&self, index_path: &[u32]) -> Result<BTreeMap<String, Signal>, RuntimeError> {
         let nested_val = get_nested_value(&self.signal_map, index_path)?;
 
         match nested_val {
@@ -545,7 +545,7 @@ impl Component {
     fn set_signal_map(
         &mut self,
         component_access: &[u32],
-        map: HashMap<String, Signal>,
+        map: BTreeMap<String, Signal>,
     ) -> Result<(), RuntimeError> {
         let nested_val = get_mut_nested_value(&mut self.signal_map, component_access)?;
 
@@ -1040,7 +1040,7 @@ mod tests {
             )
             .unwrap();
 
-        let mut signal_map = HashMap::new();
+        let mut signal_map = BTreeMap::new();
         let signal = Signal::new(&[], next_signal_id.clone());
         signal_map.insert("signal1".to_string(), signal);
 
@@ -1285,7 +1285,7 @@ mod tests {
     #[test]
     fn test_component_set_and_get_signal_map() {
         let mut component = Component::new(&[1]);
-        let mut signal_map = HashMap::new();
+        let mut signal_map = BTreeMap::new();
         let signal = Signal::new(&[], Rc::new(RefCell::new(0)));
         signal_map.insert("signal1".to_string(), signal);
 
@@ -1300,7 +1300,7 @@ mod tests {
     #[test]
     fn test_component_get_signal_content() {
         let mut component = Component::new(&[1]);
-        let mut signal_map = HashMap::new();
+        let mut signal_map = BTreeMap::new();
         let signal = Signal::new(&[], Rc::new(RefCell::new(0)));
         signal_map.insert("signal1".to_string(), signal);
 
@@ -1319,7 +1319,7 @@ mod tests {
     #[test]
     fn test_component_get_signal_id() {
         let mut component = Component::new(&[1]);
-        let mut signal_map = HashMap::new();
+        let mut signal_map = BTreeMap::new();
         let signal = Signal::new(&[], Rc::new(RefCell::new(0)));
         signal_map.insert("signal1".to_string(), signal);
 
@@ -1338,7 +1338,7 @@ mod tests {
     #[test]
     fn test_component_nested_signal_map() {
         let mut component = Component::new(&[2]);
-        let mut signal_map_0 = HashMap::new();
+        let mut signal_map_0 = BTreeMap::new();
         let signal_0 = Signal::new(&[], Rc::new(RefCell::new(0)));
         signal_map_0.insert("signal1".to_string(), signal_0);
 
@@ -1346,7 +1346,7 @@ mod tests {
             .set_signal_map(&[0], signal_map_0)
             .expect("Setting signal map failed");
 
-        let mut signal_map_1 = HashMap::new();
+        let mut signal_map_1 = BTreeMap::new();
         let signal_1 = Signal::new(&[], Rc::new(RefCell::new(1)));
         signal_map_1.insert("signal2".to_string(), signal_1);
 

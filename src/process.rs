@@ -15,7 +15,7 @@ use circom_program_structure::ast::{
 };
 use circom_program_structure::program_archive::ProgramArchive;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 /// Processes a sequence of statements.
@@ -368,7 +368,7 @@ fn handle_call(
 
     // Get return values
     let mut function_return: Option<u32> = None;
-    let mut component_return: HashMap<String, Signal> = HashMap::new();
+    let mut component_return: BTreeMap<String, Signal> = BTreeMap::new();
 
     if is_function {
         if let Ok(value) = runtime
